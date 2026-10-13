@@ -1,0 +1,21 @@
+# Closed-source KCDC client/server distribution -- downloaded releases, not
+# this project's own code. See resources/kcdc-gamemode for the actual source.
+/client/
+/server/
+/server-linux/
+
+# Build output and installed packages, regenerated with npm ci && npm run build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Runtime data a running server writes next to itself
+logs/
+*.log
+.packages/
+playerdata/
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
