@@ -74,16 +74,6 @@ function readRequest(payload: unknown): BookRequest | undefined {
     return { action, style: known ? style : undefined, value: typeof value === "number" ? value : undefined, pages: validPages ? pages as string[] : undefined };
 }
 
-/** A picture this resource ships, or null with the reason shown when it could not be packaged. */
-function picture(path: string): string | null {
-    try {
-        return Book.image(path);
-    } catch (error) {
-        Hud.showNotification(`Book picture unavailable: ${String(error)}`);
-        return null;
-    }
-}
-
 function stopFade(): void {
     if (fadeTimer !== -1) {
         clearInterval(fadeTimer);
@@ -101,7 +91,8 @@ function open(options: BookOptions): number | null {
 }
 
 function openChronicle(style: BookStyle, extra: Partial<BookOptions> = {}): number | null {
-    return open({ pages: chroniclePages(picture("assets/book/seal.dds")), style, visual: 7, ...extra });
+    // The wax seal picture (assets/book/seal.dds, 8 KB packed) is not shipped any more: every byte of the client package counts.
+    return open({ pages: chroniclePages(null), style, visual: 7, ...extra });
 }
 
 export function installBook(): void {
@@ -127,15 +118,6 @@ export function installBook(): void {
                 stopFade();
                 open({ pages: letterPages(), style: "letter", visual: 3 });
                 break;
-
-            case "parchment": {
-                stopFade();
-                // Plain binding: the red one's diffuse colour would darken
-                // the parchment to 78%.
-                const texture = picture("assets/book/parchment_diff.dds");
-                openChronicle("plainBook", texture !== null ? { texture } : {});
-                break;
-            }
 
             case "fade":
                 stopFade();

@@ -7,6 +7,20 @@ export interface InteractionViewOptions {
     height?: number;
 }
 
+let personInView = 0;
+
+/**
+ * The player whose "[E] Conversar" hint is up (`property-labels.ts`), or 0. A person under the crosshair comes before an
+ * object behind them: other hints on the same key (the dice table's) give way, so one press never does two things.
+ */
+export function setPersonInView(id: number): void {
+    personInView = id;
+}
+
+export function getPersonInView(): number {
+    return personInView;
+}
+
 /** Call on nearby candidates at the interaction's polling rate, not on every object each frame. */
 export function isInteractionTargetVisible(position: Pick<Vector3, "x" | "y" | "z">, options: InteractionViewOptions): boolean {
     const player = LocalPlayer;

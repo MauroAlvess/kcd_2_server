@@ -19,3 +19,4 @@ playerdata/
 .DS_Store
 Thumbs.db
 *.swp
+secrets/

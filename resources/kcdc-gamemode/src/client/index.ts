@@ -1,5 +1,5 @@
 /**
- * The client half of the default gamemode: a CEF debug panel on F4.
+ * The client half of the default gamemode: a CEF debug panel on F4, which the server opens for administrators only.
  *
  * Three directions: the page calls `callEvent`, `Web.on` receives it; `Web.emit`
  * sends a whole snapshot back per channel; `Events.emitServer` and `player.emit`
@@ -10,13 +10,24 @@
 import { installBook } from "./book.js";
 import { installBuild } from "./build.js";
 import { installCamera } from "./camera.js";
+import { installCarts } from "./carts.js";
 import { installCreator } from "./creator.js";
+import { installCreatorPage } from "./creator-page.js";
+import { installCookHint } from "./cook-hint.js";
 import { installDice } from "./dice.js";
 import { installFollow } from "./follow.js";
 import { installCombat } from "./combat.js";
 import { installHud } from "./hud.js";
+import { installPropertyLabels } from "./property-labels.js";
+import { installNotify } from "./notify.js";
 import { installPick } from "./pick.js";
+import { installPosture } from "./posture.js";
 import { installScreen } from "./screen.js";
+import { installItemUses } from "./item-uses.js";
+import { installSkillBooks } from "./skill-books.js";
+import { installStatus } from "./status.js";
+import { installVoice } from "./voice.js";
+import { installWhistle } from "./whistle.js";
 import * as panel from "./panel.js";
 import { readSelf } from "./snapshot.js";
 import { describeAll, flip } from "./switches.js";
@@ -119,10 +130,14 @@ const handlers: panel.PageHandlers = {
     },
 };
 
+// The panel is for administrators, and only the server knows who they are: a press that finds it shut
+// asks the server, which answers an admin with `panel.open` below and anybody else with a line in chat.
 Key.bind(OPEN_KEY, "down", () => {
-    if (panel.toggle(handlers)) {
-        askServer();
+    if (panel.isVisible()) {
+        panel.hide();
+        return;
     }
+    Events.emitServer(`${RESOURCE}:panel.request`);
 });
 
 Events.on(`${RESOURCE}:panel.open`, () => {
@@ -174,6 +189,7 @@ installBuild();
 
 // The `/camera` switch.
 installCamera();
+installCarts();
 
 // The `/book` demo books.
 installBook();
@@ -181,8 +197,12 @@ installBook();
 // The `/creator` stage, which the server asks for.
 installCreator();
 
+// The character creator proper: a page over the player's own body, filmed from the front.
+installCreatorPage();
+
 // The `/pick` trace, for the prop-hunt test commands.
 installPick();
+installPosture();
 
 // The `/screenfx` presets: intoxication and injury.
 installScreen();
@@ -190,8 +210,28 @@ installScreen();
 // The `/hud` commands and the server's optional playerSpawned Stats test.
 installHud();
 installDice();
+// "Cozinhar" beside the game's own prompt at a fire, a rack or a smoker: the server answers with its cooking menu.
+installCookHint();
 installCombat();
 installFollow();
+
+// The status panel (F2, and F3 for administrators): character info, social status and guild selection.
+installStatus();
+
+// Push-to-talk on V.
+installVoice();
+
+// The name of the house, chest or player under the crosshair, where the game's own prompt is, and the talk key on players.
+installPropertyLabels();
+
+// Lines the server sends to the game's own notification line.
+installNotify();
+
+installItemUses();
+installSkillBooks();
+
+// X, the game's horse whistle, calls the player's own horse.
+installWhistle();
 
 Events.on("resourceStop", (resourceName) => {
     if (resourceName === RESOURCE) {
@@ -200,4 +240,4 @@ Events.on("resourceStop", (resourceName) => {
     }
 });
 
-console.log(`debug panel armed; press ${OPEN_KEY.toUpperCase()} or type /ui`);
+console.log(`debug panel armed for administrators; press ${OPEN_KEY.toUpperCase()}`);

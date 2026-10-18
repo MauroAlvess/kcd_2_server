@@ -7,11 +7,10 @@ const STYLES = ["book", "plainBook", "letter"] as const;
 
 export const bookCommand: Command = {
     name: "book",
-    summary: "Opens a demo book in your hands: the chronicle of Kingdoms Connected, a herald's letter, a re-bound copy.",
+    summary: "Opens a demo book in your hands: the chronicle of Kingdoms Connected, or a herald's letter.",
     usage: [
         "/book [book|plainBook|letter]  -- the chronicle of Kingdoms Connected, in that binding",
         "/book letter                   -- a herald's letter, on folded parchment",
-        "/book parchment                -- the chronicle re-bound in the resource's own parchment texture",
         "/book fade                     -- the chronicle starting illegible, its ink coming clear a tenth at a time",
         "/book legibility <0..1>        -- changes how legible the open book is",
         "/book close                    -- puts the book down",
@@ -33,11 +32,6 @@ export const bookCommand: Command = {
             case "letter":
                 player.emit(BOOK_EVENT, JSON.stringify({ action: "letter" }));
                 reply.line("A herald's letter.");
-                return;
-
-            case "parchment":
-                player.emit(BOOK_EVENT, JSON.stringify({ action: "parchment" }));
-                reply.line("The chronicle, bound in parchment.");
                 return;
 
             case "fade":

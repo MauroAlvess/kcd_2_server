@@ -86,6 +86,31 @@ test("a creator ended as interrupted is reopened a few times, then reported", ()
     assert.equal(state.info.length, 1);
 });
 
+test("a newcomer who backs out of the game's own stage is shown it again, and is told to make the character", () => {
+    const { events, state, advance } = load();
+    events.get("kcdc-gamemode:creator.open")({ genders: "both", mandatory: true });
+    advance(11000);
+    assert.equal(state.opened, 1);
+    events.get("characterCreatorClosed")(null, "cancelled");
+    assert.deepEqual(state.info, ["Crie o seu personagem para entrar em Kuttenberg."]);
+    advance(1000);
+    assert.equal(state.opened, 2, "up again");
+    events.get("characterCreatorClosed")(null, "cancelled");
+    advance(1000);
+    assert.equal(state.opened, 3, "as many times as they back out");
+    events.get("characterCreatorClosed")({ gender: "male" }, "accepted");
+    advance(10000);
+    assert.equal(state.opened, 3, "once the look is accepted, it is over");
+
+    // and a later creator, opened for the same player to change their look, can be backed out of
+    events.get("kcdc-gamemode:creator.open")({ genders: "both" });
+    advance(1000);
+    assert.equal(state.opened, 4);
+    events.get("characterCreatorClosed")(null, "cancelled");
+    advance(10000);
+    assert.equal(state.opened, 4);
+});
+
 test("backing out of the creator is reported without a retry", () => {
     const { events, state, advance } = load();
     events.get("kcdc-gamemode:creator.open")({ genders: "both" });

@@ -1,4 +1,4 @@
-import { isInteractionTargetVisible } from "./interaction.js";
+import { getPersonInView, isInteractionTargetVisible } from "./interaction.js";
 
 const STATE_EVENT = "kcdc-gamemode:dice.state";
 const INTERACT_EVENT = "kcdc-gamemode:dice.interact";
@@ -27,7 +27,8 @@ export function installDice(): void {
     let selected = "";
     const update = (): void => {
         const player = LocalPlayer;
-        const table = !pending && player && offer?.tables.slice().sort((a, b) => {
+        // A person under the crosshair gets the key ("[E] Conversar"), even across the table.
+        const table = !pending && !getPersonInView() && player && offer?.tables.slice().sort((a, b) => {
             const p = player.position;
             return Math.hypot(p.x - a.position.x, p.y - a.position.y, p.z - a.position.z) - Math.hypot(p.x - b.position.x, p.y - b.position.y, p.z - b.position.z);
         }).find(lookingAtTable);
@@ -36,11 +37,11 @@ export function installDice(): void {
             return;
         }
         selected = table.id;
-        const text = offer!.joined ? "Leave dice lobby" : "Play dice (join lobby)";
+        const text = offer!.joined ? "Sair da mesa de dados" : "Jogar dados";
         if (!hint) {
             hint = ActionHint.create({ key: "primary_action", text }, () => {
                 const target = offer?.tables.find((table) => table.id === selected);
-                if (pending || !target || !lookingAtTable(target)) return;
+                if (pending || getPersonInView() || !target || !lookingAtTable(target)) return;
                 pending = true;
                 remove();
                 Events.emitServer(INTERACT_EVENT, { token: offer!.token, table: selected });

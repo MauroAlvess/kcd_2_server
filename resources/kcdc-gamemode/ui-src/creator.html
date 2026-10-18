@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdoms Connected &mdash; Criar personagem</title>
+<style>
+    @font-face {
+        font-family: "Cinzel";
+        src: url("fonts/cinzel.woff2") format("woff2");
+        font-weight: 400 900;
+        font-display: block;
+    }
+
+    :root {
+        --btn:    rgba(124, 3, 5, 0.992);
+        --btn-hi: rgb(152, 9, 12);
+        --bg:     rgba(210, 179, 140, 0.992);
+        --ink:    rgba(32, 27, 23, 0.99);
+        --ink-2:  rgba(32, 27, 23, .66);
+        --rule:   rgba(32, 27, 23, .30);
+        --rule-soft: rgba(32, 27, 23, .15);
+        --display: "Cinzel", "Palatino Linotype", Georgia, serif;
+        --body: "Constantia", "Sitka Text", Georgia, "Palatino Linotype", serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: 16px; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { font: 1rem/1.5 var(--body); color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
+    img { display: block; -webkit-user-drag: none; }
+    [hidden] { display: none !important; }
+    input { user-select: text; font-family: var(--body); color: var(--ink); }
+    button { font-family: var(--display); color: inherit; cursor: pointer; }
+    button, button:focus, input:focus { outline: none; }
+    button:focus-visible, input:focus-visible { box-shadow: 0 0 0 2px var(--btn); }
+
+    /* ---------- the stage: the world is on the left, under a golden mist; the page keeps the right ---------- */
+    .stage { position: fixed; inset: 0; animation: open .35s ease both; }
+    @keyframes open { from { opacity: 0; } to { opacity: 1; } }
+    .fog {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+            radial-gradient(ellipse 30% 66% at 30% 52%, transparent 0 52%, rgba(120, 76, 22, .26) 82%, rgba(76, 44, 10, .6) 100%),
+            linear-gradient(90deg, rgba(176, 126, 52, .58) 0, rgba(196, 148, 72, .2) 20%, transparent 44%),
+            linear-gradient(270deg, rgba(150, 100, 38, .62) 0, rgba(170, 120, 52, .3) 32%, transparent 62%),
+            linear-gradient(0deg, rgba(88, 52, 12, .72) 0, transparent 30%),
+            linear-gradient(180deg, rgba(88, 52, 12, .5) 0, transparent 20%);
+    }
+    .drag { position: absolute; left: 0; top: 0; bottom: 0; right: 40rem; cursor: grab; }
+    .drag.on { cursor: grabbing; }
+
+    .plate { position: absolute; left: 4.6rem; top: 3rem; width: 36rem; pointer-events: none; text-shadow: 0 .1rem .6rem rgba(40, 22, 4, .75); }
+    .plate .who { font: 600 2.5rem/1.15 var(--display); letter-spacing: .06em; color: #f3e6c8; overflow-wrap: anywhere; }
+    .plate .who.none { opacity: .55; font-size: 1.7rem; }
+    .plate .rule { width: 4.2rem; height: 2px; margin-top: .6rem; background: var(--btn-hi); }
+    .how { position: absolute; left: 4.6rem; bottom: 1.5rem; pointer-events: none; font: italic 1.02rem/1.4 var(--body); color: rgba(243, 230, 200, .88); text-shadow: 0 .1rem .5rem rgba(40, 22, 4, .8); }
+
+    /* ---------- the panel ---------- */
+    .panel {
+        position: absolute;
+        right: 3rem;
+        top: 2.2rem;
+        bottom: 2.2rem;
+        width: 34rem;
+        display: flex;
+        flex-direction: column;
+        padding: 1.5rem 2.4rem 1.3rem;
+        background: var(--bg);
+        border: 1px solid var(--rule);
+        box-shadow: 0 0 0 .45rem rgba(210, 179, 140, .22), 0 1.4rem 3.4rem rgba(30, 18, 6, .6);
+    }
+    .panel > .layer { position: absolute; inset: 0; pointer-events: none; }
+    .photo { background: url("img/bg-hud.webp") center / cover no-repeat; opacity: .22; mix-blend-mode: multiply; }
+    .grain { background: url("img/paper.svg"); mix-blend-mode: multiply; }
+    .sheen { background: radial-gradient(ellipse 80% 55% at 24% 12%, rgba(255, 244, 214, .5), transparent 72%); }
+    .inner { position: absolute; inset: .55rem; border: 1px solid var(--rule); pointer-events: none; }
+    .orn { position: absolute; width: 7.4rem; height: auto; pointer-events: none; z-index: 3; filter: drop-shadow(0 .3rem .5rem rgba(20, 12, 4, .4)); }
+    .orn-tl { top: -.8rem; left: -.8rem; }
+    .orn-br { right: -.8rem; bottom: -.8rem; }
+    .panel > .head, .panel > .rows, .panel > .foot { position: relative; }
+
+    .close {
+        position: absolute;
+        top: 1.3rem;
+        right: 1.4rem;
+        z-index: 5;
+        display: grid;
+        place-items: center;
+        width: 2.2rem;
+        height: 2.2rem;
+        background: var(--btn);
+        border: 1px solid rgba(0, 0, 0, .4);
+        transition: background .15s;
+    }
+    .close svg { width: .9rem; height: .9rem; stroke: var(--bg); stroke-width: 2.2; stroke-linecap: square; }
+    .close:hover { background: var(--btn-hi); }
+
+    .head { text-align: left; padding-left: 3.2rem; }
+    .head-title { height: 3.9rem; width: auto; }
+    .head .bar { display: flex; margin-top: .55rem; }
+    .head .bar i { display: block; height: 2px; }
+    .head .bar i:first-child { width: 2.6rem; background: var(--btn-hi); }
+    .head .bar i:last-child { flex: 1; margin-left: .3rem; background: var(--rule); }
+    .head p { margin-top: .45rem; font: italic 1rem/1.35 var(--body); color: var(--ink-2); }
+
+    .rows { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-evenly; padding: .6rem 0 .4rem; }
+    .row { display: block; }
+    .k { display: flex; align-items: baseline; gap: .6rem; margin-bottom: .32rem; font: 600 .7rem/1.2 var(--display); letter-spacing: .26em; text-transform: uppercase; color: var(--ink-2); }
+    .k em { font: italic .95rem/1 var(--body); letter-spacing: 0; text-transform: none; color: var(--ink-2); opacity: .8; }
+
+    .sexus { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+    .gender {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: .55rem .4rem .5rem;
+        background: transparent;
+        border: 1px solid var(--rule);
+        transition: background .15s, color .15s, border-color .15s;
+    }
+    .gender b { font: 700 1.3rem/1.1 var(--display); letter-spacing: .12em; }
+    .gender span { font: italic .95rem/1.2 var(--body); opacity: .75; }
+    .gender:hover { background: rgba(213, 161, 86, .16); border-color: rgba(32, 27, 23, .55); }
+    .gender.on { background: var(--btn); border-color: rgba(0, 0, 0, .4); color: var(--bg); }
+    .gender.on:hover { background: var(--btn-hi); }
+    .gender:disabled { opacity: .35; cursor: default; }
+
+    .sel { display: flex; align-items: stretch; border: 1px solid var(--rule); background: rgba(255, 247, 226, .3); }
+    .sel .val { flex: 1; display: grid; place-items: center; font: 600 1rem/1 var(--display); letter-spacing: .08em; }
+    .sel .val i { font: italic .95rem/1 var(--body); opacity: .65; margin-left: .4rem; letter-spacing: 0; }
+    .arrow { width: 2.6rem; height: 2.3rem; padding: 0; display: grid; place-items: center; background: transparent; border: 0; font-size: 1.5rem; line-height: 1; transition: background .15s, color .15s; }
+    .arrow:first-child { border-right: 1px solid var(--rule); }
+    .arrow:last-child { border-left: 1px solid var(--rule); }
+    .arrow:hover { background: var(--btn); color: var(--bg); }
+    .sel.off { opacity: .4; pointer-events: none; }
+
+    .tones { display: flex; justify-content: center; gap: .62rem; padding: .15rem 0; min-height: 2.3rem; }
+    .tone { width: 1.9rem; height: 1.9rem; padding: 0; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .55); box-shadow: inset 0 0 0 2px rgba(255, 247, 226, .35); transition: transform .12s; }
+    .tone:hover { transform: scale(1.14); }
+    .tone.on { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--btn); transform: scale(1.1); }
+    .tones .none { align-self: center; font: italic .95rem/1 var(--body); color: var(--ink-2); }
+
+    .field { display: block; width: 100%; height: 2.5rem; padding: 0 .8rem; font-size: 1.1rem; background: rgba(255, 247, 226, .42); border: 1px solid var(--rule); transition: border-color .15s; }
+    .field:focus { border-color: var(--btn); }
+    .field:disabled { opacity: .6; }
+    .field.bad { border-color: var(--btn-hi); }
+    .hint { min-height: 1.15rem; margin-top: .22rem; font: italic .9rem/1.2 var(--body); color: var(--ink-2); }
+    .hint.bad { color: var(--btn-hi); font-style: normal; font-weight: 600; }
+    .hint.good { color: #2f5a22; }
+
+    .dd { position: relative; }
+    .dd-btn { display: flex; align-items: center; width: 100%; height: 2.5rem; padding: 0 .8rem; background: rgba(255, 247, 226, .42); border: 1px solid var(--rule); font: 600 .98rem/1 var(--display); letter-spacing: .05em; text-align: left; }
+    .dd-btn:hover { border-color: rgba(32, 27, 23, .55); }
+    .dd-btn:disabled { opacity: .55; cursor: default; }
+    .dd-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dd-val i { margin-left: .5rem; font: italic .95rem/1 var(--body); opacity: .65; letter-spacing: 0; }
+    .dd-arrow { width: .55rem; height: .55rem; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg) translateY(-2px); }
+    .dd-list { position: absolute; left: 0; right: 0; bottom: calc(100% + .3rem); z-index: 20; max-height: 19rem; overflow-y: auto; background: var(--bg); border: 1px solid rgba(32, 27, 23, .55); box-shadow: 0 .8rem 1.6rem rgba(30, 18, 6, .45); }
+    .dd-head { padding: .5rem .8rem .2rem; font: 600 .62rem/1.2 var(--display); letter-spacing: .26em; text-transform: uppercase; color: var(--ink-2); }
+    .dd-opt { display: block; width: 100%; padding: .42rem .8rem; background: transparent; border: 0; text-align: left; font: 600 .95rem/1.2 var(--display); letter-spacing: .04em; }
+    .dd-opt i { margin-left: .5rem; font: italic .9rem/1 var(--body); opacity: .65; letter-spacing: 0; }
+    .dd-opt:hover { background: rgba(213, 161, 86, .22); }
+    .dd-opt.on { background: var(--btn); color: var(--bg); }
+    *::-webkit-scrollbar { width: .5rem; }
+    *::-webkit-scrollbar-track { background: rgba(32, 27, 23, .09); }
+    *::-webkit-scrollbar-thumb { background: rgba(32, 27, 23, .5); }
+
+    .known { margin-top: .5rem; text-align: center; font: italic 1rem/1.3 var(--body); color: var(--ink-2); }
+    .known b { font: 700 1.25rem/1.3 var(--display); letter-spacing: .08em; font-style: normal; color: var(--ink); }
+
+    .foot { display: flex; gap: .8rem; padding-top: .7rem; border-top: 1px solid var(--rule); }
+    .btn { height: 3rem; padding: 0 1.2rem; font: 700 .86rem/1 var(--display); letter-spacing: .2em; text-transform: uppercase; background: var(--btn); color: var(--bg); border: 1px solid rgba(0, 0, 0, .4); transition: background .15s; }
+    .btn:hover { background: var(--btn-hi); }
+    .btn:disabled { opacity: .45; cursor: default; background: var(--btn); }
+    .btn.go { flex: 1; }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+    .btn.ghost:hover { background: rgba(213, 161, 86, .2); border-color: rgba(32, 27, 23, .55); }
+
+    .sure { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 2rem; background: rgba(210, 179, 140, .985); }
+    .sure div { text-align: center; }
+    .sure h3 { font: 700 1.25rem/1.3 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+    .sure p { margin: .9rem 0 1.4rem; font: 1.08rem/1.5 var(--body); }
+    .sure .btns { display: flex; gap: .8rem; justify-content: center; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+    <div class="fog"></div>
+    <div class="drag" id="drag"></div>
+    <div class="plate">
+        <div class="who none" id="who">Sem nome ainda</div>
+        <div class="rule"></div>
+    </div>
+    <div class="how">Arraste para girar o personagem &middot; a roda do mouse aproxima</div>
+
+    <aside class="panel" id="panel">
+        <div class="layer photo"></div>
+        <div class="layer grain"></div>
+        <div class="layer sheen"></div>
+        <div class="inner"></div>
+        <img class="orn orn-tl" src="img/frame-corner-tl.webp" alt="">
+        <img class="orn orn-br" src="img/frame-corner-br.webp" alt="">
+        <button class="close" id="close" title="Sair (Esc)"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4l16 16M20 4L4 20"/></svg></button>
+
+        <header class="head">
+            <img class="head-title" src="img/title-personagem.webp" alt="Personagem">
+            <div class="bar"><i></i><i></i></div>
+            <p id="sub">Quem você será em Kuttenberg</p>
+        </header>
+
+        <main class="rows" id="rows">
+            <section class="row">
+                <div class="k">Sexus<em>homem ou mulher</em></div>
+                <div class="sexus">
+                    <button class="gender" id="g-male"><b>VIR</b><span>homem</span></button>
+                    <button class="gender" id="g-female"><b>FEMINA</b><span>mulher</span></button>
+                </div>
+            </section>
+            <section class="row">
+                <div class="k">Capillus<em>cabelo</em></div>
+                <div class="sel" id="s-hair"></div>
+            </section>
+            <section class="row">
+                <div class="k">Color<em>cor do cabelo</em></div>
+                <div class="tones" id="tones"></div>
+            </section>
+            <section class="row">
+                <div class="k">Facies<em>rosto</em></div>
+                <div class="sel" id="s-head"></div>
+            </section>
+            <section class="row">
+                <div class="k">Barba<em>só para homens</em></div>
+                <div class="sel" id="s-beard"></div>
+            </section>
+            <section class="row">
+                <div class="k">Cutis<em>pele</em></div>
+                <div class="sel" id="s-skin"></div>
+            </section>
+            <section class="row">
+                <div class="k">Nomen<em>o primeiro nome</em></div>
+                <input class="field" id="name" type="text" maxlength="16" autocomplete="off" spellcheck="false">
+                <div class="hint" id="hint"></div>
+            </section>
+            <section class="row">
+                <div class="k">Agnomen<em>alcunha, se quiser</em></div>
+                <div class="dd" id="dd"></div>
+                <div class="known" id="known"></div>
+            </section>
+        </main>
+
+        <footer class="foot">
+            <button class="btn ghost" id="dice" title="Um visual ao acaso">Sortear</button>
+            <button class="btn go" id="save">Salvar e criar</button>
+        </footer>
+
+        <div class="sure" id="sure" hidden>
+            <div>
+                <h3 id="sure-h">Sair?</h3>
+                <p id="sure-p"></p>
+                <div class="btns">
+                    <button class="btn ghost" id="sure-stay">Continuar</button>
+                    <button class="btn" id="sure-leave">Sair</button>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<script>
+"use strict";
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+
+/* 1rem is 16px on a 1920x1080 screen; everything is in rem, so the page scales with the screen. */
+const fit = () => {
+    const scale = Math.max(0.5, Math.min(window.innerWidth / 1920, window.innerHeight / 1080));
+    document.documentElement.style.fontSize = (16 * scale).toFixed(3) + "px";
+};
+fit();
+window.addEventListener("resize", fit);
+
+const $ = (id) => document.getElementById(id);
+const make = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+};
+
+/* The colours a hairstyle comes in, as the swatch shows them. */
+const TONES = {
+    black: ["preto", "#18120e"],
+    dark_brown: ["castanho escuro", "#3b281a"],
+    light_brown: ["castanho claro", "#7d5a3a"],
+    dark_ginger: ["ruivo escuro", "#7b3a1a"],
+    ginger: ["ruivo", "#b5541f"],
+    blonde: ["loiro", "#dcc27c"],
+    dark_grey: ["grafite", "#4c4b49"],
+    grey: ["grisalho", "#9b9993"],
+    white: ["branco", "#ece6d8"],
+};
+
+const LETTERS = /^[A-Za-zÀ-ÖØ-öø-ſ]+$/;
+const NOT_LETTERS = /[^A-Za-zÀ-ÖØ-öø-ſ]/g;
+
+let catalog = null;
+let genders = "both";
+let rules = { min: 2, max: 16 };
+let epithets = { groups: [], list: [] };
+/* The first time there is no way out: the player makes the character and gives it a name, or does not play. */
+let mandatory = false;
+let locked = false;
+let picked = null;
+let epithet = "";
+let name = "";
+let verdict = { for: "", ok: false, message: "", full: "" };
+let saving = false;
+/* A refusal that is not about the name: shown where the name's hint is, until something changes. */
+let note = "";
+
+const part = () => catalog[picked.gender];
+
+/* ---------- the numbers: what is picked, and what each number means ---------- */
+
+const wrap = (value, count) => ((value % count) + count) % count;
+
+function beardCount() {
+    return picked.gender === "male" ? part().beards[picked.head] : 0;
+}
+
+function step(kind, by) {
+    const here = part();
+    if (kind === "hair") {
+        const was = here.hairs[picked.hair][picked.tone];
+        picked.hair = wrap(picked.hair + by, here.hairs.length);
+        const tones = here.hairs[picked.hair];
+        // The colour stays when the new style comes in it.
+        const same = tones.indexOf(was);
+        picked.tone = tones.length === 0 ? -1 : same >= 0 ? same : 0;
+    } else if (kind === "head") {
+        picked.head = wrap(picked.head + by, here.heads);
+        if (beardCount() === 0) picked.beard = -1;
+        else if (picked.beard >= beardCount()) picked.beard = beardCount() - 1;
+    } else if (kind === "skin") {
+        picked.skin = wrap(picked.skin + by, here.skins);
+    } else if (kind === "beard") {
+        const count = beardCount();
+        if (count === 0) return;
+        // -1 is no beard: the ring goes none, 1, 2 ... count, none
+        picked.beard = wrap(picked.beard + 1 + by, count + 1) - 1;
+    }
+    changed();
+}
+
+function setGender(gender) {
+    if (picked.gender === gender || (genders !== "both" && genders !== gender)) return;
+    picked = freshLook(gender);
+    changed();
+}
+
+function freshLook(gender) {
+    const here = catalog[gender];
+    const style = here.hairs.findIndex((tones) => tones.length > 0);
+    return { gender, head: 0, hair: style, tone: Math.min(1, here.hairs[style].length - 1), beard: -1, skin: 0 };
+}
+
+const pickAt = (count) => Math.floor(Math.random() * count);
+
+function dice() {
+    const here = part();
+    const hair = pickAt(here.hairs.length);
+    const tones = here.hairs[hair];
+    const head = pickAt(here.heads);
+    const beards = picked.gender === "male" ? here.beards[head] : 0;
+    picked = { gender: picked.gender, head, hair, tone: tones.length ? pickAt(tones.length) : -1, beard: beards > 0 && Math.random() < 0.45 ? pickAt(beards) : -1, skin: pickAt(here.skins) };
+    changed();
+}
+
+/* ---------- drawing ---------- */
+
+function selector(host, kind) {
+    const back = make("button", "arrow", "‹");
+    const value = make("span", "val");
+    const next = make("button", "arrow", "›");
+    back.addEventListener("click", () => step(kind, -1));
+    next.addEventListener("click", () => step(kind, 1));
+    host.appendChild(back);
+    host.appendChild(value);
+    host.appendChild(next);
+    return value;
+}
+
+const values = {
+    hair: selector($("s-hair"), "hair"),
+    head: selector($("s-head"), "head"),
+    beard: selector($("s-beard"), "beard"),
+    skin: selector($("s-skin"), "skin"),
+};
+
+function label(node, text, of) {
+    node.textContent = text;
+    if (of) node.appendChild(make("i", null, of));
+}
+
+function drawTones() {
+    const host = $("tones");
+    host.innerHTML = "";
+    const tones = part().hairs[picked.hair];
+    if (tones.length === 0) {
+        host.appendChild(make("span", "none", "Este penteado tem uma cor só"));
+        return;
+    }
+    tones.forEach((tone, index) => {
+        const swatch = make("button", "tone" + (index === picked.tone ? " on" : ""));
+        swatch.style.background = TONES[tone][1];
+        swatch.title = TONES[tone][0];
+        swatch.addEventListener("click", () => {
+            picked.tone = index;
+            changed();
+        });
+        host.appendChild(swatch);
+    });
+}
+
+function draw() {
+    const here = part();
+    $("g-male").classList.toggle("on", picked.gender === "male");
+    $("g-female").classList.toggle("on", picked.gender === "female");
+    $("g-male").disabled = genders === "female";
+    $("g-female").disabled = genders === "male";
+    label(values.hair, "Estilo " + (picked.hair + 1), "de " + here.hairs.length);
+    label(values.head, "Rosto " + (picked.head + 1), "de " + here.heads);
+    label(values.skin, "Pele " + (picked.skin + 1), "de " + here.skins);
+    const beards = beardCount();
+    $("s-beard").classList.toggle("off", beards === 0);
+    label(values.beard, beards === 0 ? "Sem barba" : picked.beard < 0 ? "Sem barba" : "Barba " + (picked.beard + 1), beards === 0 ? "" : "de " + beards);
+    drawTones();
+}
+
+/* ---------- the name ---------- */
+
+const epithetOf = (id) => epithets.list.find((entry) => entry.id === id) || null;
+const fullName = () => (epithetOf(epithet) ? name + " " + epithetOf(epithet).label : name);
+
+function localProblem() {
+    if (name === "") return "";
+    if (name.length < rules.min) return "O nome precisa ter pelo menos " + rules.min + " letras.";
+    return "";
+}
+
+function drawName() {
+    const known = name === "" ? "" : fullName();
+    $("who").textContent = known || "Sem nome ainda";
+    $("who").classList.toggle("none", known === "");
+    $("known").innerHTML = "";
+    if (known) {
+        $("known").appendChild(document.createTextNode("Será conhecido como "));
+        $("known").appendChild(make("b", null, known));
+    }
+    const hint = $("hint");
+    const field = $("name");
+    hint.className = "hint";
+    field.classList.remove("bad");
+    if (locked) {
+        hint.textContent = "O nome do personagem se escolhe uma vez: este já está escolhido.";
+    } else if (name === "") {
+        hint.textContent = "Só letras, de " + rules.min + " a " + rules.max + ": sem espaço, número nem símbolo.";
+    } else if (localProblem() !== "") {
+        hint.textContent = localProblem();
+        hint.classList.add("bad");
+        field.classList.add("bad");
+    } else if (verdict.for !== name + "|" + epithet) {
+        hint.textContent = "Conferindo o nome…";
+    } else if (verdict.ok) {
+        hint.textContent = "Esse nome está livre.";
+        hint.classList.add("good");
+    } else {
+        hint.textContent = verdict.message;
+        hint.classList.add("bad");
+        field.classList.add("bad");
+    }
+    if (note !== "") {
+        hint.textContent = note;
+        hint.className = "hint bad";
+    }
+    $("save").disabled = saving || !canSave();
+    $("save").textContent = saving ? "Criando…" : "Salvar e criar";
+}
+
+function canSave() {
+    return locked || (name !== "" && localProblem() === "" && verdict.for === name + "|" + epithet && verdict.ok);
+}
+
+let checkTimer = 0;
+function askName() {
+    clearTimeout(checkTimer);
+    if (locked || name === "" || localProblem() !== "") return;
+    checkTimer = setTimeout(() => send("creator:check", { name, epithet }), 280);
+}
+
+let noteTimer = 0;
+$("name").addEventListener("input", (event) => {
+    // Only letters: whatever else was typed or pasted is dropped as it comes, and the player is told why.
+    const typed = event.target.value;
+    const clean = typed.replace(NOT_LETTERS, "").slice(0, rules.max);
+    if (clean !== typed) event.target.value = clean;
+    name = clean;
+    note = NOT_LETTERS.test(typed) ? "Só letras: o espaço, o número ou o símbolo foi tirado." : "";
+    NOT_LETTERS.lastIndex = 0;
+    clearTimeout(noteTimer);
+    if (note !== "") {
+        noteTimer = setTimeout(() => {
+            note = "";
+            drawName();
+        }, 2600);
+    }
+    drawName();
+    askName();
+});
+$("name").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") save();
+});
+
+/* ---------- the alcunha: a list that opens upwards, in groups ---------- */
+
+let list = null;
+function closeList() {
+    if (!list) return false;
+    list.remove();
+    list = null;
+    return true;
+}
+
+function drawEpithet() {
+    const host = $("dd");
+    host.innerHTML = "";
+    const button = make("button", "dd-btn");
+    const current = epithetOf(epithet);
+    const value = make("span", "dd-val", current ? current.label : "Nenhuma");
+    if (current && current.gloss) value.appendChild(make("i", null, current.gloss));
+    button.appendChild(value);
+    button.appendChild(make("i", "dd-arrow"));
+    button.disabled = locked;
+    button.addEventListener("click", () => {
+        if (closeList()) return;
+        list = make("div", "dd-list");
+        const row = (id, text, gloss) => {
+            const option = make("button", "dd-opt" + (id === epithet ? " on" : ""), text);
+            if (gloss) option.appendChild(make("i", null, gloss));
+            option.addEventListener("click", () => {
+                closeList();
+                epithet = id;
+                drawEpithet();
+                drawName();
+                askName();
+            });
+            list.appendChild(option);
+        };
+        row("", "Nenhuma", "");
+        epithets.groups.forEach((group) => {
+            const inside = epithets.list.filter((entry) => entry.group === group.id);
+            if (inside.length === 0) return;
+            list.appendChild(make("div", "dd-head", group.label));
+            inside.forEach((entry) => row(entry.id, entry.label, entry.gloss));
+        });
+        host.appendChild(list);
+        const on = list.querySelector(".dd-opt.on");
+        if (on) list.scrollTop = Math.max(0, on.offsetTop - list.clientHeight / 2);
+    });
+    host.appendChild(button);
+}
+
+document.addEventListener("mousedown", (event) => {
+    if (list && !$("dd").contains(event.target)) closeList();
+});
+
+/* ---------- the look goes to the body ---------- */
+
+let previewTimer = 0;
+function changed() {
+    note = "";
+    draw();
+    drawName();
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => send("creator:preview", { look: picked }), 60);
+}
+
+function save() {
+    if (saving || !canSave()) return;
+    saving = true;
+    drawName();
+    send("creator:accept", { look: picked, name, epithet });
+    // The server's answer closes the page; a refusal frees the button, and so does a silence.
+    setTimeout(() => {
+        if (saving) {
+            saving = false;
+            drawName();
+        }
+    }, 9000);
+}
+
+/* ---------- leaving ---------- */
+
+function ask() {
+    if (mandatory) return;
+    $("sure-h").textContent = "Sair do criador?";
+    $("sure-p").textContent = "O personagem volta a ser como era: nada do que você mudou aqui é guardado.";
+    $("sure").hidden = false;
+    $("sure-stay").focus();
+}
+
+$("close").addEventListener("click", ask);
+$("sure-stay").addEventListener("click", () => ($("sure").hidden = true));
+$("sure-leave").addEventListener("click", () => send("creator:cancel"));
+document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (closeList() || mandatory) return;
+    if ($("sure").hidden) ask();
+    else $("sure").hidden = true;
+});
+
+/* ---------- turning the figure and zooming ---------- */
+
+let from = null;
+let drag = 0;
+let frame = 0;
+$("drag").addEventListener("mousedown", (event) => {
+    from = event.clientX;
+    $("drag").classList.add("on");
+});
+window.addEventListener("mousemove", (event) => {
+    if (from === null) return;
+    drag += event.clientX - from;
+    from = event.clientX;
+    if (!frame) {
+        frame = requestAnimationFrame(() => {
+            frame = 0;
+            send("creator:orbit", { dx: drag });
+            drag = 0;
+        });
+    }
+});
+window.addEventListener("mouseup", () => {
+    from = null;
+    $("drag").classList.remove("on");
+});
+$("stage").addEventListener("wheel", (event) => {
+    if ($("panel").contains(event.target)) return;
+    send("creator:zoom", { dy: event.deltaY });
+});
+
+$("g-male").addEventListener("click", () => setGender("male"));
+$("g-female").addEventListener("click", () => setGender("female"));
+$("dice").addEventListener("click", dice);
+$("save").addEventListener("click", save);
+
+/* ---------- what the server sends ---------- */
+
+window.addEventListener("creator:begin", (event) => {
+    const data = event.detail;
+    catalog = data.catalog;
+    genders = data.genders;
+    rules = data.rules;
+    epithets = data.epithets;
+    mandatory = data.mandatory === true;
+    $("close").hidden = mandatory;
+    $("sub").textContent = mandatory ? "Para entrar em Kuttenberg, crie o seu personagem e dê um nome a ele" : "Quem você será em Kuttenberg";
+    locked = data.identity.locked === true;
+    picked = Object.assign({}, data.look);
+    name = data.identity.name || data.identity.suggestion || "";
+    epithet = data.identity.epithet || "";
+    verdict = { for: "", ok: false, message: "", full: "" };
+    saving = false;
+    $("name").value = name;
+    $("name").disabled = locked;
+    $("sure").hidden = true;
+    closeList();
+    drawEpithet();
+    draw();
+    drawName();
+    send("creator:preview", { look: picked });
+    askName();
+});
+
+window.addEventListener("creator:name", (event) => {
+    const data = event.detail;
+    // The answer is for what was asked, which the server sends back: an old answer does not judge a newer name.
+    verdict = { for: (data.name === undefined ? "" : data.name) + "|" + (data.epithet === undefined ? "" : data.epithet), ok: data.ok === true, message: data.message || "", full: data.full || "" };
+    drawName();
+});
+
+window.addEventListener("creator:refused", (event) => {
+    saving = false;
+    const data = event.detail;
+    if (data.field === "name") {
+        verdict = { for: name + "|" + epithet, ok: false, message: data.message, full: "" };
+    } else {
+        note = data.message;
+    }
+    drawName();
+});
+
+send("creator:ready");
+</script>
+</body>
+</html>

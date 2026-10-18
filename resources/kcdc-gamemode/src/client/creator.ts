@@ -17,7 +17,7 @@ const ENDINGS: Record<string, string> = {
     interrupted: "it was interrupted",
 };
 
-function readGenders(payload: unknown): "male" | "female" | "both" {
+function parseOpen(payload: unknown): { genders?: unknown; mandatory?: unknown } {
     let parsed: unknown = payload;
     if (typeof payload === "string") {
         try {
@@ -26,7 +26,11 @@ function readGenders(payload: unknown): "male" | "female" | "both" {
             parsed = undefined;
         }
     }
-    const genders = typeof parsed === "object" && parsed !== null ? (parsed as { genders?: unknown }).genders : undefined;
+    return typeof parsed === "object" && parsed !== null ? (parsed as { genders?: unknown; mandatory?: unknown }) : {};
+}
+
+function readGenders(payload: unknown): "male" | "female" | "both" {
+    const genders = parseOpen(payload).genders;
     return genders === "male" || genders === "female" ? genders : "both";
 }
 
@@ -48,6 +52,8 @@ export function installCreator(): void {
     let request = 0;
     let retries = 0;
     let genders: "male" | "female" | "both" = "both";
+    /** A newcomer, who has no character yet and cannot back out: the stage is put up again when they do. */
+    let mandatory = false;
 
     function openWhenSettled(): void {
         const mine = ++request;
@@ -89,12 +95,14 @@ export function installCreator(): void {
 
     Events.on(`${RESOURCE}:creator.open`, (payload) => {
         genders = readGenders(payload);
+        mandatory = parseOpen(payload).mandatory === true;
         retries = 0;
         openWhenSettled();
     });
 
     Events.on(`${RESOURCE}:creator.close`, () => {
         request++;
+        mandatory = false;
         if (owned) CharacterCreator.close();
     });
 
@@ -103,10 +111,17 @@ export function installCreator(): void {
         if (!owned) return;
         owned = false;
         if (appearance !== null) {
+            mandatory = false;
             Events.emitServer(`${RESOURCE}:creator.accepted`, JSON.stringify(appearance));
             return;
         }
         // `replaced` means a newer creator is already up; nothing to say.
+        if (reason === "cancelled" && mandatory) {
+            Hud.showInfoText("Crie o seu personagem para entrar em Kuttenberg.");
+            retries = 0;
+            openWhenSettled();
+            return;
+        }
         if (reason !== "replaced") {
             retryOrReport(reason);
         }

@@ -68,7 +68,7 @@ every player.
 | `/area [here]`, `/area near [radius]`, `/area doors [id]` | Lists the level's areas and the script areas around you, and the doors an area links. |
 | `/blip [type] [label]`, `/blip me [type] [label]`, `/blip set <id> type\|label\|state\|compass\|map <value>`, `/blip move <id>`, `/blip types [prefix]`, `/blip list`, `/blip remove <id>`, `/blip clear` | Puts a point on everybody's compass and map screen, or on yours alone. |
 | `/blipdemo`, `/blipdemo clear` | Places one of every kind of blip around you, plus one that circles. |
-| `/book [book\|plainBook\|letter]`, `/book parchment`, `/book fade`, `/book legibility <0..1>`, `/book close`, `/book status` | Opens a demo book in your hands. |
+| `/book [book\|plainBook\|letter]`, `/book fade`, `/book legibility <0..1>`, `/book close`, `/book status` | Opens a demo book in your hands. |
 | `/build <model> [scale] [rigid\|static\|none]`, `/build stop` | Places a mesh where you aim, with a live preview. |
 | `/camera`, `/camera third [distance]`, `/camera first` | Switches your view between the game's first-person camera and one behind you. |
 | `/carry <item>`, `/carry prop <item>`, `/carry list`, `/carry drop [now]` | Carries an item in your arms, or lays one down for the game's pick-up prompt. |
@@ -102,10 +102,11 @@ every player.
 | `/siege trebuchet\|cannon`, `/siege load [id]`, `/siege fire [distance] [id]`, `/siege fire at <player id> [id]`, `/siege speed <multiplier> [id]`, `/siege list`, `/siege remove <id>`, `/siege clear` | Builds, loads and fires trebuchets and cannons; an engine it builds can also be loaded and fired from the game's use hint. |
 | `/stash`, `/stash virtual`, `/stash info`, `/stash clear`, `/stash near [guid]`, `/stash lock\|unlock [guid]`, `/stash pick on\|off [guid]`, `/stash key <item guid>\|clear [guid]`, `/stash goto [locked\|unlocked\|guid]` | Opens your virtual stash, spawns containers, and reads and locks the level's own. See [Virtual stash](#virtual-stash). |
 | `/take <GUID\|"exact item name"> [amount]` | Takes items back out of your own inventory. |
-| `/tp <player\|slot>`, `/tp <x> <y> [z]`, `/tp list` | Puts you next to another player, or at a map position; the slot is the ID the Tab scoreboard shows. |
-| `/ui` | Opens the debug panel on your own screen. |
+| `/tp <player\|slot>`, `/tp <x> <y> [z]`, `/tp list` | Puts you next to another player, or at a map position; the slot is the ID in the administrator's player list (F3 panel, Jogadores); the Tab scoreboard is switched off in `server.json` on this server. |
+| `/ui` | Opens the debug panel on your own screen. Administrators only on this server. |
 | `/unmute <player\|slot>` | Lets you hear a player you muted again. |
 | `/vendor stall`, `/vendor here`, `/vendor reset` | Trades on the game's own shop screen, at prices the server sets. |
+| `/vendedor listar`, `/vendedor aqui <id>`, `/vendedor reabastecer`, `/vendedor padrao` | The server's trade NPCs (smith, apothecary, tavern keeper, hunter, clothier): where they stand, and their shelves. |
 | `/vfx <effect> [scale]`, `/vfx burst <effect> [scale]`, `/vfx names [prefix]`, `/vfx list`, `/vfx remove <id>`, `/vfx clear` | Places a particle effect from the game's own libraries, or fires one off. |
 | `/world [info]`, `/world scale <0..200>`, `/world hour <0..24>`, `/world day <day> <hour>`, `/world weather <preset> [seconds 0..21600]`, `/world rain <0..1> [amount 0..1]`, `/world wind <x> <y> [z]` | Reads and sets the shared clock and weather; wind is in metres per second, up to 50. |
 
@@ -230,7 +231,9 @@ Neither is verified, so a whitelist that has to hold should check
 
 ## The debug panel
 
-`F4` opens and closes it, `/ui` opens it, **Esc** hands input back to the game.
+`F4` opens and closes it, `/ui` opens it, **Esc** hands input back to the game. On this server both are for
+administrators only: a press of F4 is sent to the server (`panel.request`), which opens the panel for an admin and
+tells anybody else so in chat, and the panel's roster and command list (`panel.poll`) are checked again on the server.
 While the panel holds the keyboard the key cannot close it -- a focused CEF view
 owns input, which is what stops `Key.bind` from firing -- so the panel carries
 its own Close plate.
@@ -292,7 +295,8 @@ src/client/
   tsconfig.json       the client program
 
 ui/index.html         the panel
-assets/book/          the textures the /book demo binds its pages in
+ui-src/status.html    the status panel's page, as it is written (F2/F3); `npm run build` packs it, without comments or
+                      indentation, into ui/status.html (scripts/pack-ui.mjs), which is what players download. Edit this one.
 tests/dice.test.cjs   the dice checks `npm run test:dice` runs
 ```
 

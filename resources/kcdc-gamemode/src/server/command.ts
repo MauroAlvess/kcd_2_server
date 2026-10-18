@@ -1,5 +1,6 @@
 /** The command vocabulary, and the one place a `/` line becomes a call. */
 
+import { canRun } from "./auth.js";
 
 /** One player's chat channel. */
 export class Reply {
@@ -71,6 +72,11 @@ export class CommandRegistry {
         }
 
         const reply = new Reply(player);
+        if (!canRun(player, command.name)) {
+            reply.line(`/${command.name} é um comando de administrador.`);
+            return true;
+        }
+
         const context: CommandContext = {
             player,
             name: command.name,

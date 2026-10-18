@@ -1,11 +1,19 @@
 /**
- * The server half of the debug panel: what its client cannot see for itself.
+ * The server half of the debug panel (F4): what its client cannot see for itself.
  * Answered on demand, so a panel nobody has open costs nothing.
+ *
+ * The panel is for administrators only. A press of F4 reaches here as `panel.request`, and only an
+ * admin is answered with `panel.open`; `panel.poll`, which carries the roster and the command list,
+ * is checked again, because a modified client could send it without ever being asked to open.
  */
 
+import { isAdmin } from "./auth.js";
 import type { CommandRegistry } from "./command.js";
 
 const RESOURCE = "kcdc-gamemode";
+
+/** A player who presses F4 over and over is told once, not once per press. */
+const REFUSAL_GAP_MS = 8000;
 
 function world(): Record<string, unknown> {
     return {
@@ -46,7 +54,7 @@ function spawned(): Record<string, number> {
     };
 }
 
-/** `/ui` is the only caller. */
+/** `/ui` and an admin's F4 are the only callers. */
 export function openPanelFor(player: Player): void {
     // The payload is declared optional, but the native binding still counts
     // two arguments; an empty one is what build.ts sends for the same reason.
@@ -54,8 +62,29 @@ export function openPanelFor(player: Player): void {
 }
 
 export function installDebugPanel(registry: CommandRegistry): void {
+    const refusedAt = new Map<number, number>();
+
+    Events.onClient(`${RESOURCE}:panel.request`, (sender) => {
+        const player = sender as Player;
+        if (isAdmin(player)) {
+            openPanelFor(player);
+            return;
+        }
+
+        const now = Date.now();
+        if (now - (refusedAt.get(player.id) ?? 0) < REFUSAL_GAP_MS) {
+            return;
+        }
+        refusedAt.set(player.id, now);
+        Chat.sendToPlayer(player, "O painel F4 é só para administradores.");
+    });
+
     Events.onClient(`${RESOURCE}:panel.poll`, (sender) => {
-        (sender as Player).emit(
+        const player = sender as Player;
+        if (!isAdmin(player)) {
+            return;
+        }
+        player.emit(
             `${RESOURCE}:panel.realm`,
             JSON.stringify({
                 world: world(),
@@ -66,5 +95,9 @@ export function installDebugPanel(registry: CommandRegistry): void {
         );
     });
 
-    console.log("debug panel answering; clients open it with F4 or /ui");
+    Events.on("playerDisconnect", (player) => {
+        refusedAt.delete(player.id);
+    });
+
+    console.log("debug panel answering administrators; F4 or /ui opens it");
 }

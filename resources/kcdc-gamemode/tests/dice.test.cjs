@@ -4,7 +4,11 @@ const path = require("node:path");
 const vm = require("node:vm");
 const { test } = require("node:test");
 
-function setup() {
+/** `emptyAtStart`: the level lists no table until `revealTables()`, as a level not loaded yet would. */
+function setup({ emptyAtStart = false } = {}) {
+    let tablesHidden = emptyAtStart;
+    const timeouts = [];
+    const logs = [];
     const handlers = new Map();
     const clients = new Map();
     const sessions = new Map();
@@ -19,6 +23,20 @@ function setup() {
     let containsCalls = 0;
     let failOpen = false;
     let failStart = false;
+    // The pot (dice-pot.js): what each carries, and what was held, bound and given back.
+    const purses = new Map();
+    const pot = { holds: [], binds: [], releases: [] };
+    const dicePots = {
+        coinsOf: (player) => purses.get(player.id) ?? 1000,
+        hold: (first, second, stake) => {
+            for (const player of [first, second]) if ((purses.get(player.id) ?? 1000) < stake) return { short: player };
+            const held = { match: 0, stake, seats: [first, second].map((player) => ({ steamId: `s${player.id}`, name: player.nickname, coins: stake, items: player.dice ? [{ item: "die", amount: 6, metadata: {} }] : [] })) };
+            pot.holds.push({ first: first.id, second: second.id, stake });
+            return held;
+        },
+        bind: (held, match) => { held.match = match; pot.binds.push({ match, stake: held.stake }); },
+        release: (held, players) => pot.releases.push({ stake: held.stake, players: Array.from(players, (player) => player.id) }),
+    };
     const emit = (name, ...args) => {
         for (const handler of handlers.get(name) ?? []) handler(...args);
     };
@@ -39,8 +57,15 @@ function setup() {
     }
     const context = {
         exports: {},
-        console,
+        // Names as the other player knows them; here everybody knows everybody.
+        require: (name) => {
+            if (name === "./dice-pot.js") return { dicePots, STAKE_STEPS: [0, 5, 10, 20, 50, 100, 200, 500, 1000], coinsText: (coins) => `${coins} ${coins === 1 ? "moeda" : "moedas"}` };
+            assert.equal(name, "./acquaintances.js");
+            return { labelFor: (_viewer, target) => target.nickname };
+        },
+        console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
         Date: { now: () => now },
+        setTimeout: (handler, ms) => { timeouts.push({ handler, ms }); return timeouts.length; },
         setInterval: (handler) => { tick = () => { crossings(); handler(); }; return 1; },
         clearInterval: () => { tick = undefined; },
         Vector3: class { constructor(x, y, z) { Object.assign(this, { x, y, z }); } },
@@ -62,7 +87,7 @@ function setup() {
         } },
         Dice: {
             // table1quest is table1 again on a quest layer: same chairs, another GUID.
-            tables: () => [{ id: "table1", position: { x: 0, y: 0, z: 0 }, seats: ["seat1", "seat2"] }, { id: "table2", position: { x: 20, y: 0, z: 0 }, seats: ["seat3", "seat4"] }, { id: "table1quest", position: { x: 0.3, y: 0, z: 0 }, seats: ["seat5", "seat6"] }],
+            tables: () => (tablesHidden ? [] : [{ id: "table1", position: { x: 0, y: 0, z: 0 }, seats: ["seat1", "seat2"] }, { id: "table2", position: { x: 20, y: 0, z: 0 }, seats: ["seat3", "seat4"] }, { id: "table1quest", position: { x: 0.3, y: 0, z: 0 }, seats: ["seat5", "seat6"] }]),
             matchOf: (id) => matches.get(id) ?? 0,
             start: (first, second, options) => {
                 if (failStart) throw new Error("Native start refused");
@@ -109,8 +134,11 @@ function setup() {
     const b = add(2);
     tick();
     const choose = (player, option) => emit("dialogueChoice", context.Dialogue.sessionOf(player.id), player, option);
+    const pageOf = (player) => sessions.get(context.Dialogue.sessionOf(player.id))?.page;
+    const optionOf = (player, id) => pageOf(player)?.options.find((option) => option.id === id);
     return {
-        a, b, add, lobby, starts, sessions, areas, emit, choose, context, players,
+        a, b, add, lobby, starts, sessions, areas, emit, choose, context, players, timeouts, logs, purses, pot, pageOf, optionOf,
+        revealTables: () => { tablesHidden = false; },
         freeDice: (player) => { let result; messages.get("playground:freeDice")({ player: player.id }, (value) => result = value); return result; },
         containsCalls: () => containsCalls,
         interactWith: (player, table) => clients.get("kcdc-gamemode:dice.interact")(player, { token: JSON.parse(player.messages.at(-1)[1]).token, table }),
@@ -151,6 +179,89 @@ test("standing players join by interaction, can leave, and both must agree befor
     h.choose(h.b, "agree");
     assert.deepEqual(h.starts, [{ first: 1, second: 2, score: 2000, firstName: "Player 1", secondName: "Player 2" }]);
     assert.equal(h.sessions.size, 0);
+});
+
+test("the stake goes up and down a step at a time with the score, both agree to it, and it is held when the match starts", () => {
+    const h = setup();
+    h.pair();
+    assert.match(h.optionOf(h.a, "agree").text, /^Propor: até 2000 pontos, sem aposta\.$/);
+    assert.equal(h.optionOf(h.a, "stakeDown").enabled, false, "nothing to lower");
+    assert.match(h.optionOf(h.a, "stakeUp").text, /^Apostar 5 moedas cada\.$/);
+    h.choose(h.a, "stakeUp");
+    h.choose(h.a, "stakeUp");
+    assert.match(h.optionOf(h.a, "agree").text, /apostando 10 moedas cada/);
+    assert.match(h.optionOf(h.a, "stakeDown").text, /^Apostar só 5 moedas cada\.$/);
+    assert.ok(h.pageOf(h.b).options.some((option) => option.id === "waiting" && /apostando 10 moedas cada/.test(option.text)), "the other sees it");
+    h.choose(h.b, "stakeUp");
+    assert.match(h.optionOf(h.a, "agree").text, /apostando 10 moedas cada/, "the one waiting cannot change it");
+
+    h.choose(h.a, "agree");
+    assert.match(h.optionOf(h.b, "agree").text, /^Aceitar: até 2000 pontos, apostando 10 moedas cada\.$/);
+    h.choose(h.b, "agree");
+    assert.equal(h.starts.length, 1);
+    assert.deepEqual(h.pot.holds, [{ first: 1, second: 2, stake: 10 }]);
+    assert.deepEqual(h.pot.binds, [{ match: 1, stake: 10 }]);
+    for (const player of [h.a, h.b]) {
+        assert.ok(player.chat.some((line) => /Aposta: 10 moedas de cada um, guardadas até o fim; quem vencer leva 20 moedas/.test(line)));
+        assert.ok(player.chat.some((line) => /Teclas padrão da mesa: E marca um dado, F pontua e joga o resto, Q pontua e passa a vez; segure Esc para desistir/.test(line)));
+    }
+});
+
+test("a change of stake takes back an agreement, as a change of score does", () => {
+    const h = setup();
+    h.pair();
+    h.choose(h.a, "agree");
+    h.choose(h.b, "stakeUp");
+    h.choose(h.b, "agree");
+    assert.equal(h.starts.length, 0, "a only agreed to no stake");
+    h.choose(h.a, "agree");
+    assert.equal(h.starts.length, 1);
+    assert.deepEqual(h.pot.holds, [{ first: 1, second: 2, stake: 5 }]);
+});
+
+test("a stake is raised only to what the one raising it carries, and one the other cannot pay stops the match before it starts", () => {
+    const h = setup();
+    h.purses.set(1, 7);
+    h.pair();
+    h.choose(h.a, "stakeUp");
+    assert.equal(h.optionOf(h.a, "stakeUp").enabled, false);
+    assert.match(h.optionOf(h.a, "stakeUp").text, /^Apostar 10 moedas cada \(você não tem\)\.$/);
+    h.choose(h.a, "stakeUp");
+    assert.match(h.optionOf(h.a, "agree").text, /apostando 5 moedas cada/, "the greyed step does nothing");
+
+    const poor = setup();
+    poor.purses.set(2, 3);
+    poor.pair();
+    poor.choose(poor.a, "stakeUp");
+    poor.choose(poor.a, "agree");
+    poor.choose(poor.b, "agree");
+    assert.equal(poor.starts.length, 0);
+    assert.equal(poor.sessions.size, 0);
+    assert.match(poor.b.chat.at(-1), /^Você não tem 5 moedas para a aposta\.$/);
+    assert.match(poor.a.chat.at(-1), /^Player 2 não tem 5 moedas para a aposta\.$/);
+});
+
+test("a match the game will not start gives the stake and the dice back", () => {
+    const h = setup();
+    h.failStart();
+    h.pair();
+    h.choose(h.a, "stakeUp");
+    h.choose(h.a, "agree");
+    h.choose(h.b, "agree");
+    assert.equal(h.starts.length, 0);
+    assert.deepEqual(h.pot.releases, [{ stake: 5, players: [1, 2] }]);
+    assert.deepEqual(h.pot.binds, []);
+});
+
+test("whoever carries dice is told they are kept for the match; with no stake nothing is said of one", () => {
+    const h = setup();
+    h.a.dice = true;
+    h.pair();
+    h.choose(h.a, "agree");
+    h.choose(h.b, "agree");
+    assert.ok(h.a.chat.some((line) => /Seus dados ficam guardados durante o jogo/.test(line)));
+    assert.ok(!h.b.chat.some((line) => /Seus dados ficam guardados/.test(line)));
+    assert.ok(![...h.a.chat, ...h.b.chat].some((line) => /Aposta:/.test(line)));
 });
 
 test("a counteroffer invalidates prior consent and returns to the other player", () => {
@@ -258,7 +369,7 @@ test("an unanswered invitation does not hold the table, and the tick skips playe
     h.interact(c);
     h.interact(d);
     assert.equal(h.sessions.size, 2);
-    assert.throws(() => h.lobby.accept(h.b), /occupied|finish/);
+    assert.throws(() => h.lobby.accept(h.b), /ocupada|termine/);
     // Crossings are the engine's; the lobby only asks about players at a table.
     const ticks = () => { const before = h.containsCalls(); for (let i = 0; i < 10; i++) h.tick(); return h.containsCalls() - before; };
     const baseline = ticks();
@@ -270,11 +381,11 @@ test("an unanswered invitation does not hold the table, and the tick skips playe
 test("invitations reserve players, expire, and acceptance only opens negotiation", async () => {
     const h = setup();
     await h.lobby.invite(h.a, h.b, 4000);
-    await assert.rejects(h.lobby.invite(h.a, h.b, 5000), /already/);
+    await assert.rejects(h.lobby.invite(h.a, h.b, 5000), /já está esperando/);
     h.interact(h.a);
     assert.equal(h.sessions.size, 0);
     h.advance(60_001);
-    assert.throws(() => h.lobby.accept(h.b), /Nobody/);
+    assert.throws(() => h.lobby.accept(h.b), /Ninguém/);
     await h.lobby.invite(h.a, h.b, 4000);
     h.lobby.accept(h.b);
     assert.equal(h.starts.length, 0);
@@ -286,16 +397,69 @@ test("invitations reserve players, expire, and acceptance only opens negotiation
 test("invitations reject unloaded tables and recheck player state after the client query", async () => {
     const h = setup();
     h.context.World.entitiesInRadius = async () => ({ answered: true, entities: [] });
-    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /loaded dice table/);
+    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /mesma mesa de dados/);
     h.context.World.entitiesInRadius = async () => ({ answered: false, entities: [] });
-    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /Try again/);
+    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /Tente de novo/);
     h.context.World.entitiesInRadius = async () => {
         h.b.virtualWorld = 1;
         return { answered: true, entities: [{ guid: "table1" }] };
     };
-    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /loaded dice table/);
+    await assert.rejects(h.lobby.invite(h.a, h.b, 2000), /mesma mesa de dados/);
     assert.equal(h.sessions.size, 0);
-    assert.throws(() => h.lobby.accept(h.b), /Nobody/);
+    assert.throws(() => h.lobby.accept(h.b), /Ninguém/);
+});
+
+test("the talk menu asks whether two players share a table, on whichever quest layer", () => {
+    const h = setup();
+    assert.equal(h.lobby.sameTable(h.a, h.b), true);
+    const across = h.add(3, "seat3");
+    const away = h.add(4);
+    away.position = { x: 500, y: 0, z: 0 };
+    h.tick();
+    assert.equal(h.lobby.sameTable(h.a, across), false, "another table is not the same table");
+    assert.equal(h.lobby.sameTable(h.a, away), false, "nor is no table at all");
+    assert.equal(h.lobby.sameTable(away, away), false);
+    h.b.position.x = 50;
+    h.tick();
+    assert.equal(h.lobby.sameTable(h.a, h.b), false, "and it follows players walking off");
+});
+
+test("a pair agreed in the talk menu goes straight to the score, without the chat commands", async () => {
+    const h = setup();
+    await h.lobby.pair(h.a, h.b);
+    assert.equal(h.sessions.size, 2, "both are asked about the score at once");
+    for (const player of [h.a, h.b]) {
+        assert.ok(!player.chat.some((line) => /\/dice/.test(line)), "nobody is told to type /dice accept for a game already accepted");
+    }
+    h.choose(h.a, "agree");
+    h.choose(h.b, "agree");
+    assert.equal(h.starts.length, 1);
+    assert.equal(h.starts[0].score, 2000);
+
+    const c = h.add(3);
+    const d = h.add(4);
+    h.tick();
+    await assert.rejects(h.lobby.pair(c, d), /ocupada/);
+    assert.throws(() => h.lobby.accept(d), /Ninguém/, "a refused pair leaves no invitation behind");
+    const across = h.add(5, "seat3");
+    h.tick();
+    await assert.rejects(h.lobby.pair(c, across), /mesma mesa de dados/);
+});
+
+test("somebody already waiting at the table can still be paired from the talk menu", async () => {
+    const h = setup();
+    h.interact(h.a);
+    assert.match(h.a.chat.at(-1), /Esperando outra pessoa/);
+    await h.lobby.pair(h.b, h.a);
+    assert.equal(h.sessions.size, 2, "the wait gives way to the game they agreed on");
+    h.choose(h.b, "agree");
+    h.choose(h.a, "agree");
+    assert.equal(h.starts.length, 1);
+
+    const busy = setup();
+    busy.pair();
+    await assert.rejects(busy.lobby.pair(busy.a, busy.b), /já está esperando|ocupada/, "a score already being agreed is not thrown away");
+    assert.equal(busy.sessions.size, 2);
 });
 
 test("score boundaries, dialogue failure, and native start failure leave no pending setup", async () => {
@@ -373,7 +537,7 @@ test("client Interact hint requires proximity, aim and a loaded station; joining
     assert.equal(raycasts, 2); // Stop at the nearest valid table; do not trace the farther one.
     let hint = [...hints.values()][0];
     assert.equal(hint.key, "primary_action");
-    assert.match(hint.text, /join lobby/);
+    assert.match(hint.text, /Jogar dados/);
     direction = { x: 0, y: -1, z: 0 };
     raycasts = 0;
     hint.handler(); // Recheck the current aim even before the next tick.
@@ -392,15 +556,22 @@ test("client Interact hint requires proximity, aim and a loaded station; joining
     hint.handler();
     assert.equal(requests.length, 2);
     receive(2, true);
-    assert.match([...hints.values()][0].text, /Leave dice lobby/);
+    assert.match([...hints.values()][0].text, /Sair da mesa de dados/);
     for (const [invalidate, restore] of [
         [() => { loaded = false; }, () => { loaded = true; }],
         [() => { hit = { distance: 0.2 }; }, () => { hit = null; }],
         [() => { context.LocalPlayer.position.y = -4; }, () => { context.LocalPlayer.position.y = -2; }],
+        // Somebody under the crosshair has "[E] Conversar" up: one key, one action.
+        [() => { interaction.setPersonInView(7); }, () => { interaction.setPersonInView(0); }],
     ]) {
         invalidate(); tick(); assert.equal(hints.size, 0);
         restore(); tick(); assert.equal(hints.size, 1);
     }
+    const before = requests.length;
+    interaction.setPersonInView(7);
+    [...hints.values()][0].handler();
+    assert.equal(requests.length, before, "a press in the moment both hints are up goes to the person");
+    interaction.setPersonInView(0);
     receive(3, true, false);
     assert.equal(hints.size, 0);
     context.LocalPlayer.position.y = -4;
@@ -445,4 +616,48 @@ test("playground refuses movement while mounted or with every table occupied", (
     h.add(3, "seat3");
     assert.match(h.freeDice(h.a).error, /unoccupied/);
     assert.equal(h.a.position.x, 8);
+});
+
+test("two players at a table share it even when the area's crossing was never reported", () => {
+    const h = setup();
+    // Added and never ticked: the engine has said nothing about these two entering the area.
+    const c = h.add(3);
+    const d = h.add(4);
+    assert.equal(h.lobby.sameTable(c, d), true);
+    d.position = { x: 3.6, y: 0, z: 0 };
+    assert.equal(h.lobby.sameTable(c, d), false, "a step past the table's reach is too far");
+    d.virtualWorld = 7;
+    d.position = { x: 0, y: 0, z: 0 };
+    assert.equal(h.lobby.sameTable(c, d), false, "another world is another table");
+});
+
+test("the server log says how far each player stood when the talk menu found no table they share", () => {
+    const h = setup();
+    h.b.position = { x: 3.4, y: 0, z: 0 };
+    h.tick();
+    assert.equal(h.lobby.sameTable(h.a, h.b), false);
+    const why = h.lobby.explainApart(h.a, h.b);
+    assert.match(why, /Player 1 a 0\.0 m da mesa table1 \(dentro da área\)/);
+    assert.match(why, /Player 2 a 3\.1 m da mesa table1quest/);
+    assert.match(why, /alcance 3 m/);
+
+    h.a.position = { x: 500, y: 0, z: 0 };
+    h.b.position = { x: -500, y: 0, z: 0 };
+    assert.equal(h.lobby.explainApart(h.a, h.b), null, "nobody near a table: nothing to say");
+});
+
+test("a level that lists no table at start is asked again later, and says so", () => {
+    const h = setup({ emptyAtStart: true });
+    assert.ok(h.logs.some((line) => /nenhuma mesa de dados/.test(line)));
+    assert.equal(h.areas.length, 0);
+    assert.equal(h.lobby.sameTable(h.a, h.b), false);
+    assert.match(h.lobby.explainApart(h.a, h.b), /nenhuma mesa/);
+
+    h.revealTables();
+    h.timeouts[0].handler();
+    assert.equal(h.areas.length, 3);
+    assert.ok(h.logs.some((line) => /2 mesas de dados no nível \(3 contando as camadas de missão\)/.test(line)));
+    assert.equal(h.lobby.sameTable(h.a, h.b), true);
+    h.timeouts[1].handler();
+    assert.equal(h.areas.length, 3, "a later retry adds nothing twice");
 });

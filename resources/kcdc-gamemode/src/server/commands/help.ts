@@ -1,3 +1,4 @@
+import { canRun } from "../auth.js";
 import type { Command, CommandContext, CommandRegistry } from "../command.js";
 
 /** Built from a registry rather than declared like the others, because it lists one. */
@@ -7,11 +8,12 @@ export function helpCommand(registry: CommandRegistry): Command {
         summary: "Lists the commands this server answers.",
         usage: ["/help", "/help <command>"],
 
-        run({ args, reply }: CommandContext): void {
+        run({ player, args, reply }: CommandContext): void {
             const asked = args[0];
             if (asked === undefined) {
-                reply.line(`${registry.all().length} command(s):`);
-                reply.lines(registry.all().map((command) => `  /${command.name} -- ${command.summary}`));
+                const allowed = registry.all().filter((command) => canRun(player, command.name));
+                reply.line(`${allowed.length} command(s):`);
+                reply.lines(allowed.map((command) => `  /${command.name} -- ${command.summary}`));
                 return;
             }
 
@@ -23,6 +25,9 @@ export function helpCommand(registry: CommandRegistry): Command {
 
             reply.line(`/${command.name} -- ${command.summary}`);
             reply.lines(command.usage.map((form) => `  ${form}`));
+            if (!canRun(player, command.name)) {
+                reply.line("  Só administradores podem usar este comando.");
+            }
         },
     };
 }

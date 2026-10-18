@@ -4,7 +4,7 @@
   "author": "Kingdoms Connected",
   "description": "Default Kingdoms Connected gamemode: every command a bare server answers and the debug panel its clients open, written against the public scripting API",
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p src/client/tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc -p src/client/tsconfig.json && node scripts/minify-client.mjs && node scripts/pack-ui.mjs",
     "test": "npm run build && node --test tests/*.test.cjs",
     "test:pots": "npm run build && node --test tests/pots.test.cjs",
     "test:follow": "npm run build && node --test tests/follow.test.cjs",
@@ -19,7 +19,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "devDependencies": {
-    "@kingdomsconnected/types": "1.6.8",
+    "@kingdomsconnected/types": "1.6.9",
+    "terser": "5.31.6",
     "typescript": "^5.9.2"
   },
   "mafiahub": {
@@ -32,8 +33,7 @@
     ],
     "files": [
       "dist/client/**",
-      "ui/**",
-      "assets/**"
+      "ui/**"
     ],
     "priority": 10
   }

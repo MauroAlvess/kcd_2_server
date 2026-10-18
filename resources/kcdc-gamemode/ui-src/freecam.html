@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdoms Connected &mdash; Camera livre</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+    /* The pointer shows while the help does, for the way out; a picture is meant to be clean, so both go after a few seconds. */
+    body.clean { cursor: none; }
+    .hint {
+        position: fixed;
+        left: 50%;
+        bottom: 6%;
+        transform: translateX(-50%);
+        max-width: 90%;
+        padding: .7rem 1.4rem;
+        font: 600 16px/1.5 "Constantia", "Sitka Text", Georgia, serif;
+        letter-spacing: .03em;
+        text-align: center;
+        color: #f3e6c8;
+        background: rgba(24, 16, 8, .74);
+        border: 1px solid rgba(210, 179, 140, .5);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+        transition: opacity .7s;
+    }
+    .hint b { color: #fff; }
+    .exit {
+        position: fixed;
+        right: 3%;
+        bottom: 6%;
+        padding: .65rem 1.2rem;
+        font: 600 14px/1.2 "Constantia", "Sitka Text", Georgia, serif;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: #f3e6c8;
+        background: #7a1418;
+        border: 1px solid rgba(243, 230, 200, .35);
+        cursor: pointer;
+        transition: opacity .7s;
+    }
+    .exit:hover { background: #95191e; }
+    body.clean .hint, body.clean .exit { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="hint" id="hint"><b>W A S D</b> voam &middot; <b>setas</b> ou o <b>mouse</b> arrastado viram &middot; <b>Espaço</b> sobe &middot; <b>Ctrl</b> desce &middot; <b>Shift</b> acelera &middot; <b>Alt</b> vai devagar &middot; <b>H</b> mostra esta ajuda &middot; <b>Esc</b> ou <b>F2</b> saem</div>
+<button class="exit" id="exit" type="button">Sair da câmera</button>
+
+<script>
+"use strict";
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+
+/*
+ * A key by what the browser of the game is sure to fill in: the key's own code number (`keyCode`, from the Windows virtual
+ * key) and, failing that, its name (`key`). The position code (`code`) comes empty from it, and was all this page read at
+ * first: no key, Esc included, did anything (2026-10-15).
+ */
+const BY_NUMBER = {
+    87: "w", 65: "a", 83: "s", 68: "d", 69: "e", 81: "q", 67: "c", 72: "h",
+    37: "left", 38: "up", 39: "right", 40: "down", 32: "space",
+    16: "shift", 17: "ctrl", 18: "alt", 27: "esc", 113: "f2", 114: "f3",
+};
+const BY_NAME = {
+    w: "w", a: "a", s: "s", d: "d", e: "e", q: "q", c: "c", h: "h",
+    arrowleft: "left", arrowup: "up", arrowright: "right", arrowdown: "down", left: "left", up: "up", right: "right", down: "down",
+    " ": "space", spacebar: "space", shift: "shift", control: "ctrl", alt: "alt", escape: "esc", esc: "esc", f2: "f2", f3: "f3",
+};
+
+function keyOf(event) {
+    const number = event.keyCode || event.which || 0;
+    if (BY_NUMBER[number]) return BY_NUMBER[number];
+    return BY_NAME[String(event.key || "").toLowerCase()] || "";
+}
+
+/* What each held key does: an axis and which way. Forward, strafe and lift move; yaw and pitch turn. */
+const AXIS = {
+    w: ["forward", 1], s: ["forward", -1], d: ["strafe", 1], a: ["strafe", -1],
+    space: ["lift", 1], e: ["lift", 1], ctrl: ["lift", -1], c: ["lift", -1], q: ["lift", -1],
+    left: ["yaw", 1], right: ["yaw", -1], up: ["pitch", 1], down: ["pitch", -1],
+};
+
+const held = new Set();
+let last = "";
+
+function reading() {
+    const axes = { forward: 0, strafe: 0, lift: 0, yaw: 0, pitch: 0 };
+    for (const key of held) {
+        const axis = AXIS[key];
+        if (axis) axes[axis[0]] += axis[1];
+    }
+    for (const name of Object.keys(axes)) axes[name] = Math.max(-1, Math.min(1, axes[name]));
+    axes.boost = held.has("shift");
+    axes.crawl = held.has("alt");
+    return axes;
+}
+
+/* Tells the client what is held, when it changes. */
+function report() {
+    const now = reading();
+    const text = JSON.stringify(now);
+    if (text !== last) {
+        last = text;
+        send("freecam:keys", now);
+    }
+}
+
+/* The first thing the player does here is told to the client once: it is how the client knows the page has the keyboard and the mouse. */
+let heard = false;
+function hear(kind, event) {
+    if (heard) return;
+    heard = true;
+    send("freecam:heard", { kind, key: String(event.key || ""), code: String(event.code || ""), keyCode: Number(event.keyCode || 0) });
+}
+
+/* Gives the picture a moment to be read, then clears the screen; H brings the help and the way out back. */
+let fade = 0;
+function help(seconds) {
+    document.body.classList.remove("clean");
+    clearTimeout(fade);
+    fade = setTimeout(() => document.body.classList.add("clean"), seconds * 1000);
+}
+help(9);
+
+function leave(panel) {
+    send("freecam:exit", panel ? { panel } : {});
+}
+
+window.addEventListener("keydown", (event) => {
+    const key = keyOf(event);
+    hear("key", event);
+    if (key === "esc") {
+        event.preventDefault();
+        leave("");
+        return;
+    }
+    if (key === "f2" || key === "f3") {
+        // The panel's own keys: the camera comes back, and the panel with it.
+        event.preventDefault();
+        leave(key === "f3" ? "admin" : "common");
+        return;
+    }
+    if (key === "h" && !event.repeat) {
+        help(8);
+        return;
+    }
+    if (AXIS[key] || key === "shift" || key === "alt") {
+        event.preventDefault();
+        held.add(key);
+        report();
+    }
+});
+
+window.addEventListener("keyup", (event) => {
+    if (held.delete(keyOf(event))) {
+        event.preventDefault();
+        report();
+    }
+});
+
+/* Losing the window must not leave the camera flying on a key nobody is holding. */
+window.addEventListener("blur", () => {
+    held.clear();
+    looking = false;
+    report();
+});
+
+document.getElementById("exit").addEventListener("click", (event) => {
+    event.preventDefault();
+    leave("");
+});
+
+/* Looking: the mouse dragged with the left or the right button, the pixels sent once a frame. */
+let looking = false;
+let from = null;
+let dx = 0;
+let dy = 0;
+let frame = 0;
+
+window.addEventListener("mousedown", (event) => {
+    hear("mouse", event);
+    if (event.target && event.target.id === "exit") return;
+    if (event.button === 0 || event.button === 2) {
+        looking = true;
+        from = [event.clientX, event.clientY];
+    }
+});
+window.addEventListener("mouseup", () => {
+    looking = false;
+});
+window.addEventListener("contextmenu", (event) => event.preventDefault());
+window.addEventListener("mousemove", (event) => {
+    if (!looking || from === null) {
+        // The pointer moved with no button down: the help and the way out come back for a moment, whatever the keyboard does.
+        if (document.body.classList.contains("clean")) help(4);
+        return;
+    }
+    dx += event.clientX - from[0];
+    dy += event.clientY - from[1];
+    from = [event.clientX, event.clientY];
+    if (!frame) {
+        frame = requestAnimationFrame(() => {
+            frame = 0;
+            send("freecam:look", { dx, dy });
+            dx = 0;
+            dy = 0;
+        });
+    }
+});
+
+/* The client gave up on this page's keyboard and flies the camera by the game's keys: the help says those. */
+window.addEventListener("freecam:mode", (event) => {
+    if (!event.detail || event.detail.mode !== "keys") return;
+    document.getElementById("hint").innerHTML = "<b>W A S D</b> voam &middot; <b>setas</b> viram &middot; <b>Espaço</b> sobe &middot; <b>Ctrl</b> desce &middot; <b>Shift</b> acelera &middot; <b>Esc</b> ou <b>F2</b> saem";
+    document.getElementById("exit").hidden = true;
+    help(10);
+});
+
+send("freecam:ready");
+</script>
+</body>
+</html>

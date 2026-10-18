@@ -19,6 +19,7 @@
 
     "declaration": false,
     "sourceMap": false,
+    "removeComments": true,
     "newLine": "lf",
 
     "types": ["@kingdomsconnected/types/client"]
