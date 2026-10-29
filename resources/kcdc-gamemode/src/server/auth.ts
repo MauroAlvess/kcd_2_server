@@ -48,9 +48,11 @@ export type Role = "player" | "admin";
 
 /**
  * The commands a plain player may run. Anything not listed here, including a command added later, is for admins.
- * `ui` is deliberately absent: it opens the F4 debug panel, which is for administrators only (see `panel.ts`).
+ * `ui` is deliberately absent: it opens the F4 debug panel, which is for administrators only (see `panel.ts`). Nor is `creator`
+ * (user, 2026-10-20: "/creator é só admin que pode usar"): a player makes their character once, at their first entry, and what
+ * they may change afterwards is changed at the barber's and the tailor's, not by a command.
  */
-export const COMMON_COMMANDS: ReadonlySet<string> = new Set(["help", "creator", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "cansaco", "sujeira", "cachorro", "leitura", "cozinhar", "me", "do", "try", "preso", "alforje", "carroca", "carroça", "idioma", "language"]);
+export const COMMON_COMMANDS: ReadonlySet<string> = new Set(["help", "aceitar", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "sede", "cansaco", "sujeira", "cachorro", "leitura", "cozinhar", "me", "do", "try", "preso", "acordar", "paz", "alforje", "carroca", "carroça", "idioma", "language", "levantar", "horta", "mural"]);
 
 const FILE = "secrets/auth.json";
 
@@ -356,6 +358,22 @@ export async function promote(player: Player, raw: string): Promise<PromoteResul
     roles.set(player.id, entry.role);
     console.log(`auth: ${player.nickname} (${player.ip || "?"}) virou administrador com o ticket '${entry.label}' pelo /admin`);
     return { ok: true, message: "Você agora é administrador, até sair do servidor." };
+}
+
+/**
+ * `/admin sair`: back to a common player until they leave (2026-10-18, the user tests as a player); `/admin <ticket>` makes them
+ * an administrator again. On a server with no tickets everybody is one, and nobody stops being.
+ */
+export function demote(player: Player): PromoteResult {
+    if (mode === "open") {
+        return { ok: false, message: "Este servidor está sem bloqueio de acesso: todos são administradores, e ninguém deixa de ser." };
+    }
+    if (roleOf(player) !== "admin") {
+        return { ok: false, message: "Você já é um jogador comum." };
+    }
+    roles.set(player.id, "player");
+    console.log(`auth: ${player.nickname} (${player.ip || "?"}) voltou a ser jogador comum pelo /admin sair`);
+    return { ok: true, message: "Você voltou a ser um jogador comum até sair do servidor. Para ser administrador de novo: /admin <ticket>." };
 }
 
 export function installAuth(): void {

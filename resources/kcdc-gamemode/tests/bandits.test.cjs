@@ -9,10 +9,17 @@ const place = (name, layer, x, y, z = 100, soul = `soul-${name}`) => ({ name, gu
 const KOPEC = "Main/kkop_kopecVysoka/series_banditCamp/banditCamp/_script/npc";
 const RAB = "Main/krab_rabstejnsko/bandit_camp/script/npc";
 const QUEST = "Main/_quest/side/zakopanyZitrek/streamed/bandit_1";
+// The level's other camps of enemies, which had tents and nobody at them (2026-10-24).
+const POACHERS = "Main/ksuc_suchdol/poachersCamp/_script/npc/poachers";
+const HUNTERS = "Main/klor_lorec/series_treasureHuntersCamp/default/_script/npc";
+const DESERTERS = "Main/kpri_pritoky/_poi_stodolaZikmundoviZbehove/_script/npc/other";
+const POACHERS_2 = "Main/kvrc_vrchlicko/poi_pytlackyTabor/_script/npc/other";
 
 /** What the game lists as equippable: everything a bandit wears or wields. */
 const GEAR = ["TunicLong04_m01_D", "TunicLong05_m01_E", "TunicLong04_m02_D", "HoseSeparate01_m01_E", "HoseSeparate04_m01_E", "Hood04_m01_E", "Cap03_m01_E", "Hood04_m03_E", "Coat03_m01_E", "Coat03_m02_E", "axeWork01", "maceClub", "shortswordCleaver", "bow_b", "arrow_crude"];
 const HEADS = new Set(["Hood04_m01_E", "Cap03_m01_E", "Hood04_m03_E"]);
+/** A veteran's battered kit (2026-10-21). */
+const VETERAN_KIT = ["KettleHat02_m01_D2", "SkullCap02_m01_C2", "KettleHat04_m01_B4", "CoifCap01_m01_C", "CoifMail02_m01_B3", "GambesonLong01_m01_C3", "MailLong02_m01_C2", "ArmPlate01_m01_C2", "BootsAnkle03_m01_D"];
 
 /** Rows as the game got them (class GUIDs), back to the names they were asked for. */
 const plain = (rows) => rows.map((row) => ({ ...row, item: row.item.replace(/^(cls|obj):/, "") }));
@@ -53,6 +60,7 @@ function load({ placementList = placements(), stashes = [], properties = [], ref
     let r = 0;
     const randoms = { list: [] };
     const files = new Map(Object.entries(initialFiles));
+    const removedFrom = [];
 
     const context = {
         exports: {},
@@ -84,6 +92,14 @@ function load({ placementList = placements(), stashes = [], properties = [], ref
                 if (request.items.some((row) => !/^(cls|obj):/.test(row.item))) return { ok: false, code: "invalidItem" };
                 if (refuseWorn(plain(request.items))) return { ok: false, code: "invalidEquipment" };
                 stocked.set(npc.id, JSON.parse(JSON.stringify(request.items)));
+                return { ok: true, code: "" };
+            },
+            get: (npc) => (stocked.has(npc.id) ? { revision: 1, items: stocked.get(npc.id).map((row, index) => ({ id: `row-${index}`, equipped: 0, ...row })) } : null),
+            remove: (npc, request) => {
+                const rows = stocked.get(npc.id) ?? [];
+                const gone = new Set(request.units.map((unit) => Number(unit.id.slice(4))));
+                stocked.set(npc.id, rows.filter((_row, index) => !gone.has(index)));
+                removedFrom.push([npc.id, request.units.length]);
                 return { ok: true, code: "" };
             },
         },
@@ -119,10 +135,11 @@ function load({ placementList = placements(), stashes = [], properties = [], ref
                     moves: [],
                     holds: 0,
                     removed: false,
-                    attack(target, opts) { this.attacks.push({ target: target.id, opts }); this.status = "running"; return true; },
-                    hold() { this.holds += 1; this.status = "idle"; },
+                    attack(target, opts) { this.attacks.push({ target: target.id, opts }); this.status = "running"; this.intent = "attack"; return true; },
+                    hold() { this.holds += 1; this.status = "idle"; this.intent = "hold"; },
+                    pin(player) { (this.pins ??= []).push(player === null ? null : player.id); },
                     say(text) { (this.said ??= []).push(text); return true; },
-                    moveTo(target, opts) { this.moves.push({ target, opts }); this.status = "running"; return true; },
+                    moveTo(target, opts) { this.moves.push({ target, opts }); this.status = "running"; this.intent = "moveTo"; return true; },
                     remove() { this.removed = true; npcs.delete(this.id); handlers.get("npcDestroy")?.(this); },
                 };
                 npcs.set(npc.id, npc);
@@ -146,7 +163,7 @@ function load({ placementList = placements(), stashes = [], properties = [], ref
         players.push(player);
         return player;
     };
-    return { api: context.exports, camps, npcs, handlers, timeouts, intervals, logs, created, stocked, players, clock, addPlayer, randoms, context, scratch, files };
+    return { api: context.exports, camps, npcs, handlers, timeouts, intervals, logs, created, stocked, players, clock, addPlayer, randoms, context, scratch, files, removedFrom };
 }
 
 const chestStash = (guid, name, x, y, refuse = () => false) => ({
@@ -177,6 +194,33 @@ test("the level's bandit placements become camps; villagers and cutscenes do not
     assert.equal(kopec.slots[0].spot.soul, "soul-kkop_bandit_1", "the level's own bandit soul");
 });
 
+test("the level's other camps of enemies -- poachers, treasure hunters, deserters -- are camps too, named by their region", () => {
+    const list = [
+        place("ksuc_poacher_1", POACHERS, 805, 3845),
+        place("ksuc_poacher_2", POACHERS, 806, 3846),
+        place("ksuc_poacher_3", POACHERS, 804, 3844),
+        place("klor_treasureHunter_2", HUNTERS, 3750, 1113),
+        place("klor_treasureHunter_3", HUNTERS, 3752, 1112),
+        place("klor_treasureHunter_4", HUNTERS, 3751, 1114),
+        place("kpri_man_39", DESERTERS, 2300, 2090),
+        place("kpri_man_40", DESERTERS, 2302, 2091),
+        place("kvrc_poacher_1", POACHERS_2, 1477, 237),
+        place("kvrc_poacher_2", POACHERS_2, 1478, 238),
+        // The people of the same regions are none of these.
+        place("kpri_farmer_1", "Main/kpri_pritoky/village/_script/npc", 2400, 2150),
+        place("ksuc_cook", "Main/ksuc_suchdol/village/_script/npc", 900, 3900),
+        place("klor_man_1", "Main/klor_lorec/village/_script/npc", 3800, 1200),
+    ];
+    const sut = load({ placementList: list });
+    assert.equal(sut.camps.discover(list), 4);
+    assert.deepEqual(Array.from(sut.camps.camps, (camp) => camp.name).sort(), ["Lorec", "Přítoky", "Suchdol", "Vrchlicko"]);
+    const suchdol = sut.camps.camps.find((camp) => camp.name === "Suchdol");
+    assert.equal(suchdol.slots.length, 5, "three placements, at least five bandits");
+    assert.equal(suchdol.slots[0].spot.soul, "soul-ksuc_poacher_1", "the level's own soul");
+    assert.ok(sut.camps.camps.every((camp) => camp.slots.length >= 5));
+    assert.ok(!sut.camps.camps.some((camp) => camp.slots.some((slot) => /farmer|cook|klor_man/.test(slot.spot.soul))), "no villager became a bandit");
+});
+
 test("two camps in one region are numbered from west to east", () => {
     const list = [
         place("east_1", KOPEC, 1265, 2441),
@@ -197,7 +241,7 @@ test("two camps in one region are numbered from west to east", () => {
 test("with no bandits in the catalog the camps found in the level data are used", () => {
     const sut = load({ placementList: [] });
     assert.equal(sut.camps.discover([]), 5);
-    assert.deepEqual(Array.from(sut.camps.camps, (camp) => camp.name), ["Grunta", "Vrchlicko (moinho)", "Kopec Vysoká", "Rabštejnsko", "Mezholezsko"]);
+    assert.deepEqual(Array.from(sut.camps.camps, (camp) => camp.name), ["Minas", "Vrchlicko (moinho)", "Kopec Vysoká", "Rabštejnsko", "Mezholezsko"]);
     assert.equal(sut.camps.camps[0].slots[0].spot.soul, "bandit");
 });
 
@@ -216,21 +260,24 @@ test("a bandit is tougher than an ordinary man, and wears and carries only plain
     const sut = load();
     sut.camps.discover(placements());
     assert.equal(sut.camps.spawnAll(), 16);
-    const melee = sut.created[0];
+    const melee = sut.created[2];
     assert.equal(melee.options.health, 180);
     assert.equal(melee.options.maxHealth, 180);
+    assert.equal(melee.options.name, "Bandido");
     assert.equal(melee.options.lootable, true);
     assert.equal(melee.options.nametag, false);
     assert.equal(melee.options.interactable, false);
 
-    const allowed = new Set([...GEAR, "money", "bread", "apple", "carrot"]);
+    // Plain clothes and weapons, coins and a bite, and now and then one of the guilds' goods (2026-10-18); a veteran's battered kit and the
+    // second bow are taken off the body when he falls (2026-10-21).
+    const allowed = new Set([...GEAR, "money", "bread", "apple", "carrot", ...sut.api.CHEST_LOOT.flatMap((entry) => entry.items), ...VETERAN_KIT]);
     for (const npc of sut.created) {
         const raw = sut.stocked.get(npc.id);
         assert.ok(raw.every((row) => /^(cls|obj):/.test(row.item)), "sent as class GUIDs");
         const items = plain(raw);
         assert.ok(items.every((row) => allowed.has(row.item)), `only plain things: ${JSON.stringify(items.map((row) => row.item))}`);
         const money = items.find((row) => row.item === "money");
-        assert.ok(money.amount >= 50 && money.amount <= 200, "5 to 20 coins as the game shows them");
+        assert.ok(money.amount >= 20 && money.amount <= 80, "2 to 8 coins as the game shows them (lowered 2026-10-25)");
         assert.ok(items.some((row) => /^Tunic/.test(row.item) && row.equipped === 1), "dressed");
     }
     const archer = sut.created[5];
@@ -336,10 +383,13 @@ test("a bandit's blow on a player is heavier; anyone else's is not", () => {
     const sut = load({ placementList: placements() });
     sut.api.installBandits();
     sut.timeouts[0].fn();
-    const bandit = sut.created[0];
+    const bandit = sut.created[2];
     const hit = { damage: 10 };
     sut.handlers.get("playerHit")({}, bandit, hit);
     assert.equal(hit.damage, 16);
+    const veteranHit = { damage: 10 };
+    sut.handlers.get("playerHit")({}, sut.created[0], veteranHit);
+    assert.equal(veteranHit.damage, 20, "a veteran's still heavier");
 
     const other = { damage: 10 };
     sut.handlers.get("playerHit")({}, { id: 99999 }, other);
@@ -443,23 +493,23 @@ test("a chest that will not take one good still gets the rest, and that good is 
     assert.ok(sut.camps.refusedLoot.has("bsmt_ironBad"));
     for (const held of finals) {
         assert.equal(held.length, 12);
-        assert.ok(held.every((rows) => rows.length >= 2 && !rows.some((row) => row.item === "bsmt_ironBad")));
+        assert.ok(held.every((rows) => rows.length >= 1 && !rows.some((row) => row.item === "bsmt_ironBad")));
     }
     assert.ok(Array.from(sut.camps.report()).includes("os baús não aceitaram: bsmt_ironBad"));
 });
 
-test("camp chests are filled again after an hour, and only while nobody is around", () => {
+test("camp chests are filled again after three hours, and only while nobody is around", () => {
     const chest = chestStash("c1", "stash[Chest/chest3_x]", 1070, 2445);
     const sut = load({ stashes: [chest] });
     sut.camps.discover(placements());
     sut.camps.stockChests(true);
     assert.equal(chest.filled.length, 1);
 
-    sut.clock.now = 59 * 60_000;
+    sut.clock.now = 179 * 60_000;
     sut.camps.stockChests();
     assert.equal(chest.filled.length, 1);
 
-    sut.clock.now = 61 * 60_000;
+    sut.clock.now = 181 * 60_000;
     sut.addPlayer(1, 1070, 2445 + 30);
     sut.camps.stockChests();
     assert.equal(chest.filled.length, 1, "not with a player at the camp");
@@ -468,7 +518,7 @@ test("camp chests are filled again after an hour, and only while nobody is aroun
     sut.camps.stockChests();
     assert.equal(chest.filled.length, 1, "not while somebody has it open");
     chest.isOpen = false;
-    sut.clock.now = 125 * 60_000;
+    sut.clock.now = 365 * 60_000;
     sut.camps.stockChests();
     assert.equal(chest.filled.length, 2);
 });
@@ -484,6 +534,64 @@ test("an administrator's restock brings every dead bandit back and fills the che
     assert.equal(spawned, 1);
     assert.equal(slot.state, "alive");
     assert.equal(Array.from(sut.camps.describe())[0].includes("6/6 vivos"), true);
+});
+
+test("a bandit that is struck is ordered to fight at once, not at the next look, and not again within a moment (2026-10-21: they ran when hit)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const camp = sut.camps.camps[0];
+    const ids = Array.from(camp.slots, (slot) => slot.npcId);
+    ids.slice(1).forEach((id) => { sut.npcs.get(id).position = { x: 1066 + 900, y: 2442, z: 100 }; });
+    const player = sut.addPlayer(1, 1066, 2442 - 20);
+    const bandit = sut.npcs.get(ids[0]);
+    assert.equal(bandit.attacks.length, 0, "before any look of the camp");
+
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.attacks.length, 1, "ordered the moment the blow landed");
+    assert.equal(bandit.attacks[0].target, player.id);
+    assert.equal(camp.slots[0].target, player.id);
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.attacks.length, 1, "not twice inside 800 ms");
+    sut.clock.now += 900;
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.attacks.length, 2, "and again on the next blow");
+});
+
+test("a bandit whose order to fight was replaced (the game's fright) is told to fight again at the next look after the retry time", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const camp = sut.camps.camps[0];
+    const ids = Array.from(camp.slots, (slot) => slot.npcId);
+    ids.slice(1).forEach((id) => { sut.npcs.get(id).position = { x: 1066 + 900, y: 2442, z: 100 }; });
+    sut.addPlayer(1, 1066, 2442 - 20);
+    const bandit = sut.npcs.get(ids[0]);
+    sut.camps.tick();
+    assert.equal(bandit.attacks.length, 1);
+    sut.camps.tick();
+    assert.equal(bandit.attacks.length, 1, "while he is told to fight and runs, he is left to it");
+
+    // Struck, he flees: what he is doing is no longer what he was told.
+    bandit.intent = "flee";
+    sut.camps.tick();
+    assert.equal(bandit.attacks.length, 1, "not before the retry time");
+    sut.clock.now += 4_500;
+    sut.camps.tick();
+    assert.equal(bandit.attacks.length, 2, "told again");
+});
+
+test("a bandit brought back by the administrator's restock is nobody's game's yet, whatever the man before him had", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const slot = sut.camps.camps[0].slots[0];
+    slot.pinned = true;
+    sut.npcs.get(slot.npcId).alive = false;
+    sut.camps.died(slot.npcId);
+    sut.camps.restockNow();
+    assert.equal(slot.state, "alive");
+    assert.equal(slot.pinned, false);
 });
 
 test("stopping removes every bandit", () => {
@@ -581,6 +689,168 @@ test("where the level puts people everywhere, or marks nothing, there are no hid
     empty.camps.discover(placements());
     assert.equal(empty.camps.addWild([], [], mesh()), 0);
     assert.equal(empty.camps.camps.length, 3);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The gangs on the roads (2026-10-24).
+
+const OWN_SOULS = new Set(["soul-kkop_bandit_1", "soul-kkop_bandit_2", "soul-kkop_bandit_3", "soul-kkop_bandit_4", "soul-kkop_bandit_5", "soul-kkop_bandit_6", "soul-krab_man_28", "soul-krab_man_29", "soul-zakopanyZitrek_bandit_1"]);
+const centresOf = (sut) => Array.from(sut.camps.camps, (camp) => `${camp.name}@${camp.center.x},${camp.center.y}`);
+
+test("road gangs keep clear of people, of every camp and of one another, and are no more than ten", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    const people = [{ x: 2000, y: 2000, z: 100 }, { x: 3500, y: 500, z: 100 }];
+    sut.camps.addWild(grid(), people, mesh());
+    const before = sut.camps.camps.length;
+    const camps = Array.from(sut.camps.camps, (camp) => camp.center);
+    const added = sut.camps.addRoads(grid(), people, mesh());
+    const roads = sut.camps.camps.slice(before);
+    assert.equal(added, roads.length);
+    assert.ok(added >= 5 && added <= 10, `a fair number of gangs: ${added}`);
+    for (const camp of roads) {
+        assert.ok(people.every((person) => flatDistance(person, camp.center) >= 140), "away from the people");
+        assert.ok(camps.every((other) => flatDistance(other, camp.center) >= 330), "away from every camp, the hideouts too");
+        assert.ok(roads.every((other) => other === camp || flatDistance(other.center, camp.center) >= 550), "away from one another");
+    }
+    assert.deepEqual(Array.from(roads, (camp) => camp.name), Array.from(roads, (_camp, index) => `Estrada ${index + 1}`));
+});
+
+test("a road gang is three or four bandits of the level's own souls, an archer and a veteran among them, standing about its place", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.addRoads(grid(), [], mesh());
+    const roads = sut.camps.camps.slice(3);
+    assert.ok(roads.length > 0);
+    for (const camp of roads) {
+        assert.ok(camp.slots.length === 3 || camp.slots.length === 4, `${camp.name}: ${camp.slots.length}`);
+        assert.equal(camp.slots.filter((slot) => slot.archer).length, sut.api.archersFor(camp.slots.length));
+        assert.equal(camp.slots.filter((slot) => slot.veteran === true).length, sut.api.veteransFor(camp.slots.length));
+        assert.ok(camp.slots.every((slot) => OWN_SOULS.has(slot.spot.soul)), "the level's own souls");
+        assert.ok(camp.slots.every((slot) => flatDistance(slot.spot.position, camp.center) <= 5 + 0.01), "standing about the place");
+    }
+});
+
+test("the roads are the same on every start, whatever order the places come in, and leave the hideouts where they were", () => {
+    const one = load();
+    one.camps.discover(placements());
+    one.camps.addWild(grid(), [], mesh());
+    const hideouts = centresOf(one);
+    one.camps.addRoads(grid(), [], mesh());
+    const other = load();
+    other.camps.discover(placements());
+    other.camps.addWild(grid().reverse(), [], mesh());
+    other.camps.addRoads(grid().reverse(), [], mesh());
+    assert.deepEqual(centresOf(one), centresOf(other));
+    assert.deepEqual(centresOf(one).slice(0, hideouts.length), hideouts, "the roads come after, and move nothing");
+    assert.ok(centresOf(one).length > hideouts.length);
+});
+
+test("a road place that cannot be walked to is passed over, and no place at all means no gangs", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.addRoads(grid(), [], mesh((at) => at.x < 1000));
+    const roads = sut.camps.camps.slice(3);
+    assert.ok(roads.length > 0 && roads.every((camp) => camp.center.x >= 1000), "none on ground the mesh does not have");
+    const crowded = load();
+    crowded.camps.discover(placements());
+    assert.equal(crowded.camps.addRoads(grid(), grid().map((marker) => marker.position), mesh()), 0, "people everywhere");
+    assert.equal(crowded.camps.addRoads([], [], mesh()), 0, "no places");
+    assert.equal(crowded.camps.camps.length, 3);
+});
+
+test("a dead man of a road gang is replaced two to four hours after his death, each at a time of his own; a camp's after thirty minutes (2026-10-25)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.addRoads(grid(), [], mesh());
+    sut.camps.spawnAll();
+    const road = sut.camps.camps.find((camp) => camp.name.startsWith("Estrada"));
+    const camp = sut.camps.camps[0];
+    assert.ok(road, "a gang on the road");
+    sut.clock.now = 1_000;
+    for (const member of [...road.slots, camp.slots[0]]) {
+        const body = sut.npcs.get(member.npcId);
+        body.alive = false;
+        sut.camps.died(body.id);
+    }
+    sut.camps.tick();
+    const HOUR = 3_600_000;
+    const waits = road.slots.map((slot) => slot.respawnWait);
+    assert.ok(waits.every((wait) => wait >= 2 * HOUR && wait <= 4 * HOUR), `between two and four hours: ${waits.map((wait) => Math.round(wait / 60_000))} min`);
+    assert.ok(new Set(waits).size > 1, "each man at a time of his own");
+    assert.equal(camp.slots[0].respawnWait, 30 * 60_000, "a camp's man keeps the thirty minutes");
+    const lines = sut.camps.inspect(road.center, 50);
+    assert.ok(lines.some((line) => /morto, volta em [234] h \d\d min|morto, volta em 1 h \d\d min/.test(line)), `the administrator sees the wait: ${lines.join(" | ")}`);
+
+    sut.clock.now = 1_000 + 31 * 60_000;
+    sut.camps.tick();
+    assert.equal(camp.slots[0].state, "alive", "the camp's man is back after half an hour");
+    assert.ok(road.slots.every((slot) => slot.state === "dead"), "and the road's are not");
+
+    sut.clock.now = 1_000 + 119 * 60_000;
+    sut.camps.tick();
+    assert.ok(road.slots.every((slot) => slot.state === "dead"), "not before two hours");
+
+    sut.clock.now = 1_000 + 241 * 60_000;
+    sut.camps.tick();
+    assert.ok(road.slots.every((slot) => slot.state === "alive"), "all back after four");
+    assert.ok(road.slots.every((slot) => slot.respawnWait === undefined), "and the next death chooses a time again");
+});
+
+test("a road gang's place that could not be filled is tried again as a camp's is, not after the hours", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.addRoads(grid(), [], mesh());
+    const road = sut.camps.camps.find((camp) => camp.name.startsWith("Estrada"));
+    const slot = road.slots[0];
+    const make = sut.context.Npc.create;
+    sut.context.Npc.create = () => { throw new Error("no room"); };
+    sut.clock.now = 5_000;
+    assert.equal(sut.camps.spawn(road, slot), false);
+    sut.context.Npc.create = make;
+    assert.equal(slot.state, "dead");
+    assert.equal(slot.respawnWait, 30 * 60_000);
+    sut.clock.now = 5_000 + 31 * 60_000;
+    sut.camps.tick();
+    assert.equal(slot.state, "alive", "back after thirty minutes");
+});
+
+/** The places of `data/road-posts.json`, as the tool writes them. */
+const roadFile = (posts) => ({ "data/road-posts.json": JSON.stringify({ posts }) });
+
+test("installing also puts the gangs of data/road-posts.json on the roads, once the mesh is ready, after the hideouts", () => {
+    const nav = { ready: false, closestPoint: (at) => ({ x: at.x, y: at.y, z: at.z }), randomPoint: (centre, radius) => ({ x: centre.x + radius / 2, y: centre.y, z: centre.z }) };
+    const animalPoints = grid().map((marker) => ({ ...marker, count: 3, actorClass: "Boar", soul: "s" }));
+    // The places half a grid step off the wild markers, with a row that lacks its numbers and one with an id that is no text: both passed over.
+    const posts = grid().map((marker) => ({ id: `road-${marker.guid}`, x: marker.position.x + 250, y: marker.position.y + 250, z: 100 }));
+    const sut = load({ placementList: placements(), animalPoints, navigation: nav, files: roadFile([...posts, { id: "no-numbers" }, { id: 5, x: 1, y: 2, z: 3 }]) });
+    sut.api.installBandits();
+    sut.timeouts[0].fn();
+    nav.ready = true;
+    sut.timeouts[1].fn();
+    const camps = sut.api.banditCamps.camps;
+    const roads = camps.filter((camp) => camp.name.startsWith("Estrada"));
+    const hideouts = camps.filter((camp) => camp.name.startsWith("Esconderijo"));
+    assert.ok(roads.length >= 3 && roads.length <= 10, `gangs on the roads: ${roads.length}`);
+    assert.ok(hideouts.length > 1, "the hideouts in the wild are still there");
+    assert.ok(camps.indexOf(roads[0]) > camps.indexOf(hideouts[hideouts.length - 1]), "the roads come after the hideouts");
+    assert.ok(roads.every((camp) => posts.some((post) => post.x === camp.center.x && post.y === camp.center.y)), "each on a place of the file");
+    assert.ok(sut.logs.some((line) => new RegExp(`e ${roads.length} posto\\(s\\) nas estradas`).test(line)), "the log says how many");
+    assert.ok(!sut.logs.some((line) => /road-posts\.json/.test(line)), "and nothing is missing");
+    assert.ok(roads.every((camp) => camp.slots.every((slot) => slot.state === "alive")), "and their bandits stand in the world");
+});
+
+test("without data/road-posts.json the roads stay empty and the log says so; the hideouts do not suffer", () => {
+    const nav = { ready: true, closestPoint: (at) => ({ x: at.x, y: at.y, z: at.z }), randomPoint: (centre, radius) => ({ x: centre.x + radius / 2, y: centre.y, z: centre.z }) };
+    const animalPoints = grid().map((marker) => ({ ...marker, count: 3, actorClass: "Boar", soul: "s" }));
+    const sut = load({ placementList: placements(), animalPoints, navigation: nav });
+    sut.api.installBandits();
+    sut.timeouts[0].fn();
+    const camps = sut.api.banditCamps.camps;
+    assert.equal(camps.filter((camp) => camp.name.startsWith("Estrada")).length, 0);
+    assert.ok(camps.filter((camp) => camp.name.startsWith("Esconderijo")).length > 1);
+    assert.ok(sut.logs.some((line) => /road-posts\.json não foi encontrado/.test(line)));
+    assert.ok(sut.logs.some((line) => /e 0 posto\(s\) nas estradas/.test(line)));
 });
 
 test("one archer for every four bandits of a camp of three or more", () => {
@@ -704,4 +974,371 @@ test("a bandit who is roused by his camp's alarm answers with the alarm call", (
     const roused = sut.npcs.get(ids[1]);
     assert.ok(roused.said?.length >= 1);
     assert.ok(sut.api.BARKS.alarm.includes(roused.said[0]), roused.said[0]);
+});
+
+test("a bandit that no game runs is pinned to the nearest player's, and let go when nobody is about", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const ids = Array.from(kopec.slots, (slot) => slot.npcId);
+    const first = sut.npcs.get(ids[0]);
+    first.simulator = null;
+    const other = sut.npcs.get(ids[1]);
+    other.simulator = { id: 9, nickname: "p9", position: { x: 1066, y: 2442, z: 100 } };
+    const player = sut.addPlayer(1, 1066, 2442 - 90);
+
+    sut.camps.tick();
+    assert.deepEqual(JSON.parse(JSON.stringify(first.pins)), [1], "nobody ran him: the player's game is made to");
+    assert.equal(other.pins, undefined, "a bandit somebody runs is left alone");
+    first.simulator = { id: 1, nickname: "p1", position: { x: 1066, y: 2442 - 90, z: 100 } };
+    sut.camps.tick();
+    assert.deepEqual(JSON.parse(JSON.stringify(first.pins)), [1], "once the player's game runs him, nothing more is asked");
+
+    player.position = { x: 5000, y: 5000, z: 100 };
+    sut.camps.tick();
+    assert.deepEqual(JSON.parse(JSON.stringify(first.pins)), [1, null], "alone again: let go");
+});
+
+test("a blow is judged by the game that runs the man struck: a runner far from him gives him to whoever strikes, a near one keeps him (2026-10-25)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const [one, two, three] = kopec.slots.slice(0, 3).map((slot) => sut.npcs.get(slot.npcId));
+    const attacker = sut.addPlayer(1, 1066, 2442 - 3, { nickname: "Luance" });
+    const pinsOf = (npc) => JSON.parse(JSON.stringify(npc.pins ?? []));
+
+    // Run by a player sixty metres from him, struck by one at three metres: the striker's game runs him.
+    one.simulator = { id: 9, nickname: "Ludmilla", position: { x: 1066, y: 2442 - 60, z: 100 } };
+    sut.camps.hit(one.id, attacker);
+    assert.deepEqual(pinsOf(one), [1]);
+    assert.ok(sut.logs.some((line) => /preso ao jogo de quem bate \(o jogo de Ludmilla, a \d+ m dele, o rodava\)/.test(line)), "the log says whose game ran him and how far");
+
+    // A runner near him keeps him, and so does the striker's own game.
+    two.simulator = { id: 9, nickname: "Ludmilla", position: { x: 1066, y: 2442 - 15, z: 100 } };
+    sut.clock.now += 5_000;
+    sut.camps.hit(two.id, attacker);
+    assert.deepEqual(pinsOf(two), [], "a runner fifteen metres off judges well enough");
+    three.simulator = { id: 1, nickname: "Luance", position: { x: 1066, y: 2442 - 3, z: 100 } };
+    sut.camps.hit(three.id, attacker);
+    assert.deepEqual(pinsOf(three), [], "already the striker's");
+
+    // A blow from far off (a bow) moves nobody's game.
+    const far = sut.addPlayer(2, 1066, 2442 - 60, { nickname: "Arqueiro" });
+    two.simulator = { id: 9, nickname: "Ludmilla", position: { x: 1066 + 80, y: 2442, z: 100 } };
+    sut.clock.now += 5_000;
+    sut.camps.hit(two.id, far);
+    assert.deepEqual(pinsOf(two), [], "the striker is not near him");
+});
+
+test("a bandit whose runner is far past reach, with a player much nearer, is given to that player; a runner within reach is left to the game's own election (2026-10-25)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const [one, two] = kopec.slots.slice(0, 2).map((slot) => sut.npcs.get(slot.npcId));
+    sut.addPlayer(1, 1066, 2442 - 30, { nickname: "Luance" });
+    const pinsOf = (npc) => JSON.parse(JSON.stringify(npc.pins ?? []));
+
+    one.simulator = { id: 9, nickname: "Longe", position: { x: 1066, y: 2442 - 120, z: 100 } };
+    two.simulator = { id: 9, nickname: "Perto", position: { x: 1066, y: 2442 - 40, z: 100 } };
+    sut.camps.tick();
+    assert.deepEqual(pinsOf(one), [1], "run from 120 m with somebody at 30 m: given to him");
+    assert.ok(sut.logs.some((line) => /era rodado por Longe, a \d+ m: preso ao jogo de Luance, a \d+ m/.test(line)));
+    assert.deepEqual(pinsOf(two), [], "run from 40 m: within reach, left alone");
+});
+
+test("a bandit nobody is fighting strolls about his spot now and then", () => {
+    const sut = load({ navigation: { ready: true, closestPoint: (point) => point, randomPoint: (centre) => ({ x: centre.x + 2, y: centre.y + 1, z: centre.z }) } });
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const bandit = sut.npcs.get(kopec.slots[0].npcId);
+    bandit.simulator = { id: 9, nickname: "p9", position: { x: 1066, y: 2442, z: 100 } };
+    sut.addPlayer(1, 1066, 2442 - 150);
+
+    sut.camps.tick();
+    sut.clock.now += 60_000;
+    sut.camps.tick();
+    assert.ok(bandit.moves.length >= 1, "he walked somewhere");
+    assert.equal(bandit.moves.at(-1).opts.speed, "walk");
+});
+
+test("a player in the global world, which is where every real player stands, is seen by the camp and fought (a test against world 0 alone left them all out)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const first = sut.npcs.get(kopec.slots[0].npcId);
+    const player = sut.addPlayer(1, 1066, 2442 - 20, { virtualWorld: 4294967295 });
+
+    sut.camps.tick();
+    assert.equal(first.attacks.at(-1)?.target, player.id, "he goes for the player");
+
+    const elsewhere = load();
+    elsewhere.camps.discover(placements());
+    elsewhere.camps.spawnAll();
+    const bandit = elsewhere.npcs.get(elsewhere.camps.camps[0].slots[0].npcId);
+    elsewhere.addPlayer(1, 1066, 2442 - 20, { virtualWorld: 7 });
+    elsewhere.camps.tick();
+    assert.equal(bandit.attacks.length, 0, "a player in some other numbered world is not his to see");
+});
+
+test("a bandit ordered to fight who does not stir is sent running at the player, and is ordered to fight again when he stands", () => {
+    const sut = load({ navigation: { ready: true, closestPoint: (point) => point, randomPoint: (centre) => ({ x: centre.x + 2, y: centre.y + 1, z: centre.z }) } });
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const bandit = sut.npcs.get(kopec.slots[0].npcId);
+    bandit.simulator = { id: 9, nickname: "p9", position: { x: 1066, y: 2442, z: 100 } };
+    // Nine metres off: near enough for the blade (twenty would be his bow's).
+    sut.addPlayer(1, 1066, 2442 - 9, { virtualWorld: 4294967295 });
+
+    sut.camps.tick();
+    assert.equal(bandit.attacks.length, 1);
+    assert.equal(bandit.moves.length, 0, "not at once: the game's own pursuit gets its chance");
+
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    sut.clock.now += 3_500;
+    sut.camps.tick();
+    const run = bandit.moves.at(-1);
+    assert.ok(run, "he stood still: sent at the player");
+    assert.equal(run.opts.speed, "run");
+    assert.equal(run.opts.pathfinding, "server");
+
+    // He gets there and stands: the order to fight is given again.
+    bandit.status = "reached";
+    bandit.position = { x: 1066, y: 2442 - 8, z: 100 };
+    sut.clock.now += 5_000;
+    sut.camps.tick();
+    assert.ok(bandit.attacks.length >= 2, "ordered to fight again");
+});
+
+test("/bandidos estado lists what stands about the player: who runs each bandit, what he was told, whom he is after", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const bandit = sut.npcs.get(kopec.slots[0].npcId);
+    bandit.simulator = null;
+    bandit.intent = "hold";
+    const lines = Array.from(sut.camps.inspect({ x: 1066, y: 2442 - 30, z: 100 }));
+    assert.match(lines[0], /^1\. /);
+    assert.ok(lines.some((line) => /PARADO \(ninguém o roda\)/.test(line) && /idle\/hold/.test(line)), lines.join(" | "));
+});
+
+test("one in three of a camp is a veteran: battered armour, more health, two draughts; the others carry a bow beside the blade (2026-10-21)", () => {
+    const sut = load();
+    assert.deepEqual([2, 3, 5, 6, 8, 9].map(sut.api.veteransFor), [0, 1, 1, 2, 2, 3]);
+    sut.camps.discover(placements());
+    const kopec = sut.camps.camps[0];
+    assert.deepEqual(Array.from(kopec.slots, (slot) => slot.veteran === true), [true, true, false, false, false, false], "two of six, never the archer");
+    sut.camps.spawnAll();
+    const veteran = sut.npcs.get(kopec.slots[0].npcId);
+    assert.equal(veteran.options.name, "Bandido veterano");
+    assert.equal(veteran.options.health, 260);
+    const kit = plain(sut.stocked.get(veteran.id)).filter((row) => VETERAN_KIT.includes(row.item));
+    assert.ok(kit.length >= 5, "helmet, coif, padded coat, rondels, boots");
+    assert.ok(kit.every((row) => row.metadata.condition >= 0.3 && row.metadata.condition <= 0.5 && row.equipped === 1), "worn, and battered");
+    assert.equal(kopec.slots[0].potions, 2);
+    const plainMan = sut.npcs.get(kopec.slots[2].npcId);
+    const rows = plain(sut.stocked.get(plainMan.id));
+    assert.ok(rows.some((row) => row.item === "bow_b" && row.equipped === 1) && rows.some((row) => row.item === "arrow_crude"), "a bow beside the blade");
+    assert.ok(rows.some((row) => ["axeWork01", "maceClub", "shortswordCleaver"].includes(row.item)));
+    assert.equal(kopec.slots[2].potions, 1);
+    assert.equal(kopec.slots[2].hasBow, true);
+});
+
+test("a bandit takes up his bow when his man runs off, and his blade again when he comes back; a refused bow is not tried for a while", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const slot = kopec.slots[2];
+    const bandit = sut.npcs.get(slot.npcId);
+    bandit.simulator = { id: 9, nickname: "p9", position: { x: 1066, y: 2442, z: 100 } };
+    const at = (metres) => ({ x: bandit.position.x, y: bandit.position.y - metres, z: 100 });
+    const player = sut.addPlayer(1, at(9).x, at(9).y, { virtualWorld: 4294967295 });
+    sut.camps.tick();
+    assert.equal(bandit.attacks.at(-1).opts, undefined, "nine metres: the blade");
+    player.position = at(16);
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.deepEqual({ ...bandit.attacks.at(-1).opts }, { weapon: "bow" }, "sixteen metres: the bow");
+    assert.equal(slot.mode, "bow");
+    player.position = at(8);
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.equal(slot.mode, "bow", "eight metres: still the bow (the gap keeps him from changing at every step)");
+    player.position = at(3);
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.equal(bandit.attacks.at(-1).opts, undefined, "three metres: the blade again");
+    assert.equal(slot.mode, "melee");
+    assert.ok(sut.logs.some((line) => /tomou o arco: o alvo se afastou/.test(line)));
+
+    // The game turns the bow down: he fights with the blade and does not ask again for half a minute.
+    bandit.attack = function (target, opts) { this.attacks.push({ target: target.id, opts }); this.status = "running"; this.intent = "attack"; return opts?.weapon !== "bow"; };
+    player.position = at(16);
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.equal(slot.mode, "melee");
+    const asked = bandit.attacks.length;
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.equal(bandit.attacks.filter((attack, index) => index >= asked && attack.opts?.weapon === "bow").length, 0, "not again at once");
+});
+
+test("a bandit badly hurt drinks a draught while he has one, no oftener than every fifteen seconds", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const kopec = sut.camps.camps[0];
+    const slot = kopec.slots[0];
+    const veteran = sut.npcs.get(slot.npcId);
+    veteran.maxHealth = 260;
+    veteran.health = 200;
+    assert.equal(sut.camps.drink(slot, veteran), false, "not hurt enough");
+    veteran.health = 80;
+    assert.equal(sut.camps.drink(slot, veteran), true);
+    assert.ok(Math.abs(veteran.health - (80 + 260 * 0.45)) < 1e-9);
+    assert.equal(slot.potions, 1);
+    assert.match(veteran.said.at(-1), /Ainda não acabou!|Isto me põe de pé|Hah! Venha de novo!/);
+    veteran.health = 50;
+    assert.equal(sut.camps.drink(slot, veteran), false, "not again at once");
+    sut.clock.now += 15_000;
+    assert.equal(sut.camps.drink(slot, veteran), true);
+    sut.clock.now += 15_000;
+    veteran.health = 20;
+    assert.equal(sut.camps.drink(slot, veteran), false, "none left");
+});
+
+test("a fallen bandit keeps his clothes, blade and purse; the veteran's armour and the second bow are taken off the body", () => {
+    const sut = load();
+    sut.api.installBandits();
+    sut.timeouts[0].fn();
+    const camp = sut.api.banditCamps.camps[0];
+    const veteranSlot = camp.slots.find((slot) => slot.veteran === true && slot.npcId !== null);
+    const veteran = sut.npcs.get(veteranSlot.npcId);
+    const before = plain(sut.stocked.get(veteran.id)).map((row) => row.item);
+    veteran.alive = false;
+    sut.handlers.get("npcDeath")(veteran);
+    const after = plain(sut.stocked.get(veteran.id)).map((row) => row.item);
+    assert.ok(before.some((item) => VETERAN_KIT.includes(item)) && before.includes("bow_b"));
+    assert.ok(!after.some((item) => VETERAN_KIT.includes(item)), "no armour on the body");
+    assert.ok(!after.includes("bow_b") && !after.includes("arrow_crude"), "nor the bow");
+    assert.ok(after.includes("money") && after.some((item) => /^Tunic/.test(item)), "his own things stay");
+});
+
+test("a bandit left with next to nothing is held and finished a moment later, for whoever struck him last (2026-10-27: the archer who lay on the ground alive at 3 of 180)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const camp = sut.camps.camps[0];
+    const ids = Array.from(camp.slots, (slot) => slot.npcId);
+    ids.slice(1).forEach((id) => { sut.npcs.get(id).position = { x: 1066 + 900, y: 2442, z: 100 }; });
+    const player = sut.addPlayer(1, 1066, 2442 - 20);
+    const bandit = sut.npcs.get(ids[0]);
+    bandit.kill = function kill(by) { (this.killed ??= []).push(by); this.alive = false; };
+    bandit.maxHealth = 180;
+
+    bandit.health = 25;
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.attacks.length, 1, "at 25 of 180 he still fights");
+    assert.equal(bandit.holds, 0);
+
+    bandit.health = 30;
+    sut.clock.now += 900;
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.holds, 0, "at 30 of 180 (17%) he still fights");
+    assert.equal(bandit.attacks.length, 2);
+
+    bandit.health = 20;
+    sut.clock.now += 900;
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.holds, 1, "at 20 of 180 (11%) he is held where he is");
+    assert.equal(bandit.killed, undefined);
+    camp.slots[0].finishAt = undefined;
+    camp.slots[0].finishBy = undefined;
+    bandit.holds = 0;
+    camp.slots[0].potions = 0;
+
+    bandit.health = 3;
+    sut.clock.now += 900;
+    sut.camps.hit(bandit.id, player);
+    assert.equal(bandit.holds, 1, "at 3 he is held where he is");
+    assert.equal(bandit.attacks.length, 2, "and is not ordered to fight again");
+    assert.equal(bandit.killed, undefined);
+    sut.clock.now += 1_000;
+    sut.camps.tick();
+    assert.equal(bandit.killed, undefined, "not yet: a moment, for the fall to be seen");
+    sut.clock.now += 600;
+    sut.camps.tick();
+    assert.deepEqual(Array.from(bandit.killed), [player.id], "killed, for the player who struck him");
+    sut.camps.tick();
+    assert.equal(camp.slots[0].state, "dead");
+});
+
+test("a bandit that was left with next to nothing by something else is finished by the round as well, and a healthy one is not touched", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const camp = sut.camps.camps[0];
+    const bandit = sut.npcs.get(camp.slots[0].npcId);
+    const other = sut.npcs.get(camp.slots[1].npcId);
+    bandit.kill = function kill(by) { (this.killed ??= []).push(by); this.alive = false; };
+    other.kill = function kill() { this.killed = [1]; this.alive = false; };
+    bandit.maxHealth = 180;
+    other.maxHealth = 180;
+    bandit.health = 14;
+    other.health = 25;
+    camp.slots[0].potions = 0;
+    camp.slots[1].potions = 0;
+    sut.addPlayer(1, 1066, 2442 - 20);
+    sut.camps.tick();
+    assert.equal(bandit.holds, 1, "14 of 180 is under twelve in a hundred: held");
+    sut.clock.now += 2_000;
+    sut.camps.tick();
+    assert.equal(bandit.alive, false);
+    assert.equal(other.alive, true, "25 of 180 (the lowest seen fighting on his feet) is not");
+    assert.equal(other.killed, undefined);
+});
+
+test("a man hurt this badly who still has a draught drinks it and stands up instead; and a mark left on a slot never kills the next man there (2026-10-27)", () => {
+    const sut = load();
+    sut.camps.discover(placements());
+    sut.camps.spawnAll();
+    const camp = sut.camps.camps[0];
+    const slot = camp.slots[0];
+    const bandit = sut.npcs.get(slot.npcId);
+    bandit.kill = function kill() { this.killed = true; this.alive = false; };
+    bandit.maxHealth = 180;
+    bandit.health = 6;
+    assert.ok((slot.potions ?? 0) > 0, "he has a draught");
+    assert.equal(sut.camps.finishOff(slot, bandit, sut.clock.now), false, "he drinks: nothing is finished");
+    assert.ok(bandit.health > 80, "and is up again");
+    assert.equal(bandit.holds, 0);
+    assert.equal(slot.finishAt, undefined);
+
+    // The draught gone, a man at 6 is held; if the player then kills him, the mark goes with the body and the next man in that place is left alone.
+    slot.potions = 0;
+    bandit.health = 6;
+    assert.equal(sut.camps.finishOff(slot, bandit, sut.clock.now), true);
+    assert.ok(slot.finishAt !== undefined);
+    bandit.alive = false;
+    sut.camps.died(bandit.id);
+    assert.equal(slot.finishAt, undefined, "cleared at his death");
+    assert.equal(slot.finishBy, undefined);
+
+    slot.finishAt = sut.clock.now - 10_000;
+    slot.finishBy = 77;
+    const camp2 = sut.camps.camps[0];
+    sut.camps.spawn(camp2, slot);
+    assert.equal(slot.finishAt, undefined, "and cleared at a new body");
+    const next = sut.npcs.get(slot.npcId);
+    next.kill = function kill() { this.killed = true; this.alive = false; };
+    sut.camps.tick();
+    assert.equal(next.alive, true, "the new man is not killed by a mark of the old one");
 });

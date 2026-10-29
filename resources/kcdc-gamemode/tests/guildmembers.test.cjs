@@ -150,7 +150,7 @@ test("an empty guild has one empty page, and a guild that is not in the catalog 
 });
 
 test("the page asks by event and is answered with its own page; nonsense is not answered", () => {
-    const { api, handlers } = load(sample());
+    const { api, handlers } = load(sample(), { admins: ["1"] });
     api.installGuildMembers();
     const handler = handlers.get(`${RESOURCE}:status.guildMembers`);
     const sent = [];
@@ -173,4 +173,19 @@ test("the page asks by event and is answered with its own page; nonsense is not 
 
     const text = JSON.stringify(sent[0].payload);
     assert.ok(!/steam|"1"|conta-/i.test(text), "no Steam id and no account name goes to the page");
+});
+
+test("only an administrator is answered (2026-10-26: the Ver membros button is theirs alone), even a member of the guild asked about", () => {
+    const { api, handlers } = load(sample(), { admins: ["9"] });
+    api.installGuildMembers();
+    const handler = handlers.get(`${RESOURCE}:status.guildMembers`);
+    const member = [];
+    const outsider = [];
+    const admin = [];
+    handler(viewerOf("1", member), JSON.stringify({ guildId: "venatores", page: 0 }));
+    handler(viewerOf("4", outsider), JSON.stringify({ guildId: "venatores", page: 0 }));
+    assert.deepEqual([member.length, outsider.length], [0, 0], "a brother of the guild and a stranger are told nothing");
+    handler(viewerOf("9", admin), JSON.stringify({ guildId: "venatores", page: 0 }));
+    assert.equal(admin.length, 1);
+    assert.equal(admin[0].payload.members.length, 3);
 });

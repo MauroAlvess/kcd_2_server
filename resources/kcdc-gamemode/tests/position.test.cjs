@@ -315,3 +315,19 @@ test("the saved places survive a restart, and a damaged file starts empty rather
     assert.equal(broken.api.getSavedPlace(STEAM), null);
     assert.equal(broken.api.getSavedPlace(""), null);
 });
+
+test("a player seated at a dice table is not kept there: a restart puts them back where they stood before sitting", () => {
+    const sut = load();
+    const ana = sut.player(1, { position: { x: 1000, y: 2000, z: 100 } });
+    sut.fire("playerSpawned", ana);
+    sut.tick();
+    assert.equal(plain(sut.saved())[STEAM].x, 1000);
+    let seated = true;
+    sut.api.setPlaceHold((player) => seated && player.id === 1);
+    ana.position = { x: 1010, y: 2010, z: 101 };
+    sut.tick();
+    assert.equal(plain(sut.saved())[STEAM].x, 1000, "the bench is not kept");
+    seated = false;
+    sut.tick();
+    assert.equal(plain(sut.saved())[STEAM].x, 1010);
+});

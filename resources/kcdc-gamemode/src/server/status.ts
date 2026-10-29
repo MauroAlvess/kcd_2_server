@@ -10,10 +10,15 @@
 import { adminLabel, nameOf } from "./acquaintances.js";
 import { fullName } from "./character-name.js";
 import { isAdmin, roleOf } from "./auth.js";
-import { getCharacter } from "./characters.js";
+import { allCharacters, getCharacter } from "./characters.js";
+import { bans, kickBanned } from "./bans.js";
+import { getSavedPlace } from "./position.js";
 import { addPerson, answerInvite, backfillMirrors, editPerson, familyHeirs, getSurname, invitesFor, LIMITS, listFamily, maritalStatus, RELATIONS, removePersonDetailed, ROWS, setSurname } from "./family.js";
 import type { MirrorOutcome, Mirroring } from "./family.js";
-import { grantFactionColours, grantGuildKit } from "./kits.js";
+import { grantFactionColours, grantGuildKit, guildKitHint } from "./kits.js";
+import { thirstPace } from "./thirst.js";
+import { chargeForChange } from "./change-fee.js";
+import { CHANGE_PRICE_COINS, freeChangesOf } from "./free-changes.js";
 import {
     assignOwner,
     cedeRegion,
@@ -23,10 +28,20 @@ import {
     displayName,
     domainOf,
     doorLines,
+    castleGates,
+    gatesOpen,
     getProperty,
     isOwner,
+    mayWorkGates,
     issueDoorKey,
     issueKey,
+    ACCESS_LIMIT,
+    accessOf,
+    grantAccess,
+    hasAccess,
+    leaveAccess,
+    propertiesSharedWith,
+    revokeAccess,
     labelFor,
     listProperties,
     lockState,
@@ -36,24 +51,32 @@ import {
     OWNER_KEY_LIMIT,
     ownerOf,
     previewRegion,
+    previewRelease,
     propertiesOwnedBy,
     propertyOfGuid,
     REGION_MAX,
     REGION_MIN,
+    regionLordOf,
     regionNamed,
+    releaseRegion,
     renameProperty,
     setDoorLocked,
+    setCastleGates,
     setLocked,
     setRegion,
     shortName,
 } from "./properties.js";
 import type { PropertyInfo } from "./properties.js";
+import { giveRoom, holdsRoomPart, removeRoom, roomById, roomsHeldBy, roomsOfHouse, saveRoom, vacateRoom, ROOM_NAME_MAX, ROOM_NAME_MIN } from "./rooms.js";
+import type { Room } from "./rooms.js";
 import { byName, DEFAULT_QUERY, matches, PAGE_SIZE, paginate, parseQuery } from "./roster.js";
 import type { RosterFilter, RosterQuery } from "./roster.js";
 import { languageOf, translate } from "./language.js";
 import { supporters } from "./supporters.js";
 import { summarize } from "./nobility.js";
 import { shownOf, titleLines, titlesOf } from "./titles.js";
+import { emitLarge } from "./big-emit.js";
+import { townOf } from "./citizenship.js";
 
 declare function require(id: string): unknown;
 
@@ -70,7 +93,11 @@ const FILE = `${DIR}/social.json`;
 
 const RESOURCE = "kcdc-gamemode";
 
-export type SocialStatus = "plebeius" | "nobilis";
+/** Commoner, lesser noble (given by an administrator, for the families of small estates; user, 2026-10-18) and noble. */
+export type SocialStatus = "plebeius" | "minor" | "nobilis";
+
+/** The statuses, lowest first. */
+export const SOCIAL_STATUS_IDS: readonly SocialStatus[] = ["plebeius", "minor", "nobilis"];
 
 /** Which of the two the character page shows on its right-hand side. */
 export type Showcase = "guild" | "faction" | "citizenship";
@@ -93,6 +120,7 @@ export interface GuildInfo {
 /** What the panel shows for a status: the Latin word, and a short Portuguese gloss under it. */
 export const SOCIAL_STATUS: Readonly<Record<SocialStatus, { readonly label: string; readonly gloss: string }>> = {
     plebeius: { label: "Plebeius", gloss: "plebeu" },
+    minor: { label: "Nobilis minor", gloss: "nobreza menor" },
     nobilis: { label: "Nobilis", gloss: "nobre" },
 };
 
@@ -141,6 +169,41 @@ export const GUILDS: readonly GuildInfo[] = [
         description:
             "Cosem e remendam o que Kuttenberg veste: túnicas, calças e capuzes. " +
             "Do camponês ao mercador, todos precisam de um pano que dure.",
+    },
+    // The Coletores (user, 2026-10-21: "uma guilda nova Coletor, já coloquei o brasão na pasta img"): the axe at the trees and the pick at the
+    // rocks (`gather.ts`); the smith makes their tools and works what they bring.
+    {
+        id: "collectores",
+        nameLatin: "Collectores",
+        profession: "Coletor",
+        crest: "guild-coletor.webp",
+        description:
+            "Cortam lenha nas matas e quebram pedra nas encostas e minas de Kuttenberg. Quase tudo é cascalho, um pouco é ferro e, " +
+            "muito de vez em quando, prata: é deles a lenha do carvão e o metal que o ferreiro forja.",
+    },
+    // The Agricultores (user, 2026-10-22: "acha que tem como fazer uma mecânica de agricultor no jogo ... o brasão e título coloquei na pasta
+    // img"): the beds of the villages' gardens, where what the kitchen needs is sown with a shovel and comes up in its time (`farm.ts`). The
+    // wild horses they began with went to the Domitores on 2026-10-25.
+    {
+        id: "agricolae",
+        nameLatin: "Agricolae",
+        profession: "Agricultor",
+        crest: "guild-agricultor.webp",
+        description:
+            "Lavram as hortas atrás das casas das aldeias: repolho, cebola, cenoura, alho e as ervas que o taberneiro e o alquimista " +
+            "compram. Semeiam com a pá e colhem quando a planta está pronta.",
+    },
+    // The Domadores (user, 2026-10-25: "adicionei dentro da pasta img o brasão domador, vamos separar a mecânica de domar cavalo totalmente da
+    // guilda dos agricultores e criar a guilda de domadores, colocando a mecânica completa de domar cavalo nessa nova guilda"): the wild
+    // horses of the open fields, won over by hand (`wild-horses.ts`), the craft `domar` of `guild-crafts.ts`.
+    {
+        id: "domitores",
+        nameLatin: "Domitores",
+        profession: "Domador",
+        crest: "guild-domador.webp",
+        description:
+            "Amansam os cavalos selvagens dos campos abertos, de comida na mão e paciência, até que confiem, e ficam com eles: " +
+            "montam, mandam seguir, e o cavalo manso aparece entre os animais de quem o ganhou.",
     },
 ];
 
@@ -226,6 +289,12 @@ export function onStatusChange(listener: StatusListener): void {
     statusListeners.push(listener);
 }
 
+/**
+ * Called when a player accepts to be somebody's relative (`status.familyAnswer`), with both Steam ids: the asker's and theirs. A
+ * noble's family takes its standing from them (`nominations.ts`).
+ */
+export const familyLinked: Array<(owner: string, member: string) => void> = [];
+
 export function setSocialStatus(steamId: string, socialStatus: SocialStatus): void {
     const record = recordFor(steamId);
     write(steamId, { ...record, socialStatus, updatedAt: Date.now() });
@@ -233,6 +302,24 @@ export function setSocialStatus(steamId: string, socialStatus: SocialStatus): vo
         for (const listener of statusListeners) {
             try {
                 listener(steamId, socialStatus, record.socialStatus);
+            } catch (error: unknown) {
+                console.log(`status: um ouvinte da mudança de status falhou: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
+}
+
+/** A player starts again (`character-reset.ts`): a commoner with no guild, no faction, and the page back to its first look. */
+export function resetRecord(steamId: string): void {
+    const record = steamId === "" ? undefined : load()[steamId];
+    if (record === undefined) {
+        return;
+    }
+    write(steamId, { ...NEW_RECORD, updatedAt: Date.now() });
+    if (record.socialStatus !== "plebeius") {
+        for (const listener of statusListeners) {
+            try {
+                listener(steamId, "plebeius", record.socialStatus);
             } catch (error: unknown) {
                 console.log(`status: um ouvinte da mudança de status falhou: ${error instanceof Error ? error.message : String(error)}`);
             }
@@ -248,7 +335,10 @@ export function listNobles(): string[] {
 }
 
 export function getGuildId(steamId: string): string | null {
-    return recordFor(steamId).guildId;
+    // Asked for every player many times a second (who may milk, tame, cut, mine): read straight from the record, without the copy `recordFor` makes of it
+    // (2026-10-27). The same answer: a guild the catalog no longer has reads as none.
+    const guildId = load()[steamId]?.guildId ?? null;
+    return guildId !== null && GUILDS.some((guild) => guild.id === guildId) ? guildId : null;
 }
 
 /** Every Steam id whose guild is this one. */
@@ -266,6 +356,7 @@ export function clearGuildId(steamId: string): boolean {
         return false;
     }
     write(steamId, { ...record, guildId: null, updatedAt: Date.now() });
+    guildChanged(steamId);
     return true;
 }
 
@@ -276,7 +367,25 @@ export function setGuildId(steamId: string, guildId: string): boolean {
     }
     const record = recordFor(steamId);
     write(steamId, { ...record, guildId, updatedAt: Date.now() });
+    guildChanged(steamId);
     return true;
+}
+
+const guildListeners: Array<(steamId: string) => void> = [];
+
+/** Called with a player's Steam id whenever their guild is chosen, swapped or taken away (`guild-crafts.ts` tells their client what it may do). */
+export function onGuildChange(listener: (steamId: string) => void): void {
+    guildListeners.push(listener);
+}
+
+function guildChanged(steamId: string): void {
+    for (const listener of guildListeners) {
+        try {
+            listener(steamId);
+        } catch (error: unknown) {
+            console.log(`status: um aviso de troca de guilda falhou: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
 }
 
 export function getFactionId(steamId: string): string | null {
@@ -331,6 +440,27 @@ function fieldsOf(payload: unknown): Record<string, unknown> {
 }
 
 /**
+ * The words that place a region and a property on the game's own map (`place-hints.ts`; user, 2026-10-26: "não sei me localizar pelas regiões que você
+ * mapeou e não aparecem com nome no mapa"). They are a convenience: loaded when asked for, and a failure there leaves them out and never the panel.
+ */
+function placeHints(): typeof import("./place-hints.js") | null {
+    try {
+        return require("./place-hints.js") as typeof import("./place-hints.js");
+    } catch {
+        return null;
+    }
+}
+
+/** Where each region of a list is on the map, by the region's name. */
+function regionHintsFor(names: readonly string[]): Record<string, unknown> {
+    try {
+        return placeHints()?.regionHints(names, listProperties()) ?? {};
+    } catch {
+        return {};
+    }
+}
+
+/**
  * What the properties pages are told about one property. A chest in a house goes by its own part of the name. A field
  * with nothing to say is left out (no owner, no house, no description, no keys made, not the viewer's), because an
  * administrator is sent the whole catalog at once: a couple of hundred of these.
@@ -367,26 +497,202 @@ function propertyEntry(property: PropertyInfo, viewer: Player, domain = false): 
             entry["mine"] = true;
         }
     }
+    // Access (2026-10-28): who the owner gave it to, for the owner and an administrator to see and take back; and, for one who was given it, that it is theirs to work.
+    if (property.parentId === "" && !domain && (isAdmin(viewer) || entry["mine"] === true)) {
+        const people = accessOf(property).map((grant) => grant.name);
+        if (people.length > 0) {
+            entry["access"] = people;
+        }
+    }
+    if (entry["mine"] !== true && viewer.steamId !== "" && hasAccess(viewer.steamId, property)) {
+        entry["shared"] = true;
+    }
     const npc = npcOf(property);
     if (npc !== null) {
         entry["npc"] = npc;
     }
+    // A castle's gates, for whoever may work them: how many, and whether they stand open.
+    const gates = gatesOpen(property);
+    if (gates !== null && !domain && mayWorkGates(viewer, property, isAdmin(viewer))) {
+        entry["gates"] = castleGates(property).length;
+        entry["gatesOpen"] = gates;
+    }
     if (property.description !== "") {
         entry["description"] = property.description;
+    }
+    // A castle, an inn, a stud farm, the Devil's Den: what the map calls the spot and where it stands against its village.
+    if (property.kind === "house" && property.parentId === "") {
+        try {
+            const where = placeHints()?.propertyHint(property) ?? "";
+            if (where !== "") {
+                entry["where"] = where;
+            }
+        } catch {
+            // Left out.
+        }
+    }
+    // Its rooms, for whoever may make and give them: the owner and an administrator.
+    if (property.parentId === "" && property.kind !== "chest" && !domain && (isAdmin(viewer) || (owner !== null && owner.steamId === viewer.steamId))) {
+        const rooms = roomsOfHouse(property.id);
+        if (rooms.length > 0) {
+            entry["rooms"] = rooms.map((room) => ({ id: room.id, name: room.name, doors: room.doors.map((guid) => property.doors.indexOf(guid)).filter((index) => index >= 0), chests: room.chests, holders: room.holders.map((holder) => holder.name) }));
+        }
     }
     return entry;
 }
 
-/** What a player is told of properties: an administrator the whole catalog, the rest what they own and what lies in the regions ceded to them. */
-function propertiesFor(player: Player): ReadonlyArray<Record<string, unknown>> {
-    if (isAdmin(player)) {
-        return listProperties().map((property) => propertyEntry(property, player));
+/**
+ * A room the viewer holds in somebody else's house, as the properties page lists it: its doors (their place in the house's list,
+ * name and lock) and its chests, which follow it as entries of their own whose parent is the room.
+ */
+function roomEntries(room: Room, viewer: Player): Array<Record<string, unknown>> {
+    const house = getProperty(room.houseId);
+    if (house === null) {
+        return [];
     }
-    return [...propertiesOwnedBy(player.steamId).map((property) => propertyEntry(property, player)), ...domainOf(player.steamId).map((property) => propertyEntry(property, player, true))];
+    const lines = doorLines(house);
+    const doors = room.doors
+        .map((guid) => house.doors.indexOf(guid))
+        .filter((index) => index >= 0)
+        .map((index) => ({ index, name: lines[index]?.name ?? `Porta ${index + 1}`, locked: lines[index]?.locked === true }));
+    const chests = room.chests.map((id) => getProperty(id)).filter((chest): chest is PropertyInfo => chest !== null);
+    const owner = ownerOf(house);
+    const entry: Record<string, unknown> = {
+        id: `room:${room.id}`,
+        kind: "room",
+        name: room.name,
+        region: house.region,
+        house: house.name,
+        houseId: house.id,
+        holders: room.holders.map((holder) => holder.name),
+        roomDoors: doors,
+        locked: doors.length + chests.length > 0 && doors.every((door) => door.locked) && chests.every((chest) => lockState(chest) === "all"),
+        mine: true,
+        room: true,
+    };
+    if (owner !== null) {
+        entry["owner"] = owner.name;
+    }
+    return [entry, ...chests.map((chest) => ({ ...propertyEntry(chest, viewer), parentId: `room:${room.id}`, mine: false }))];
+}
+
+/**
+ * The region each player has open on the two property pages (2026-10-21): Chaves, the administrator's, and Propriedades, where a lord sees the
+ * regions ceded to them. Only that region's properties are sent (with the player's own, wherever they are), never the whole catalog: with 17
+ * regions mapped it is 1131 properties, and a page that built a row for each made the panel heavy to open and the game's frame rate low.
+ * What the other regions hold is told in a line each (`regionLines`), which is all the page's dropdown and its "take the whole region" card need.
+ */
+const regionPicks = new Map<number, { keys: string; mine: string }>();
+
+/** What a region holds, as the "take or cede the whole region" card counts it: the same numbers the page used to count itself. */
+export interface RegionLine {
+    readonly name: string;
+    /** Properties that stand on their own (the chests of a house are under the house). */
+    readonly houses: number;
+    /** Of those: with no owner, and how many chests they hold; of an NPC; with an owner. */
+    readonly given: number;
+    readonly chests: number;
+    readonly npc: number;
+    readonly kept: number;
+    /** Who the region was ceded to, or "": the form offers to remove the lord only when there is one. */
+    readonly lord: string;
+}
+
+export function regionLines(properties: readonly PropertyInfo[]): RegionLine[] {
+    const kids = new Map<string, number>();
+    for (const property of properties) {
+        if (property.parentId !== "") {
+            kids.set(property.parentId, (kids.get(property.parentId) ?? 0) + 1);
+        }
+    }
+    const lines = new Map<string, { name: string; houses: number; given: number; chests: number; npc: number; kept: number; lord: string }>();
+    for (const property of properties) {
+        if (property.parentId !== "") {
+            continue;
+        }
+        const line = lines.get(property.region) ?? { name: property.region, houses: 0, given: 0, chests: 0, npc: 0, kept: 0, lord: regionLordOf(property.region)?.name ?? "" };
+        line.houses += 1;
+        if (npcOf(property) !== null) {
+            line.npc += 1;
+        } else if (ownerOf(property) === null) {
+            line.given += 1;
+            line.chests += kids.get(property.id) ?? 0;
+        } else {
+            line.kept += 1;
+        }
+        lines.set(property.region, line);
+    }
+    return [...lines.values()].sort((a, b) => a.name.localeCompare(b.name, "pt", { numeric: true }));
+}
+
+/** The region of the property nearest to this player, or "" when the catalog is empty: where the administrator's Chaves list opens. */
+function nearestRegion(player: Player): string {
+    let best = "";
+    let distance = Infinity;
+    for (const property of listProperties()) {
+        const away = Math.hypot(property.x - player.position.x, property.y - player.position.y);
+        if (away < distance) {
+            distance = away;
+            best = property.region;
+        }
+    }
+    return best !== "" ? best : (listProperties()[0]?.region ?? "");
+}
+
+/** The regions ceded to a lord, by name. */
+function domainRegions(steamId: string): string[] {
+    return [...new Set(domainOf(steamId).map((property) => property.region))].sort((a, b) => a.localeCompare(b, "pt", { numeric: true }));
+}
+
+function picksOf(player: Player): { keys: string; mine: string } {
+    let pick = regionPicks.get(player.id);
+    if (pick === undefined) {
+        pick = { keys: "", mine: "" };
+        regionPicks.set(player.id, pick);
+    }
+    if (isAdmin(player) && (pick.keys === "" || regionNamed(pick.keys) === null)) {
+        pick.keys = nearestRegion(player);
+    }
+    return pick;
+}
+
+/**
+ * What a player is told of properties: an administrator their own and the one region open on Chaves; the rest what they own and, for a lord, EVERYTHING in the lands ceded to them (2026-10-29,
+ * the user: "os lordes de uma terra, mesmo se darem propriedade a alguém, devem continuar com ela na lista, porque todas as propriedades são deles, inclusive as de NPC"): what they gave away, what
+ * others own and the vendors' houses stay on their list, to be looked at. A region picked in the dropdown narrows the lands to it. A lord's lands are small (the biggest, Suchdol, has 163 entries
+ * with its chests), unlike the administrator's whole catalog, which is why the lands are sent whole and the catalog one region at a time.
+ */
+function propertiesFor(player: Player): ReadonlyArray<Record<string, unknown>> {
+    const pick = picksOf(player);
+    if (isAdmin(player)) {
+        const shown = new Map<string, PropertyInfo>();
+        for (const property of [...propertiesOwnedBy(player.steamId), ...listProperties().filter((property) => property.region === pick.keys)]) {
+            shown.set(property.id, property);
+        }
+        for (const property of propertiesSharedWith(player.steamId)) {
+            shown.set(property.id, property);
+        }
+        return [...shown.values()].map((property) => propertyEntry(property, player));
+    }
+    const listed = [...propertiesOwnedBy(player.steamId).map((property) => propertyEntry(property, player)), ...domainOf(player.steamId).filter((property) => pick.mine === "" || property.region === pick.mine).map((property) => propertyEntry(property, player, true))];
+    // What they were given access to, in other people's hands (the second tab of Propriedades), then the rooms they hold in houses that are not theirs.
+    const own = new Set(listed.map((entry) => entry["id"]));
+    for (const property of propertiesSharedWith(player.steamId)) {
+        if (!own.has(property.id)) {
+            listed.push(propertyEntry(property, player));
+            own.add(property.id);
+        }
+    }
+    for (const room of roomsHeldBy(player.steamId)) {
+        if (!own.has(room.houseId)) {
+            listed.push(...roomEntries(room, player));
+        }
+    }
+    return listed;
 }
 
 /** The limits the page checks a name, a description and a region against before it asks; the server checks again. */
-const PROPERTY_LIMITS = { nameMin: NAME_MIN, nameMax: NAME_MAX, descriptionMax: DESCRIPTION_MAX, regionMin: REGION_MIN, regionMax: REGION_MAX, keyLimit: OWNER_KEY_LIMIT };
+const PROPERTY_LIMITS = { nameMin: NAME_MIN, nameMax: NAME_MAX, descriptionMax: DESCRIPTION_MAX, regionMin: REGION_MIN, regionMax: REGION_MAX, keyLimit: OWNER_KEY_LIMIT, accessLimit: ACCESS_LIMIT, roomMin: ROOM_NAME_MIN, roomMax: ROOM_NAME_MAX };
 
 /**
  * A gauge as the page draws it: the reading and the capacity, in whole numbers. The game reports a capacity of 0 until it
@@ -421,6 +727,8 @@ function playerEntry(viewer: Player, other: Player, label: string): Record<strin
         guild: GUILDS.find((guild) => guild.id === guildId)?.profession ?? null,
         guildId,
         factionId: getFactionId(other.steamId),
+        // The town they are a citizen of (2026-10-18: "ao clicar em jogadores ... aparecer a cidadania").
+        town: townOf(other.steamId)?.name ?? null,
         status: SOCIAL_STATUS[getSocialStatus(other.steamId)],
         statusId: getSocialStatus(other.steamId),
         titles: summarize(titlesOf(other.steamId), gender === "female"),
@@ -432,8 +740,12 @@ function playerEntry(viewer: Player, other: Player, label: string): Record<strin
         health: gauge(other.health, other.maxHealth),
         stamina: gauge(other.stamina, other.maxStamina),
         hunger: gauge(other.hunger, other.maxHunger),
+        // The server's own thirst (`thirst.ts`): a measure of a hundred.
+        thirst: gauge(thirstPace.value(other), 100),
         energy: gauge(other.exhaust, other.maxExhaust),
         supporter: supporters.summary(other.steamId),
+        offline: false,
+        banned: bans.isBanned(other.steamId),
         ready: other.ready,
         alive: other.alive,
         steamId: other.steamId,
@@ -497,20 +809,133 @@ function heirNames(steamId: string): string[] {
     });
 }
 
-/** Whether a player passes the filter of the administrator's list. */
-function passes(filter: RosterFilter, other: Player): boolean {
+/** Whether an account passes the filter of the administrator's list; `player` is their body when they are in the game. */
+function passes(filter: RosterFilter, steamId: string, player: Player | null): boolean {
     switch (filter) {
+        case "online":
+            return player !== null;
+        case "offline":
+            return player === null;
+        case "banned":
+            return bans.isBanned(steamId);
         case "admin":
-            return roleOf(other) === "admin";
+            return player !== null && roleOf(player) === "admin";
         case "patron":
-            return supporters.summary(other.steamId) !== null;
+            return supporters.summary(steamId) !== null;
         case "noble":
-            return getSocialStatus(other.steamId) === "nobilis";
+            return getSocialStatus(steamId) !== "plebeius";
         case "noguild":
-            return getGuildId(other.steamId) === null;
+            return getGuildId(steamId) === null;
         default:
             return true;
     }
+}
+
+/**
+ * The accounts the administrator's list knows besides the bodies in the game (user, 2026-10-26: "na lista de jogadores deve carregar os jogadores offline também e permitir
+ * filtrar e pesquisar, assim podemos dar ban em jogadores offline e até entregar benefícios ou retirar"): every saved character, and every banned account (one that never
+ * made a character is only in the bans). The page names an account that is not in the game by a number below zero, so that it never meets an entity id; it is made of the
+ * Steam id, the same on every call, and moved down by one for the rare account that comes out with another's number. The Steam id itself stays on the server.
+ */
+function knownAccounts(): Array<{ id: number; steamId: string }> {
+    const steamIds = new Set<string>([...allCharacters().map((character) => character.steamId), ...bans.list().map((ban) => ban.steamId)]);
+    const taken = new Set<number>();
+    return [...steamIds].sort().map((steamId) => {
+        let hash = 2166136261;
+        for (let at = 0; at < steamId.length; at += 1) {
+            hash = Math.imul(hash ^ steamId.charCodeAt(at), 16777619) >>> 0;
+        }
+        let id = -1 - (hash % 1_000_000_000);
+        while (taken.has(id)) {
+            id -= 1;
+        }
+        taken.add(id);
+        return { id, steamId };
+    });
+}
+
+/** What a character goes by when its owner is not here: the name, the alcunha and the family's surname -- or, for a banned account with no character, the name the ban kept. */
+function nameOfAccount(steamId: string): string {
+    const saved = getCharacter(steamId);
+    if (saved === null) {
+        return bans.get(steamId)?.name || "um jogador";
+    }
+    const first = saved.name ? fullName(saved.name, saved.epithet) : saved.nickname;
+    const surname = getSurname(steamId);
+    return surname ? `${first} ${surname}` : first;
+}
+
+/** What an administrator reads for an account that is not here: the character's name and, when it is not the account's, the account in brackets. */
+function accountLabel(steamId: string): string {
+    const saved = getCharacter(steamId);
+    const name = nameOfAccount(steamId);
+    return saved === null || name === saved.nickname ? name : `${name} (${saved.nickname})`;
+}
+
+/** "há 5 min", "há 3 h", "há 4 dias": how long ago an account was last seen, for a line of the list. */
+export function agoText(at: number, now: number = Date.now()): string {
+    const minutes = Math.max(0, Math.floor((now - at) / 60_000));
+    if (minutes < 1) {
+        return "agora há pouco";
+    }
+    if (minutes < 60) {
+        return `há ${minutes} min`;
+    }
+    const hours = Math.floor(minutes / 60);
+    return hours < 48 ? `há ${hours} h` : `há ${Math.floor(hours / 24)} dias`;
+}
+
+/** An account not in the game, as the page's list reads it: the same fields as a body, without the readings only a body has. */
+function offlineEntry(steamId: string, id: number, label: string): Record<string, unknown> {
+    const gender = getCharacter(steamId)?.appearance.gender;
+    const guildId = getGuildId(steamId);
+    const seen = getSavedPlace(steamId)?.savedAt;
+    return {
+        id,
+        self: false,
+        offline: true,
+        nickname: label,
+        role: null,
+        guild: GUILDS.find((guild) => guild.id === guildId)?.profession ?? null,
+        guildId,
+        factionId: getFactionId(steamId),
+        town: townOf(steamId)?.name ?? null,
+        status: SOCIAL_STATUS[getSocialStatus(steamId)],
+        statusId: getSocialStatus(steamId),
+        titles: summarize(titlesOf(steamId), gender === "female"),
+        titleIds: titlesOf(steamId),
+        heirs: heirNames(steamId),
+        marital: maritalStatus(steamId, gender ?? null),
+        surname: getSurname(steamId),
+        body: gender === "female" ? "female" : "male",
+        supporter: supporters.summary(steamId),
+        banned: bans.isBanned(steamId),
+        seen: seen === undefined ? null : agoText(seen),
+        ready: false,
+        alive: false,
+    };
+}
+
+/** What an administrator is told when the player they pointed at cannot be found: gone from the game (an entity id) or never known (the number of an account). */
+function goneText(id: unknown): string {
+    return typeof id === "number" && id > 0 ? "Esse jogador não está mais no servidor." : "Esse jogador não foi encontrado.";
+}
+
+/** The account a page names by `targetId`: the entity id of a body in the game, or the number below zero of an account that is not. Null for anything else. */
+function accountOfTarget(id: unknown): { steamId: string; name: string; player: Player | null } | null {
+    if (typeof id !== "number" || !Number.isInteger(id) || id === 0) {
+        return null;
+    }
+    if (id > 0) {
+        const player = Player.getById(id);
+        return player === null || player.steamId === "" ? null : { steamId: player.steamId, name: nameOf(player), player };
+    }
+    const account = knownAccounts().find((candidate) => candidate.id === id);
+    if (account === undefined) {
+        return null;
+    }
+    const player = Player.all().find((other) => other.steamId === account.steamId) ?? null;
+    return { steamId: account.steamId, name: player !== null ? nameOf(player) : nameOfAccount(account.steamId), player };
 }
 
 /** Whom a noble may name now (`nominations.ts` says who), for the picker of the Nomeação page. */
@@ -533,12 +958,20 @@ export function rosterAnswer(viewer: Player, wanted: RosterQuery): Record<string
     let paged;
     let players: Array<Record<string, unknown>>;
     if (query.tag === "list") {
-        const rows = Player.all()
-            .map((other) => ({ other, label: adminLabel(other) }))
-            .filter((row) => passes(query.filter, row.other) && matches(query.q, row.other.id, row.label))
-            .sort((a, b) => byName(a.label, b.label) || a.other.id - b.other.id);
-        paged = paginate(rows, query.page, size);
-        players = paged.rows.map((row) => playerEntry(viewer, row.other, row.label));
+        // The bodies in the game first, then the accounts that are not: both by name.
+        const here = Player.all();
+        const inGame = new Set(here.map((other) => other.steamId));
+        const rows: Array<{ id: number; steamId: string; player: Player | null; label: string }> = here.map((other) => ({ id: other.id, steamId: other.steamId, player: other, label: adminLabel(other) }));
+        for (const account of knownAccounts()) {
+            if (!inGame.has(account.steamId)) {
+                rows.push({ id: account.id, steamId: account.steamId, player: null, label: accountLabel(account.steamId) });
+            }
+        }
+        const kept = rows
+            .filter((row) => passes(query.filter, row.steamId, row.player) && matches(query.q, row.id, row.label))
+            .sort((a, b) => Number(b.player !== null) - Number(a.player !== null) || byName(a.label, b.label) || a.id - b.id);
+        paged = paginate(kept, query.page, size);
+        players = paged.rows.map((row) => (row.player !== null ? playerEntry(viewer, row.player, row.label) : offlineEntry(row.steamId, row.id, row.label)));
     } else if (query.tag === "nom") {
         const rows = nominees(viewer)
             .filter((candidate) => matches(query.q, candidate.id, candidate.name))
@@ -579,6 +1012,8 @@ function payloadFor(player: Player): Record<string, unknown> {
     for (const contributor of contributors) {
         Object.assign(extra, contributor(player));
     }
+    const regionList = isAdmin(player) ? regionLines(listProperties()) : [];
+    const domainList = domainRegions(player.steamId);
     return {
         ...extra,
         socialStatus: SOCIAL_STATUS[getSocialStatus(player.steamId)],
@@ -587,10 +1022,19 @@ function payloadFor(player: Player): Record<string, unknown> {
         factionId: getFactionId(player.steamId),
         factions: FACTIONS,
         showcase: getShowcase(player.steamId),
+        // The one free change of guild and of citizenship each player has (2026-10-19), while they still have it, and what every change after it costs (2026-10-26).
+        freeChanges: freeChangesOf(player.steamId),
+        changePrice: CHANGE_PRICE_COINS,
         // Which nav sections the page may show: the server decides, never the page's own guess.
         role: roleOf(player),
         // An administrator is sent the whole catalog, everybody else only what they own, and only a name for each other player.
         properties: propertiesFor(player),
+        // The regions to choose from, with what each holds (an administrator's Chaves), the regions ceded to a lord (Propriedades), and the one open on each.
+        propertyRegions: regionList,
+        domainRegions: domainList,
+        // Where each of them is on the game's own map, for the dropdown of both pages.
+        regionHints: regionHintsFor([...regionList.map((line) => line.name), ...domainList]),
+        propertyPick: picksOf(player),
         propertyLimits: PROPERTY_LIMITS,
         family: listFamily(player.steamId),
         // Who asks this player to be their relative, waiting for a yes or a no in the Família section.
@@ -611,7 +1055,8 @@ function payloadFor(player: Player): Record<string, unknown> {
 }
 
 export function sendSocial(player: Player): void {
-    player.emit(`${RESOURCE}:status.social`, JSON.stringify(payloadFor(player)));
+    // In pieces when too big for one message (about 29 KB): an administrator's has the whole property catalog.
+    emitLarge(player, "status.social", JSON.stringify(payloadFor(player)));
 }
 
 /**
@@ -641,6 +1086,34 @@ export function installStatus(): void {
         player.emit(`${RESOURCE}:status.roster`, JSON.stringify(rosterAnswer(player, query)));
     });
 
+    // Chaves and Propriedades open one region at a time: the page says which, and is sent that region's properties.
+    Events.onClient(`${RESOURCE}:status.propRegion`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const tab = fields["tab"];
+        const region = fields["region"];
+        if ((tab !== "keys" && tab !== "mine") || typeof region !== "string" || region.length > REGION_MAX) {
+            return;
+        }
+        const pick = picksOf(player);
+        if (tab === "keys") {
+            const named = regionNamed(region);
+            if (!isAdmin(player) || named === null) {
+                return;
+            }
+            pick.keys = named;
+        } else {
+            if (region !== "" && !domainRegions(player.steamId).includes(region)) {
+                return;
+            }
+            pick.mine = region;
+        }
+        sendSocial(player);
+    });
+    Events.on("playerDisconnect", (player) => {
+        regionPicks.delete(player.id);
+    });
+
     Events.onClient(`${RESOURCE}:status.selectGuild`, (sender, payload) => {
         const player = sender as Player;
         if (!player.steamId) {
@@ -648,11 +1121,55 @@ export function installStatus(): void {
             return;
         }
         const guildId = typeof payload === "object" && payload !== null ? (payload as { guildId?: unknown }).guildId : undefined;
-        // One guild for good (user, 2026-10-17): the choice is not undone from the panel, only by an administrator (`/guilda`).
+        // Players do not choose a guild any more (2026-10-29, the user: "as guildas não vão poder mais ser selecionadas pelos jogadores"): a clerk, a master of a trade or a lord
+        // hands it to a citizen of theirs (`scribe.ts`). An administrator still chooses, and switches at will, to test the trades (2026-10-18).
+        if (!isAdmin(player)) {
+            notice(player, "A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras, que cede a guilda a quem é cidadão. Sem cidadania, escolha primeiro a sua cidade na seção Cidadania.");
+            return;
+        }
+        // The first guild is a choice; changing it is the player's one free change and then costs coins (2026-10-26: "uma vez grátis, depois custa 100
+        // moedas"). An administrator switches at will, to test the trades (2026-10-18).
         const current = getGuildId(player.steamId);
+        if (current !== null && isAdmin(player) && typeof guildId === "string" && guildId !== current && GUILDS.some((candidate) => candidate.id === guildId)) {
+            if (!setGuildId(player.steamId, guildId)) {
+                Chat.sendToPlayer(player, "Essa guilda não pode ser selecionada.");
+                return;
+            }
+            notice(player, `Administrador: você trocou para ${GUILDS.find((candidate) => candidate.id === guildId)?.nameLatin ?? guildId}. Jogadores comuns não trocam.`);
+            sendSocial(player);
+            return;
+        }
+        // Every player's one free change (2026-10-19), and after it a change for a price: what they had stays until they take it.
+        if (current !== null && typeof guildId === "string" && guildId !== current && GUILDS.some((candidate) => candidate.id === guildId)) {
+            const fee = chargeForChange(player, "guild");
+            if (!fee.ok) {
+                notice(player, fee.message);
+                return;
+            }
+            if (!setGuildId(player.steamId, guildId)) {
+                fee.refund();
+                Chat.sendToPlayer(player, "Essa guilda não pode ser selecionada.");
+                return;
+            }
+            const from = GUILDS.find((candidate) => candidate.id === current);
+            const to = GUILDS.find((candidate) => candidate.id === guildId);
+            console.log(`status: ${player.nickname} trocou de guilda (${fee.free ? "troca gratuita" : `${CHANGE_PRICE_COINS} moedas`}): ${from?.nameLatin ?? current} -> ${to?.nameLatin ?? guildId}`);
+            notice(player, fee.free
+                ? `Você trocou ${from?.nameLatin ?? current} por ${to?.nameLatin ?? guildId}. Esta era a sua troca gratuita: as próximas custam ${CHANGE_PRICE_COINS} moedas.`
+                : `Você trocou ${from?.nameLatin ?? current} por ${to?.nameLatin ?? guildId} por ${CHANGE_PRICE_COINS} moedas.`);
+            const handed = grantGuildKit(player, guildId);
+            if (handed.length > 0) {
+                notice(player, `Kit da guilda entregue: ${handed.join(", ")}.`);
+                if (guildKitHint(guildId) !== "") {
+                    notice(player, guildKitHint(guildId));
+                }
+            }
+            sendSocial(player);
+            return;
+        }
         if (current !== null) {
             const kept = GUILDS.find((candidate) => candidate.id === current);
-            notice(player, current === guildId ? `Você já faz parte de ${kept?.nameLatin ?? current}.` : `Você já escolheu a guilda ${kept?.nameLatin ?? current}: a escolha é definitiva e não se troca. Só um administrador pode desfazê-la.`);
+            notice(player, current === guildId ? `Você já faz parte de ${kept?.nameLatin ?? current}.` : "Essa guilda não pode ser selecionada.");
             return;
         }
         if (typeof guildId !== "string" || !setGuildId(player.steamId, guildId)) {
@@ -665,6 +1182,9 @@ export function installStatus(): void {
         const handed = grantGuildKit(player, guildId);
         if (handed.length > 0) {
             notice(player, `Kit da guilda entregue: ${handed.join(", ")}.`);
+            if (guildKitHint(guildId) !== "") {
+                notice(player, guildKitHint(guildId));
+            }
         }
         sendSocial(player);
     });
@@ -740,6 +1260,58 @@ export function installStatus(): void {
         if (result.ok && target !== player) {
             Chat.sendToPlayer(target, `${nameOf(player)} entregou a você uma chave${typeof doorIndex === "number" ? " de uma porta" : ""}. Fique perto da porta ou do baú e digite /chave para usá-la.`);
         }
+        sendSocial(player);
+    });
+
+    // Access (2026-10-28), instead of keys: the owner, or an administrator, chooses a player who is here and gives them access to the property; takes it back; and whoever was given it may let go.
+    Events.onClient(`${RESOURCE}:status.propAccess`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        if (typeof fields["id"] !== "string" || typeof fields["targetId"] !== "number" || fields["targetId"] === player.id) {
+            notice(player, "Escolha outro jogador para dar o acesso.");
+            return;
+        }
+        const target = targetOf(player, fields);
+        if (target === null) {
+            return;
+        }
+        const result = grantAccess(player, fields["id"], target, isAdmin(player));
+        notice(player, result.message);
+        if (result.ok) {
+            const property = getProperty(fields["id"]);
+            const where = property === null ? "uma propriedade" : displayName(property.parentId !== "" ? (getProperty(property.parentId) ?? property) : property);
+            Chat.sendToPlayer(target, `${nameOf(player)} deu a você acesso a ${where}. Veja em Propriedades, na aba Com acesso (F2).`);
+            sendSocial(target);
+        }
+        sendSocial(player);
+    });
+
+    Events.onClient(`${RESOURCE}:status.propAccessRemove`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        if (typeof fields["id"] !== "string" || typeof fields["index"] !== "number") {
+            return;
+        }
+        const result = revokeAccess(player, fields["id"], fields["index"], typeof fields["name"] === "string" ? fields["name"] : "", isAdmin(player));
+        notice(player, result.message);
+        if (result.ok && result.steamId !== undefined) {
+            const gone = Player.all().find((other) => other.steamId === result.steamId);
+            if (gone !== undefined) {
+                const property = getProperty(fields["id"]);
+                Chat.sendToPlayer(gone, `${nameOf(player)} tirou o seu acesso a ${property === null ? "uma propriedade" : displayName(property.parentId !== "" ? (getProperty(property.parentId) ?? property) : property)}.`);
+                sendSocial(gone);
+            }
+        }
+        sendSocial(player);
+    });
+
+    Events.onClient(`${RESOURCE}:status.propAccessLeave`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        if (typeof fields["id"] !== "string") {
+            return;
+        }
+        notice(player, leaveAccess(player.steamId, fields["id"]).message);
         sendSocial(player);
     });
 
@@ -853,12 +1425,12 @@ export function installStatus(): void {
             notice(player, "Propriedade não encontrada.");
             return;
         }
-        if (!isAdmin(player) && !isOwner(player, property)) {
-            notice(player, "Só o dono pode trancar ou destrancar.");
-            return;
-        }
         const index = fields["index"];
         if (typeof index !== "number" || !Number.isInteger(index) || (fields["locked"] !== 0 && fields["locked"] !== 1)) {
+            return;
+        }
+        if (!isAdmin(player) && !isOwner(player, property) && !hasAccess(player.steamId, property) && !holdsRoomPart(player, property.doors[index] ?? "")) {
+            notice(player, "Só o dono, ou quem tem acesso, pode trancar ou destrancar.");
             return;
         }
         notice(player, setDoorLocked(property.id, index, fields["locked"] === 1).message);
@@ -876,6 +1448,27 @@ export function installStatus(): void {
         const region = typeof fields["region"] === "string" ? regionNamed(fields["region"]) : null;
         if (region === null) {
             notice(player, "Escolha uma região para ceder.");
+            return;
+        }
+        // "Remover dono": the region goes back to the Crown and the lord loses the properties they hold in it (those of others stay). Nobody is chosen.
+        if (fields["remove"] === 1) {
+            const would = previewRelease(region);
+            if (would.lord === null) {
+                notice(player, `${region} não tem senhor.`);
+                return;
+            }
+            if (fields["confirm"] !== 1) {
+                notice(player, `${region}: ${would.lord.name} deixaria de ser o senhor das terras: ${would.released} propriedade(s) dele ficariam sem dono e ${would.kept} de outros donos continuariam.`);
+                return;
+            }
+            const released = releaseRegion(region);
+            notice(player, released.message);
+            const former = released.lord === null ? undefined : Player.all().find((other) => other.steamId === released.lord?.steamId);
+            if (released.ok && former !== undefined && former !== player) {
+                Chat.sendToPlayer(former, `${nameOf(player)} tirou de você as terras de ${region}, com as propriedades que você tinha lá. O resto continua seu.`);
+                sendSocial(former);
+            }
+            sendSocial(player);
             return;
         }
         const target = targetOf(player, fields);
@@ -904,17 +1497,82 @@ export function installStatus(): void {
         if (!isAdmin(player)) {
             return;
         }
-        const id = fieldsOf(payload)["targetId"];
-        const target = typeof id === "number" && Number.isInteger(id) ? Player.getById(id) : null;
+        const target = accountOfTarget(fieldsOf(payload)["targetId"]);
         if (target === null) {
-            notice(player, "Esse jogador não está mais no servidor.");
+            notice(player, goneText(fieldsOf(payload)["targetId"]));
             return;
         }
-        notice(player, supporters.grant(player, target).message);
-        sendRoster(player);
-        if (target !== player) {
-            sendSocial(target);
+        // Somebody who is not in the game gets it when they come in.
+        if (target.player === null) {
+            notice(player, supporters.queue("grant", target.steamId, target.name, player.nickname).message);
+            sendRoster(player);
+            return;
         }
+        notice(player, supporters.grant(player, target.player).message);
+        sendRoster(player);
+        if (target.player !== player) {
+            sendSocial(target.player);
+        }
+    });
+
+    // The same hand-over taken back, when it was given by mistake (administrator only, from the same page).
+    Events.onClient(`${RESOURCE}:status.supporterRevoke`, (sender, payload) => {
+        const player = sender as Player;
+        if (!isAdmin(player)) {
+            return;
+        }
+        const target = accountOfTarget(fieldsOf(payload)["targetId"]);
+        if (target === null) {
+            notice(player, goneText(fieldsOf(payload)["targetId"]));
+            return;
+        }
+        if (target.player === null) {
+            notice(player, supporters.queue("revoke", target.steamId, target.name, player.nickname).message);
+            sendRoster(player);
+            return;
+        }
+        notice(player, supporters.revoke(player, target.player).message);
+        sendRoster(player);
+        if (target.player !== player) {
+            sendSocial(target.player);
+        }
+    });
+
+    // A Steam account banned from the server, or let back in (administrator only, from the same page; it works on somebody who is not in the game too).
+    Events.onClient(`${RESOURCE}:status.ban`, (sender, payload) => {
+        const player = sender as Player;
+        if (!isAdmin(player)) {
+            return;
+        }
+        const target = accountOfTarget(fieldsOf(payload)["targetId"]);
+        if (target === null) {
+            notice(player, goneText(fieldsOf(payload)["targetId"]));
+            return;
+        }
+        if (target.steamId === player.steamId) {
+            notice(player, "Você não pode banir a si mesmo.");
+            return;
+        }
+        const outcome = bans.ban(target.steamId, target.name, player.nickname);
+        if (outcome.ok) {
+            kickBanned();
+        }
+        notice(player, outcome.message);
+        sendRoster(player);
+    });
+
+    Events.onClient(`${RESOURCE}:status.unban`, (sender, payload) => {
+        const player = sender as Player;
+        if (!isAdmin(player)) {
+            return;
+        }
+        const target = accountOfTarget(fieldsOf(payload)["targetId"]);
+        if (target === null) {
+            notice(player, goneText(fieldsOf(payload)["targetId"]));
+            return;
+        }
+        notice(player, bans.unban(target.steamId, target.name, player.nickname).message);
+        sendRoster(player);
     });
 
     // A door or a chest the player is looking at: its name, and its owner's if it has one. Everybody may ask, since
@@ -934,6 +1592,19 @@ export function installStatus(): void {
         player.emit(`${RESOURCE}:props.label`, JSON.stringify({ guid, label: labelFor(guid), use, door }));
     });
 
+    // The castle's gates, from the panel: its owner, the lord of its lands and an administrator.
+    Events.onClient(`${RESOURCE}:status.propGates`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const property = typeof fields["id"] === "string" ? getProperty(fields["id"]) : null;
+        if (property === null || (fields["open"] !== 0 && fields["open"] !== 1)) {
+            notice(player, "Propriedade não encontrada.");
+            return;
+        }
+        notice(player, setCastleGates(player, property, fields["open"] === 1, isAdmin(player)).message);
+        sendSocial(player);
+    });
+
     // Locking and unlocking from the panel: the owner (and the owner of the house a chest is in) or an administrator.
     // The chest of a house is its own property here, with its own button.
     Events.onClient(`${RESOURCE}:status.propLock`, (sender, payload) => {
@@ -944,14 +1615,109 @@ export function installStatus(): void {
             notice(player, "Propriedade não encontrada.");
             return;
         }
-        if (!isAdmin(player) && !isOwner(player, property)) {
-            notice(player, "Só o dono pode trancar ou destrancar.");
+        if (!isAdmin(player) && !isOwner(player, property) && !hasAccess(player.steamId, property) && !(property.kind === "chest" && holdsRoomPart(player, property.stashGuid))) {
+            notice(player, "Só o dono, ou quem tem acesso, pode trancar ou destrancar.");
             return;
         }
         if (fields["locked"] !== 0 && fields["locked"] !== 1) {
             return;
         }
         notice(player, setLocked(property.id, fields["locked"] === 1).message);
+        sendSocial(player);
+    });
+
+    // Rooms (`rooms.ts`): the house's owner, or an administrator, makes them, gives them and takes them back; a holder may leave.
+    const roomHouse = (player: Player, houseId: unknown): PropertyInfo | null => {
+        const house = typeof houseId === "string" ? getProperty(houseId) : null;
+        if (house === null) {
+            notice(player, "Casa não encontrada.");
+            return null;
+        }
+        if (!isAdmin(player) && !isOwner(player, house)) {
+            notice(player, "Só o dono da casa cuida dos quartos.");
+            return null;
+        }
+        return house;
+    };
+    const holdersOf = (room: Room): Player[] => Player.all().filter((other) => room.holders.some((holder) => holder.steamId === other.steamId));
+    const list = (text: unknown): string[] => (typeof text === "string" && text !== "" ? text.split(",").slice(0, 200) : []);
+
+    Events.onClient(`${RESOURCE}:status.roomSave`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const house = roomHouse(player, fields["house"]);
+        if (house === null) {
+            return;
+        }
+        const doors = list(fields["doors"]).map(Number);
+        const result = saveRoom(house.id, typeof fields["room"] === "string" ? fields["room"] : "", fields["name"], doors, list(fields["chests"]));
+        notice(player, result.message);
+        sendSocial(player);
+        if (result.ok) {
+            holdersOf(result.room).forEach((holder) => sendSocial(holder));
+        }
+    });
+
+    Events.onClient(`${RESOURCE}:status.roomGive`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const room = typeof fields["room"] === "string" ? roomById(fields["room"]) : null;
+        if (room === null || roomHouse(player, room.houseId) === null) {
+            return;
+        }
+        const target = targetOf(player, fields);
+        if (target === null) {
+            return;
+        }
+        const result = giveRoom(room.id, target.steamId, nameOf(target));
+        notice(player, result.message);
+        if (result.ok) {
+            if (target !== player) {
+                Chat.sendToPlayer(target, `${nameOf(player)} deu a você o quarto ${room.name} em ${getProperty(room.houseId)?.name ?? "uma casa"}. Veja na seção Propriedades do painel (F2).`);
+            }
+            sendSocial(target);
+        }
+        sendSocial(player);
+    });
+
+    Events.onClient(`${RESOURCE}:status.roomVacate`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const room = typeof fields["room"] === "string" ? roomById(fields["room"]) : null;
+        if (room === null) {
+            notice(player, "Quarto não encontrado.");
+            return;
+        }
+        const before = holdersOf(room);
+        // A holder leaves on their own; the owner or an administrator empties it.
+        const leaving = fields["self"] === 1;
+        if (leaving ? !room.holders.some((holder) => holder.steamId === player.steamId) : roomHouse(player, room.houseId) === null) {
+            return;
+        }
+        const result = vacateRoom(room.id, leaving ? player.steamId : "");
+        notice(player, result.message);
+        before.forEach((holder) => {
+            if (holder !== player) {
+                sendSocial(holder);
+            }
+        });
+        sendSocial(player);
+    });
+
+    Events.onClient(`${RESOURCE}:status.roomDelete`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        const room = typeof fields["room"] === "string" ? roomById(fields["room"]) : null;
+        if (room === null || roomHouse(player, room.houseId) === null) {
+            return;
+        }
+        const before = holdersOf(room);
+        notice(player, removeRoom(room.id).message);
+        before.forEach((holder) => {
+            if (holder !== player) {
+                sendSocial(holder);
+            }
+        });
         sendSocial(player);
     });
 
@@ -1069,6 +1835,15 @@ export function installStatus(): void {
         if (asker !== undefined) {
             Chat.sendToPlayer(asker, result.accepted ? `${nameOf(player)} aceitou ser ${result.label} na sua árvore de família.` : `${nameOf(player)} recusou ser ${result.label} na sua árvore; o parente fica só com o nome.`);
         }
+        if (result.accepted) {
+            for (const listener of familyLinked) {
+                try {
+                    listener(result.owner, player.steamId);
+                } catch (error: unknown) {
+                    console.log(`status: um ouvinte do vínculo de família falhou: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        }
     });
 
     // A player's standing (administrator only), and with it, when asked, their spouse's and their legitimate line's.
@@ -1081,21 +1856,21 @@ export function installStatus(): void {
         const id = fields["targetId"];
         const status = fields["status"];
         const target = typeof id === "number" && Number.isInteger(id) ? Player.getById(id) : null;
-        if (status !== "plebeius" && status !== "nobilis") {
+        if (typeof status !== "string" || !(SOCIAL_STATUS_IDS as readonly string[]).includes(status)) {
             return;
         }
         if (target === null || target.steamId === "") {
             notice(player, "Esse jogador não está mais no servidor.");
             return;
         }
-        const label = SOCIAL_STATUS[status];
+        const label = SOCIAL_STATUS[status as SocialStatus];
         const changed: string[] = [];
         const steamIds = [target.steamId, ...(fields["family"] === 1 ? familyHeirs(target.steamId).map((heir) => heir.steamId) : [])];
         for (const steamId of steamIds) {
             if (getSocialStatus(steamId) === status) {
                 continue;
             }
-            setSocialStatus(steamId, status);
+            setSocialStatus(steamId, status as SocialStatus);
             changed.push(nameOfSteamId(steamId));
             const online = Player.all().find((other) => other.steamId === steamId);
             if (online !== undefined) {

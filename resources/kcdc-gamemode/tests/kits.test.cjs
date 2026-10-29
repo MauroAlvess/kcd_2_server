@@ -44,6 +44,8 @@ function load({ kept = true, looks = { 1: { appearance: { gender: "male" } } }, 
                 };
             }
             if (id === "./characters.js") return { getCharacter: (steamId) => looks[steamId] ?? null };
+            // Our own items (the Agricultores' seeds) go by the GUID the game gave them once registered.
+            if (id === "./craft-items.js") return { craftItemGuid: (item) => (item.startsWith("kcdc-craft:") ? `guid:${item}` : null) };
             assert.fail(`unexpected require ${id}`);
         },
         console: { log: (line) => logs.push(line) },
@@ -423,9 +425,51 @@ test("a guild without a kit, or one that does not exist, hands out nothing", () 
     assert.equal(sut.added.length, 0);
 });
 
+test("the Coletores' kit: the lumberjack's axe, the pick used and worn, and working clothes cut for the body (2026-10-21)", () => {
+    const sut = load({ looks: { 1: { appearance: { gender: "male" } }, 2: { appearance: { gender: "female" } } } });
+    const man = sut.makePlayer("1", "male");
+    const handed = sut.api.grantGuildKit(man, "collectores");
+    assert.deepEqual(sut.added.map((entry) => entry.item), ["axeWork01", "axeBattle03", "TunicShort03_m01_D", "HoseSeparate05_m01_D", "Hood08_m01_D", "BootsAnkle01_m03_C", "HandWrap01_m01_E"]);
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.added[1].metadata)), { quality: 1, condition: 0.5 }, "the pick is worn: the smith makes new ones");
+    assert.equal(sut.added[0].metadata, undefined);
+    assert.deepEqual(Array.from(handed).slice(0, 2), ["machado de lenhador", "picareta (usada)"]);
+
+    const woman = sut.makePlayer("2", "female");
+    sut.added.length = 0;
+    sut.api.grantGuildKit(woman, "collectores");
+    assert.deepEqual(sut.added.map((entry) => entry.item), ["axeWork01", "axeBattle03", "F_SimpleDress06_m05_D", "F_Veil06_m01_D", "F_Shoes02_m06_B", "HandWrap01_m01_E"]);
+    assert.equal(sut.ledger.has("2/guild:collectores:2"), false, "a piece for the other body is not marked as given");
+    sut.added.length = 0;
+    assert.deepEqual(Array.from(sut.api.grantGuildKit(woman, "collectores")), [], "and nothing twice");
+});
+
+test("the Domadores' kit: treats to win a horse over with, and riding clothes cut for the body (2026-10-25)", () => {
+    const sut = load({ looks: { 1: { appearance: { gender: "male" } }, 2: { appearance: { gender: "female" } } } });
+    const man = sut.makePlayer("1", "male");
+    const handed = sut.api.grantGuildKit(man, "domitores");
+    assert.deepEqual(sut.added.map((entry) => entry.item), ["carrot", "apple", "TunicShort01_m01_D", "HoseLoose01_m01_C", "BootsKnee05_m01_C", "Cap03_m01_E", "HandWrap01_m03_E"]);
+    assert.deepEqual(sut.added.slice(0, 2).map((entry) => entry.amount), [6, 4]);
+    assert.deepEqual(Array.from(handed).slice(0, 2), ["6 cenouras", "4 maçãs"]);
+
+    const woman = sut.makePlayer("2", "female");
+    sut.added.length = 0;
+    sut.api.grantGuildKit(woman, "domitores");
+    assert.deepEqual(sut.added.map((entry) => entry.item), ["carrot", "apple", "F_SimpleDress03_m01_C", "F_Hood01_m01_C", "F_Shoes02_m01_B", "HandWrap01_m03_E"]);
+    assert.equal(sut.ledger.has("2/guild:domitores:2"), false, "a piece for the other body is not marked as given");
+    sut.added.length = 0;
+    assert.deepEqual(Array.from(sut.api.grantGuildKit(woman, "domitores")), [], "and nothing twice");
+});
+
+test("the Domadores' kit says how a horse is won (E at a wild horse, food from the bag), and says nothing of the farmers' gardens (2026-10-25)", () => {
+    const sut = load();
+    assert.match(sut.api.guildKitHint("domitores"), /cavalo selvagem.*aperte E.*cenoura, maçã, pera, beterraba, nabo ou pão/);
+    assert.doesNotMatch(sut.api.guildKitHint("domitores"), /canteiro|horta|plantar/i);
+    assert.doesNotMatch(sut.api.guildKitHint("agricolae"), /cavalo/i, "the Agricultores' hint is the gardens' alone now");
+});
+
 test("every guild in the catalog has a kit, and the old tailors' id has none", () => {
     const sut = load();
-    assert.deepEqual(Object.keys(sut.api.GUILD_KITS).sort(), ["alchemistae", "artifices", "fabri-ferrarii", "tabernarii", "venatores"]);
+    assert.deepEqual(Object.keys(sut.api.GUILD_KITS).sort(), ["agricolae", "alchemistae", "artifices", "collectores", "domitores", "fabri-ferrarii", "tabernarii", "venatores"]);
 });
 
 test("the artisans' guild hands out plain clothes to sell, worn by nobody", () => {
@@ -512,4 +556,23 @@ test("both houses have a mantle and a collar for each body", () => {
             assert.deepEqual(Array.from(cuts[body], (entry) => entry.piece), ["manto", "gola"], `${house} ${body}`);
         }
     }
+});
+
+test("the Coletores' kit says how the work is done: E at a tree or a rock, not the left click (2026-10-22); the other guilds' kits say nothing more", () => {
+    const sut = load();
+    assert.match(sut.api.guildKitHint("collectores"), /olhe para uma árvore ou uma pedra e aperte E/);
+    assert.doesNotMatch(sut.api.guildKitHint("collectores"), /esquerdo|clique/i);
+    for (const guild of ["fabri-ferrarii", "venatores", "tabernarii", "alchemistae", "artifices"]) {
+        assert.equal(sut.api.guildKitHint(guild), "", guild);
+    }
+    assert.equal(sut.api.guildKitHint("unknown"), "");
+});
+
+test("a piece added to a kit goes at the end of its list: the ledger is by position, so one put in the middle would hand every piece after it a second time to whoever had the old list (2026-10-27)", () => {
+    const sut = load();
+    const farmers = Array.from(sut.api.GUILD_KITS.agricolae, (entry) => entry.item);
+    assert.deepEqual(farmers.slice(0, 6), ["player_shovel", "kcdc-craft:semente-cebola", "kcdc-craft:semente-repolho", "kcdc-craft:semente-nabo", "kcdc-craft:semente-cenoura", "kcdc-craft:semente-urtiga"]);
+    assert.equal(farmers.length, 16);
+    assert.equal(farmers[13], "HandWrap01_m02_E", "the last piece of the list as it was: its position, and so its ledger entry, did not move");
+    assert.deepEqual(farmers.slice(14), ["kcdc-craft:semente-linho", "kcdc-craft:semente-trigo"], "flax and wheat for the Artifices' thread and the Tabernarii's flour, handed to the farmers of before at their next entry");
 });

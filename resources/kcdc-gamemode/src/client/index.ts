@@ -10,24 +10,44 @@
 import { installBook } from "./book.js";
 import { installBuild } from "./build.js";
 import { installCamera } from "./camera.js";
+import { installBigEvents } from "./big-events.js";
+import { installChatCard } from "./chat-card.js";
+import { installCraftPage } from "./craft-page.js";
 import { installCarts } from "./carts.js";
 import { installCreator } from "./creator.js";
 import { installCreatorPage } from "./creator-page.js";
 import { installCookHint } from "./cook-hint.js";
+import { installFurniture } from "./furniture.js";
+import { installHorseMenu } from "./horse-menu.js";
+import { installDogMenu } from "./dog-menu.js";
 import { installDice } from "./dice.js";
+import { installDiceQuiet } from "./dice-quiet.js";
 import { installFollow } from "./follow.js";
 import { installCombat } from "./combat.js";
 import { installHud } from "./hud.js";
 import { installPropertyLabels } from "./property-labels.js";
 import { installNotify } from "./notify.js";
+import { installPerfWatch } from "./perf-watch.js";
 import { installPick } from "./pick.js";
 import { installPosture } from "./posture.js";
+import { installThirst } from "./thirst.js";
 import { installScreen } from "./screen.js";
 import { installItemUses } from "./item-uses.js";
 import { installSkillBooks } from "./skill-books.js";
 import { installStatus } from "./status.js";
 import { installVoice } from "./voice.js";
+import { installWelcome } from "./welcome.js";
+import { installMural } from "./mural.js";
+import { installArrest } from "./arrest.js";
 import { installWhistle } from "./whistle.js";
+import { installWorkQuiet } from "./work-quiet.js";
+import { installMountQuiet } from "./mount-quiet.js";
+import { installEmotes } from "./emotes.js";
+import { installGather } from "./gather.js";
+import { installFarm } from "./farm.js";
+import { installCowMilk } from "./cow-milk.js";
+import { installTradeRights } from "./trade-rights.js";
+import { installUiScale } from "./ui-scale.js";
 import * as panel from "./panel.js";
 import { readSelf } from "./snapshot.js";
 import { describeAll, flip } from "./switches.js";
@@ -47,6 +67,9 @@ const LOG_LINES = 40;
 const lines: string[] = [];
 let ticks = 0;
 let timer = -1;
+
+// Where the scripts spend their time, a line a minute in the client log (src/client/perf-watch.ts); in place before anything below registers a timer.
+installPerfWatch();
 
 function remember(text: string): void {
     lines.push(text);
@@ -189,6 +212,15 @@ installBuild();
 
 // The `/camera` switch.
 installCamera();
+
+// The chat, drawn by a page of ours at the bottom left (T writes).
+installChatCard();
+
+// Events too big for one message come in pieces (the forge's page is 79 KB; one message holds about 29).
+installBigEvents();
+
+// The guilds' trades: the recipes page (the server puts it up).
+installCraftPage();
 installCarts();
 
 // The `/book` demo books.
@@ -203,6 +235,7 @@ installCreatorPage();
 // The `/pick` trace, for the prop-hunt test commands.
 installPick();
 installPosture();
+installThirst();
 
 // The `/screenfx` presets: intoxication and injury.
 installScreen();
@@ -210,16 +243,35 @@ installScreen();
 // The `/hud` commands and the server's optional playerSpawned Stats test.
 installHud();
 installDice();
+// Other players' dice matches: their sounds stopped here, and their players nobody's to talk to (dice-quiet.ts).
+installDiceQuiet();
+// The felling, the mining and the digging of the other players heard only by those near (work-quiet.ts).
+installWorkQuiet();
+// The other players' get-on, get-off and horses heard only from near (mount-quiet.ts, 2026-10-26: "sempre que alguém sobe no cavalo escutam de longe").
+installMountQuiet();
 // "Cozinhar" beside the game's own prompt at a fire, a rack or a smoker: the server answers with its cooking menu.
 installCookHint();
+installFurniture();
+// E at one of the player's horses asks the server for its menu before the game's own climb gets anywhere.
+installHorseMenu();
+// The same at the player's dog: Fazer carinho, Mandar ficar or Mandar seguir, Sair.
+installDogMenu();
 installCombat();
 installFollow();
 
 // The status panel (F2, and F3 for administrators): character info, social status and guild selection.
 installStatus();
 
-// Push-to-talk on V.
+// The open microphone and the voice indicator at the bottom of the screen (voice.ts).
 installVoice();
+
+// The welcome form: whoever has made a character agrees to the rules and the lore before going on (welcome.ts).
+installWelcome();
+
+// The notice boards of the villages, towns and castles: the page of their letters (mural.ts; the prompt is cook-hint.ts's).
+installMural();
+// Handcuffs and the pillory: the actions and menus held back, and the officers' hint at the pillory (arrest.ts).
+installArrest();
 
 // The name of the house, chest or player under the crosshair, where the game's own prompt is, and the talk key on players.
 installPropertyLabels();
@@ -232,6 +284,17 @@ installSkillBooks();
 
 // X, the game's horse whistle, calls the player's own horse.
 installWhistle();
+// G: our gestures, chosen with a click.
+installEmotes();
+// What the player's guild lets their own game do: butchering is the hunters' (the game's F is switched off for anybody else), and the
+// Coletores' blows with the axe at a tree and the pick at a rock, told to the server on the left click.
+installTradeRights();
+installUiScale();
+installGather();
+// The Agricultores' gardens: E at the soil of a bed of a village's garden sows it, or harvests it (farm.ts).
+installFarm();
+// The Agricultores' milking: E at a cow within reach (cow-milk.ts, 2026-10-27).
+installCowMilk();
 
 Events.on("resourceStop", (resourceName) => {
     if (resourceName === RESOURCE) {

@@ -1,21 +1,23 @@
 import { nameOf } from "../acquaintances.js";
 import { isAdmin } from "../auth.js";
 import type { Command, CommandContext } from "../command.js";
-import { allCarts, bringCart, cartName, cartsOf, giveCart, registerCart, releaseCart, renameCart, whereIs } from "../carts.js";
+import { allCarts, bringCart, cartGiftNote, cartName, cartsOf, giveCart, isWorldCart, placeCart, registerCart, releaseCart, removeCart, renameCart, whereIs } from "../carts.js";
 import { compassDirection } from "../horses.js";
 import { findPlayer } from "../players.js";
 
 export const carrocaCommand: Command = {
     name: "carroca",
-    summary: "As suas carroças: onde estão, trazer para perto, dar nome; o admin dá, registra e libera.",
+    summary: "As suas carroças: onde estão, trazer para perto, dar nome; o admin dá, coloca no mundo, registra, libera e remove.",
     usage: [
         "/carroca  -- as suas carroças e onde estão",
         "/carroca trazer [n]  -- a carroça vazia vem para a sua frente (de dois em dois minutos)",
         "/carroca nome [n] <nome>  -- dá nome à carroça (sem nome, volta ao comum)",
-        "/carroca dar <jogador> [modelo]  -- (admin) uma carroça nova para o jogador",
-        "/carroca registrar <jogador>  -- (admin) a carroça sem dono ao lado do jogador passa a ser dele",
-        "/carroca listar  -- (admin) todas as carroças com dono",
-        "/carroca liberar <n>  -- (admin) a carroça n da lista deixa de ter dono",
+        "/carroca dar <jogador ou nº> [modelo]  -- (admin) uma carroça nova para o jogador (o nome, ou o número da página Jogadores, como 4438)",
+        "/carroca colocar [modelo]  -- (admin) deixa uma carroça aqui, de todos: fica para sempre e volta ao lugar depois de cada reinício",
+        "/carroca registrar <jogador ou nº>  -- (admin) a carroça sem dono ao lado do jogador passa a ser dele (o nome, ou o número da página Jogadores, como 4438)",
+        "/carroca listar  -- (admin) todas as carroças guardadas, as de jogadores e as do mundo",
+        "/carroca liberar <n>  -- (admin) a carroça n da lista deixa de ter dono e fica no mundo, para todos",
+        "/carroca remover <n>  -- (admin) a carroça n da lista sai do mundo e não volta",
     ],
 
     run({ player, args, reply, usage }: CommandContext): void {
@@ -52,17 +54,22 @@ export const carrocaCommand: Command = {
         }
 
         if (!isAdmin(player)) {
-            reply.line("Só administradores dão, registram e liberam carroças.");
+            reply.line("Só administradores dão, colocam, registram, liberam e removem carroças.");
             return;
         }
 
-        if (sub === "listar" || sub === "liberar") {
+        if (sub === "colocar") {
+            reply.line(placeCart(player, rest[0]).message);
+            return;
+        }
+
+        if (sub === "listar" || sub === "liberar" || sub === "remover") {
             const all = allCarts();
             if (sub === "listar") {
                 reply.lines(
                     all.length === 0
-                        ? ["Nenhuma carroça com dono."]
-                        : all.map((owned, index) => `  ${index + 1}. ${owned.record.name || cartName(owned.record.blueprint)} de ${owned.record.ownerName || owned.record.owner}, ${owned.cart === null ? "fora do mundo" : "no mundo"}, em ${owned.record.x.toFixed(0)} ${owned.record.y.toFixed(0)} ${owned.record.z.toFixed(0)}`),
+                        ? ["Nenhuma carroça guardada."]
+                        : all.map((owned, index) => `  ${index + 1}. ${owned.record.name || cartName(owned.record.blueprint)} ${isWorldCart(owned.record) ? "(do mundo, de todos)" : `de ${owned.record.ownerName || owned.record.owner}`}, ${owned.cart === null ? "fora do mundo" : "no mundo"}, em ${owned.record.x.toFixed(0)} ${owned.record.y.toFixed(0)} ${owned.record.z.toFixed(0)}`),
                 );
                 return;
             }
@@ -71,7 +78,12 @@ export const carrocaCommand: Command = {
                 usage();
                 return;
             }
-            reply.line(releaseCart(owned.record.key) ? `${cartName(owned.record.blueprint)} de ${owned.record.ownerName} agora é de ninguém (continua no mundo).` : "Essa carroça já não estava guardada.");
+            const label = `${owned.record.name || cartName(owned.record.blueprint)}${isWorldCart(owned.record) ? "" : ` de ${owned.record.ownerName}`}`;
+            if (sub === "remover") {
+                reply.line(removeCart(owned.record.key) ? `${label} saiu do mundo e não volta.` : "Essa carroça já não estava guardada.");
+                return;
+            }
+            reply.line(releaseCart(owned.record.key) ? `${label} agora é do mundo: fica onde está, para todos, e volta ali depois de cada reinício.` : "Essa carroça já é do mundo.");
             return;
         }
 
@@ -88,7 +100,7 @@ export const carrocaCommand: Command = {
             const outcome = sub === "dar" ? giveCart(found.player, rest[1]) : registerCart(found.player);
             reply.line(outcome.message);
             if (outcome.ok && found.player.id !== player.id) {
-                Chat.sendToPlayer(found.player, `${nameOf(player)} deu a você uma carroça. /carroca mostra onde ela está; a seção Animais do painel (F2) a mostra também, e E perto dela escolhe o assento.`);
+                Chat.sendToPlayer(found.player, cartGiftNote(nameOf(player)));
             }
             return;
         }

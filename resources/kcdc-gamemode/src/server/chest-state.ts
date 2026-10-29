@@ -104,6 +104,29 @@ function restore(guid: string): boolean {
     return true;
 }
 
+/**
+ * Empties a property chest, in the world and in its file: a deleted character's things go with it (2026-10-25). True when the world's chest
+ * was emptied; the file is written empty either way, so a chest the level has not built yet is not filled again at the next start.
+ */
+export function emptyChest(guid: string): boolean {
+    if (!GUID.test(guid) || blocked.has(guid)) {
+        return false;
+    }
+    let emptied = false;
+    try {
+        emptied = Stash.find(guid)?.setInventory({ items: [] }).ok === true;
+    } catch {
+        emptied = false;
+    }
+    try {
+        ensureDir(DIR);
+        write(pathFor(guid), { v: 1, guid, savedAt: Date.now(), items: [] } satisfies SavedChest);
+    } catch (error: unknown) {
+        console.log(`chests: não consegui esvaziar o arquivo de ${guid}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return emptied;
+}
+
 export function installChestState(): void {
     ensureDir(DIR);
 

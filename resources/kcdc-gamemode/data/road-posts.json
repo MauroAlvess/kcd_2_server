@@ -1,0 +1,388 @@
+{
+ "posts": [
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place2]",
+   "x": 315.2,
+   "y": 921.7,
+   "z": 99.9
+  },
+  {
+   "id": "eventPlace[kvys_road_eventPlace]",
+   "x": 419.0,
+   "y": 2889.3,
+   "z": 188.5
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place1]",
+   "x": 508.7,
+   "y": 512.1,
+   "z": 104.9
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place1]",
+   "x": 646.9,
+   "y": 3388.1,
+   "z": 146.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place3]",
+   "x": 715.4,
+   "y": 1296.1,
+   "z": 121.7
+  },
+  {
+   "id": "eventPlace[kroz_road3_eventPlace]",
+   "x": 766.6,
+   "y": 2698.2,
+   "z": 205.8
+  },
+  {
+   "id": "eventPlace[krab_forestRoad_eventPlace]",
+   "x": 773.0,
+   "y": 847.0,
+   "z": 109.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place2]",
+   "x": 887.2,
+   "y": 3389.2,
+   "z": 141.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place2]",
+   "x": 887.4,
+   "y": 3150.7,
+   "z": 144.6
+  },
+  {
+   "id": "eventPlace[kmez_roadJunction_eventPlace]",
+   "x": 936.8,
+   "y": 1870.1,
+   "z": 184.5
+  },
+  {
+   "id": "eventPlace[kroz_road_eventPlace]",
+   "x": 978.1,
+   "y": 3096.7,
+   "z": 149.0
+  },
+  {
+   "id": "eventPlace[kroz_road2_eventPlace]",
+   "x": 1012.5,
+   "y": 2826.5,
+   "z": 185.8
+  },
+  {
+   "id": "eventPlace[krat_road_eventPlace]",
+   "x": 1113.8,
+   "y": 3474.0,
+   "z": 125.0
+  },
+  {
+   "id": "eventPlace[kroz_crossroads_eventPlace]",
+   "x": 1188.2,
+   "y": 2968.3,
+   "z": 167.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place4]",
+   "x": 1204.3,
+   "y": 1224.3,
+   "z": 132.6
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place3]",
+   "x": 1238.7,
+   "y": 3461.0,
+   "z": 122.5
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place3]",
+   "x": 1325.9,
+   "y": 2598.9,
+   "z": 178.3
+  },
+  {
+   "id": "eventPlace[kmis_road_eventPlace]",
+   "x": 1327.3,
+   "y": 1857.6,
+   "z": 164.9
+  },
+  {
+   "id": "sedmStatecnych2_eventPlace_road2_bandit_5",
+   "x": 1327.7,
+   "y": 2544.3,
+   "z": 174.0
+  },
+  {
+   "id": "eventPlace[kroz_road4_eventPlace]",
+   "x": 1438.4,
+   "y": 3003.9,
+   "z": 163.2
+  },
+  {
+   "id": "eventPlace[kzik_road_eventPlace]",
+   "x": 1468.4,
+   "y": 2356.5,
+   "z": 162.6
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place4]",
+   "x": 1490.0,
+   "y": 2123.6,
+   "z": 161.5
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place5]",
+   "x": 1588.3,
+   "y": 1003.6,
+   "z": 117.5
+  },
+  {
+   "id": "eventPlace[kmis_forestRoad_eventPlace]",
+   "x": 1631.1,
+   "y": 1568.2,
+   "z": 117.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place4]",
+   "x": 1633.3,
+   "y": 3640.8,
+   "z": 92.3
+  },
+  {
+   "id": "eventPlace[kbyl_fieldRoad_eventPlace]",
+   "x": 1650.7,
+   "y": 841.9,
+   "z": 116.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place5]",
+   "x": 1748.6,
+   "y": 3660.1,
+   "z": 91.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place5]",
+   "x": 1779.2,
+   "y": 1782.2,
+   "z": 145.5
+  },
+  {
+   "id": "eventPlace[kboh_roadJunction_eventPlace]",
+   "x": 1879.7,
+   "y": 3540.5,
+   "z": 105.9
+  },
+  {
+   "id": "eventPlace[kmis_innRoad_eventPlace]",
+   "x": 1882.1,
+   "y": 1718.0,
+   "z": 132.4
+  },
+  {
+   "id": "eventPlace[kvlc_roadJunction_eventPlace]",
+   "x": 1937.3,
+   "y": 2419.8,
+   "z": 175.4
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place6]",
+   "x": 1957.1,
+   "y": 1345.0,
+   "z": 107.6
+  },
+  {
+   "id": "eventPlace[kvlc_forestRoad_eventPlace]",
+   "x": 1986.7,
+   "y": 2704.8,
+   "z": 178.0
+  },
+  {
+   "id": "eventPlace[knab_forestRoad_eventPlace]",
+   "x": 1987.3,
+   "y": 870.4,
+   "z": 89.4
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path3_place6]",
+   "x": 2001.9,
+   "y": 3296.0,
+   "z": 115.4
+  },
+  {
+   "id": "eventPlace[kopa_crossroads]",
+   "x": 2077.6,
+   "y": 3053.3,
+   "z": 139.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place7]",
+   "x": 2230.0,
+   "y": 1682.9,
+   "z": 123.6
+  },
+  {
+   "id": "eventPlace[kvlc_crossroads_eventPlace]",
+   "x": 2231.9,
+   "y": 2679.8,
+   "z": 157.9
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place6]",
+   "x": 2282.5,
+   "y": 1394.7,
+   "z": 110.4
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place1]",
+   "x": 2292.5,
+   "y": 283.7,
+   "z": 47.5
+  },
+  {
+   "id": "eventPlace[kopa_forestRoad_eventPlace]",
+   "x": 2324.0,
+   "y": 2966.7,
+   "z": 148.3
+  },
+  {
+   "id": "eventPlace[knab_crossroads_eventPlace]",
+   "x": 2365.8,
+   "y": 466.4,
+   "z": 51.9
+  },
+  {
+   "id": "eventPlace[kvlc_crossroads2_eventPlace]",
+   "x": 2375.6,
+   "y": 2302.3,
+   "z": 157.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place2]",
+   "x": 2416.5,
+   "y": 510.0,
+   "z": 59.2
+  },
+  {
+   "id": "eventPlace[knab_roadJunction_eventPlace]",
+   "x": 2544.6,
+   "y": 629.8,
+   "z": 70.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place8]",
+   "x": 2553.7,
+   "y": 1900.3,
+   "z": 139.5
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place10]",
+   "x": 2576.2,
+   "y": 2779.0,
+   "z": 133.3
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path4_place9]",
+   "x": 2612.2,
+   "y": 2348.2,
+   "z": 148.6
+  },
+  {
+   "id": "eventPlace[khor_road_eventPlace]",
+   "x": 2620.4,
+   "y": 2435.2,
+   "z": 145.7
+  },
+  {
+   "id": "eventPlace[kkuk_road_eventPlace]",
+   "x": 2630.7,
+   "y": 1864.6,
+   "z": 142.0
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place3]",
+   "x": 2715.2,
+   "y": 894.3,
+   "z": 90.1
+  },
+  {
+   "id": "eventPlace[kcer_roadJunctionWoods_eventPlace]",
+   "x": 2807.2,
+   "y": 2942.8,
+   "z": 120.8
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place7]",
+   "x": 2814.3,
+   "y": 1016.6,
+   "z": 86.8
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place4]",
+   "x": 2951.4,
+   "y": 1120.9,
+   "z": 89.2
+  },
+  {
+   "id": "eventPlace[kkuk_roadJunction_eventPlace]",
+   "x": 3058.5,
+   "y": 1812.6,
+   "z": 128.8
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place7]",
+   "x": 3076.5,
+   "y": 2606.9,
+   "z": 109.9
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place8]",
+   "x": 3133.7,
+   "y": 1088.7,
+   "z": 70.2
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place6]",
+   "x": 3200.7,
+   "y": 1897.5,
+   "z": 106.7
+  },
+  {
+   "id": "eventPlace[ksta_road_eventPlace]",
+   "x": 3205.6,
+   "y": 1176.0,
+   "z": 66.9
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path2_place5]",
+   "x": 3352.6,
+   "y": 1288.0,
+   "z": 65.4
+  },
+  {
+   "id": "eventPlace[ksus_road_eventPlace]",
+   "x": 3354.3,
+   "y": 1392.5,
+   "z": 74.0
+  },
+  {
+   "id": "eventPlace[kkut_roadJunction_eventPlace]",
+   "x": 3355.5,
+   "y": 917.8,
+   "z": 40.0
+  },
+  {
+   "id": "eventPlace[karavanyVeSvete_path1_place9]",
+   "x": 3437.1,
+   "y": 819.7,
+   "z": 40.7
+  },
+  {
+   "id": "eventPlace[klor_road]",
+   "x": 3679.3,
+   "y": 1135.0,
+   "z": 61.6
+  }
+ ]
+}

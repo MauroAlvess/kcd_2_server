@@ -50,7 +50,18 @@ function load({ look = { x: 0, y: 1, z: 0 }, walls = {} } = {}) {
     const camera = { PHOTO_HIDDEN: ["Compass", "Stats", "Hints"] };
     const context = {
         exports: {},
-        require: (id) => (id === "./camera.js" ? camera : assert.fail(`unexpected require ${id}`)),
+        require: (id) => {
+            if (id === "./camera.js") return camera;
+            if (id === "./ui-scale.js") return { scaleView() {}, onUiScale() {}, uiFactor: () => 1, installUiScale() {} };
+            if (id === "./big-events.js") return { onLarge: (name, fn) => serverEvents.set(`kcdc-gamemode:${name}`, fn) };
+            if (id === "./chat-state.js") {
+                // The real module over the test's own fake of the game's chat, so the assertions on `Chat` still read what happened.
+                const sandbox = { exports: {}, Chat: context.Chat };
+                vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/chat-state.js"), "utf8"), sandbox);
+                return sandbox.exports;
+            }
+            return assert.fail(`unexpected require ${id}`);
+        },
         console: { log: (line) => state.logs.push(line), error: (line) => state.logs.push(line) },
         Date: { now: () => state.now },
         Vector3,

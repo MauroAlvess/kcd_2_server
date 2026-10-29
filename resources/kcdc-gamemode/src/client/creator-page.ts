@@ -19,7 +19,10 @@
  * the next spawn opens it again; and on a horse the creator waits until the player has got down.
  */
 
+import { onLarge } from "./big-events.js";
+import { scaleView } from "./ui-scale.js";
 import { PHOTO_HIDDEN } from "./camera.js";
+import { chatShown, showChat } from "./chat-state.js";
 
 const RESOURCE = "kcdc-gamemode";
 const PAGE = `fw://resources/${RESOURCE}/ui/creator.html`;
@@ -38,6 +41,7 @@ const CHECK = `${RESOURCE}:creator.check`;
 const ACCEPT = `${RESOURCE}:creator.accept`;
 const CANCEL = `${RESOURCE}:creator.cancel`;
 const FAILED = `${RESOURCE}:creator.failed`;
+const DRESS = `${RESOURCE}:creator.dress`;
 
 /** How long the body must have been ready before the scene goes up: the game dresses its default Henry at the end of loading. */
 export const SETTLE_MS = 6_000;
@@ -127,6 +131,8 @@ export function installCreatorPage(): void {
     const started = Date.now();
     let active = false;
     let begin: unknown = null;
+    /** The clothes a newcomer may choose (`creator.clothes`), kept for a page that comes up after them. */
+    let clothes: unknown = null;
     let view = -1;
     let pageReady = false;
     let waiting: ReturnType<typeof setInterval> | null = null;
@@ -185,9 +191,9 @@ export function installCreatorPage(): void {
                 hiddenByUs.push(element);
             }
         }
-        chatWasVisible = Chat.isUIVisible();
+        chatWasVisible = chatShown();
         if (chatWasVisible) {
-            Chat.setUIVisible(false);
+            showChat(false);
         }
     }
 
@@ -197,7 +203,7 @@ export function installCreatorPage(): void {
         }
         hiddenByUs = [];
         if (chatWasVisible) {
-            Chat.setUIVisible(true);
+            showChat(true);
             chatWasVisible = false;
         }
     }
@@ -263,6 +269,7 @@ export function installCreatorPage(): void {
     function finish(): void {
         active = false;
         begin = null;
+        clothes = null;
         if (waiting !== null) {
             clearInterval(waiting);
             waiting = null;
@@ -313,13 +320,32 @@ export function installCreatorPage(): void {
                 return;
             }
             pageReady = true;
+            scaleView(view);
             if (pageTimer !== null) {
                 clearTimeout(pageTimer);
                 pageTimer = null;
             }
             Web.emit(view, "creator:begin", { ...objectOf(begin), aspect: aspect() });
+            if (clothes !== null) {
+                Web.emit(view, "creator:clothes", clothes);
+            }
             Web.showView(view);
             Web.focusView(view, true);
+        });
+
+        Web.on(view, "creator:dress", (payload) => {
+            const fields = objectOf(payload);
+            const gender = fields["gender"];
+            const picks: Record<string, number> = {};
+            for (const part of ["top", "legs", "feet"]) {
+                const value = fields[part];
+                if (typeof value === "number" && Number.isInteger(value) && value >= -1 && value < 64) {
+                    picks[part] = value;
+                }
+            }
+            if (id === view && (gender === "male" || gender === "female")) {
+                Events.emitServer(DRESS, JSON.stringify({ gender, ...picks }));
+            }
         });
 
         Web.on(view, "creator:preview", (payload) => {
@@ -365,10 +391,15 @@ export function installCreatorPage(): void {
         });
 
         Web.on(view, "creator:zoom", (payload) => {
-            const dy = objectOf(payload)["dy"];
+            const body = objectOf(payload);
+            const dy = body["dy"];
             if (id === view && sceneOn && typeof dy === "number" && Number.isFinite(dy)) {
                 distance = clamp(distance + clamp(dy, -400, 400) * METRES_PER_WHEEL, DISTANCE.min, DISTANCE.max);
                 applyShot(120);
+            } else if (id === view && sceneOn && (body["face"] === 1 || body["face"] === 0)) {
+                // W goes up to the face, S comes back to where the camera began (user, 2026-10-18).
+                distance = body["face"] === 1 ? DISTANCE.min : framing.distance;
+                applyShot(350);
             }
         });
     }
@@ -459,6 +490,18 @@ export function installCreatorPage(): void {
                 finish();
             }
         }, 1_000);
+    });
+
+    // A newcomer's clothes to choose from, with their icons: they come after `creator.begin`, maybe before the page is up.
+    onLarge("creator.clothes", (payload) => {
+        try {
+            clothes = typeof payload === "string" ? (JSON.parse(payload) as unknown) : payload;
+        } catch {
+            clothes = null;
+        }
+        if (view >= 0 && pageReady && clothes !== null) {
+            Web.emit(view, "creator:clothes", clothes);
+        }
     });
 
     const toPage = (channel: string) => (payload: unknown) => {

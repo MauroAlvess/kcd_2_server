@@ -9,7 +9,7 @@ const HANS = "76561198000000002";
 const KATERINA = "76561198000000003";
 
 /** The real titles module over a fake disk, a fake character book and the real catalog. */
-function load({ saved = null, characters = {} } = {}) {
+function load({ saved = null, characters = {}, thieves = {} } = {}) {
     const files = new Map();
     if (saved !== null) files.set("playerdata/titles.json", JSON.stringify(saved));
     const logs = [];
@@ -20,6 +20,7 @@ function load({ saved = null, characters = {} } = {}) {
         require: (id) => {
             if (id === "./nobility.js") return nobility.exports;
             if (id === "./characters.js") return { getCharacter: (steamId) => characters[steamId] ?? null };
+            if (id === "./thieves.js") return { onThiefChange() {}, thiefMark: (steamId) => thieves[steamId] ?? null };
             if (id === "./store.js") {
                 return {
                     ensureDir() {},
@@ -165,7 +166,7 @@ test("a file that is damaged is left alone, and an empty or new one starts with 
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/nobility.js"), "utf8"), nobility);
     const context = {
         exports: {},
-        require: (id) => (id === "./nobility.js" ? nobility.exports : id === "./characters.js" ? { getCharacter: () => null } : { ensureDir() {}, read: () => ({ status: "corrupt", reason: "x" }), write: (file, body) => files.set(file, body) }),
+        require: (id) => (id === "./nobility.js" ? nobility.exports : id === "./characters.js" ? { getCharacter: () => null } : id === "./thieves.js" ? { onThiefChange() {}, thiefMark: () => null } : { ensureDir() {}, read: () => ({ status: "corrupt", reason: "x" }), write: (file, body) => files.set(file, body) }),
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/titles.js"), "utf8"), context);
@@ -205,4 +206,17 @@ test("over the head: only the title the player chose, in gold, in the form of th
 
     const gone = { steamId: HANS, appearance: { gender: "male" }, setNametagVisible() { throw new Error("gone"); }, setNametagText() { throw new Error("gone"); }, setNametagColor() {}, setNametagHealthVisible() {} };
     assert.doesNotThrow(() => api.applyNametag(gone), "a player gone between the event and here");
+});
+
+test("a marked thief wears Ladrão over the head, in red, over any title, and Ladra for a woman", () => {
+    const mark = { name: "Hans", until: 2e12, reason: "roubou", at: 1 };
+    const { api } = load({ characters: { [KATERINA]: { appearance: { gender: "female" } } }, thieves: { [HANS]: mark, [KATERINA]: mark } });
+    api.addTitle(HANS, "Hans", "cavaleiro", by(MAURO, "Mauro"));
+    api.setShown(HANS, "cavaleiro");
+    const hans = fakePlayer(HANS);
+    api.applyNametag(hans);
+    assert.deepEqual(plain(hans.calls), [["text", "Ladrão"], ["colour", 0xffd23c32], ["health", false], ["visible", true]]);
+    const she = fakePlayer(KATERINA, "male");
+    api.applyNametag(she);
+    assert.deepEqual(plain(she.calls)[0], ["text", "Ladra"]);
 });

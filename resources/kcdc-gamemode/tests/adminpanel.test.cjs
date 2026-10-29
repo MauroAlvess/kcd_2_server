@@ -97,8 +97,9 @@ function loadClient() {
     const panelState = { visible: false, hides: 0, opens: 0 };
     const stub = new Proxy({}, { get: () => () => undefined });
     const modules = {
-        "./book.js": stub, "./build.js": stub, "./camera.js": stub, "./carts.js": stub, "./creator.js": stub, "./creator-page.js": stub, "./dice.js": stub, "./follow.js": stub,
-        "./combat.js": stub, "./cook-hint.js": stub, "./hud.js": stub, "./property-labels.js": stub, "./notify.js": stub, "./pick.js": stub, "./posture.js": stub, "./screen.js": stub, "./status.js": stub, "./voice.js": stub, "./skill-books.js": stub, "./item-uses.js": stub, "./skip-time.js": stub, "./whistle.js": stub,
+        "./big-events.js": stub, "./book.js": stub, "./build.js": stub, "./camera.js": stub, "./chat-card.js": stub, "./craft-page.js": stub, "./carts.js": stub, "./creator.js": stub, "./creator-page.js": stub, "./dice.js": stub, "./dice-quiet.js": stub, "./follow.js": stub,
+        "./combat.js": stub, "./cook-hint.js": stub, "./furniture.js": stub, "./horse-menu.js": stub, "./dog-menu.js": stub, "./hud.js": stub, "./property-labels.js": stub, "./notify.js": stub, "./pick.js": stub, "./posture.js": stub, "./thirst.js": stub, "./screen.js": stub, "./status.js": stub, "./voice.js": stub, "./welcome.js": stub, "./mural.js": stub, "./skill-books.js": stub, "./item-uses.js": stub, "./skip-time.js": stub, "./whistle.js": stub, "./work-quiet.js": stub, "./mount-quiet.js": stub, "./emotes.js": stub,
+        "./arrest.js": stub, "./restraint.js": stub, "./gather.js": stub, "./farm.js": stub, "./cow-milk.js": stub, "./trade-rights.js": stub, "./ui-scale.js": stub, "./perf-watch.js": stub,
         "./snapshot.js": { readSelf: () => ({}) },
         "./switches.js": { describeAll: () => [], flip: () => null },
         "./panel.js": {

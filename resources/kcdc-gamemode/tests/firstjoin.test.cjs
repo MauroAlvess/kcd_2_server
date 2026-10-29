@@ -95,8 +95,15 @@ test("a returning player's look is sent at once when the client reports somethin
     assert.equal(player.sends.length, 5);
 
     world.advance(10_000);
-    assert.equal(world.state.ticks.size, 0, "the watch ends");
+    assert.equal(world.state.ticks.size, 1, "the watch goes on, in case a slow client dresses Henry after the moments");
     assert.equal(player.sends.length, 5);
+    player.appearance = { ...DEFAULT_HENRY };
+    world.advance(4000);
+    assert.equal(player.sends.length, 6, "and a look the client no longer reports is sent again");
+    player.appearance = { ...SAVED };
+    world.advance(100_000);
+    assert.equal(world.state.ticks.size, 0, "the watch ends");
+    assert.equal(player.sends.length, 6);
     assert.equal(world.state.opened.length, 0);
 });
 
@@ -141,7 +148,7 @@ test("a look the game keeps refusing is written off after three tries", () => {
     assert.ok(world.state.logs.some((line) => line.includes("refused")));
 });
 
-test("nothing is sent before the body is ready, and the moments that went by count as one", () => {
+test("nothing is sent before the body is ready; a body that is ready late is given its look, the moments counted from then", () => {
     const world = load(SAVED);
     const player = makePlayer({ ...SAVED });
     player.ready = false;
@@ -152,7 +159,39 @@ test("nothing is sent before the body is ready, and the moments that went by cou
 
     player.ready = true;
     world.advance(2000);
-    assert.equal(player.sends.length, 1);
+    assert.equal(player.sends.length, 0, "just ready: the game has not yet dressed Henry");
+    world.advance(2000);
+    assert.equal(player.sends.length, 1, "the first moment after it");
+});
+
+test("a body that takes over a minute to be ready (a slow machine, a late server) still gets the look, and is watched from then on (2026-10-25)", () => {
+    const world = load(SAVED);
+    const player = makePlayer({ ...DEFAULT_HENRY });
+    player.ready = false;
+    spawn(world, player);
+
+    world.advance(100_000);
+    assert.equal(player.sends.length, 0);
+    assert.equal(world.state.ticks.size, 1, "the old 36 s watch would have ended long ago, with `sent 0 time(s)`");
+
+    player.ready = true;
+    world.advance(2000);
+    assert.equal(player.sends.length, 1, "at once, the client reporting Henry");
+    assert.deepEqual(player.sends[0], SAVED);
+    world.advance(60_000);
+    assert.ok(player.sends.length >= 4, "and at the moments after it");
+    world.advance(100_000);
+    assert.equal(world.state.ticks.size, 0, "then the watch ends");
+});
+
+test("a body that is never ready is given up after five minutes", () => {
+    const world = load(SAVED);
+    const player = makePlayer({ ...DEFAULT_HENRY });
+    player.ready = false;
+    spawn(world, player);
+    world.advance(5 * 60_000 + 4000);
+    assert.equal(world.state.ticks.size, 0);
+    assert.equal(player.sends.length, 0);
 });
 
 test("the watch ends when the player leaves", () => {
@@ -190,4 +229,18 @@ test("a player with no saved look is asked for one and nothing is watched", () =
     assert.equal(world.state.ticks.size, 0);
     world.advance(10_000);
     assert.equal(player.sends.length, 0);
+});
+
+test("a character an administrator asked to be made again opens the creator at the next entry, and the old look is not forced on", () => {
+    const world = load(SAVED);
+    world.state.store[765].redo = true;
+    const player = makePlayer({ ...DEFAULT_HENRY });
+    spawn(world, player);
+
+    assert.equal(world.state.opened.length, 1);
+    assert.match(world.state.chat[0], /refaça o seu personagem/);
+    assert.equal(world.state.ticks.size, 0, "no watch pressing the old look over the creator's");
+    world.advance(10_000);
+    assert.equal(player.sends.length, 0);
+    assert.ok(world.state.logs.some((line) => /Mauro vai refazer o personagem/.test(line)));
 });

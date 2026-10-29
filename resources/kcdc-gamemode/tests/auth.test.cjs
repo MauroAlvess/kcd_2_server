@@ -106,11 +106,11 @@ test("a player ticket gets a player in, who may run only the common commands", a
 
     assert.notEqual(player, null);
     assert.equal(sut.api.roleOf(player), "player");
-    for (const name of ["help", "creator", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "cachorro"]) {
+    for (const name of ["help", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "sede", "cachorro"]) {
         assert.equal(sut.api.canRun(player, name), true, `/${name} is for everyone`);
     }
     // `ui` opens the F4 debug panel, which is for administrators only.
-    for (const name of ["ui", "give", "take", "tp", "world", "builder", "npc", "siege", "socialstatus", "appearance", "propriedade", "posicao", "vendedor", "bandidos", "clima", "horse", "some-future-command"]) {
+    for (const name of ["ui", "creator", "give", "take", "tp", "world", "builder", "npc", "siege", "socialstatus", "appearance", "propriedade", "posicao", "vendedor", "bandidos", "clima", "horse", "some-future-command"]) {
         assert.equal(sut.api.canRun(player, name), false, `/${name} is for administrators`);
     }
 });
@@ -467,10 +467,13 @@ test("/admin is one of the commands a plain player may run, and takes exactly on
     const replies = [];
     const usages = [];
     const refreshed = [];
+    const changed = [];
     const status = { sendSocial: (target) => refreshed.push(target.id) };
+    // The weapon combos follow the role (esgrima.ts): all of them for an administrator, only their own for a player.
+    const esgrima = { esgrima: { roleChanged: (target) => changed.push(target.id) } };
     const context = {
         exports: {},
-        require: (id) => (id === "../auth.js" ? sut.api : id === "../status.js" ? status : assert.fail(`unexpected require ${id}`)),
+        require: (id) => (id === "../auth.js" ? sut.api : id === "../status.js" ? status : id === "../esgrima.js" ? esgrima : assert.fail(`unexpected require ${id}`)),
     };
     vm.runInNewContext(fs.readFileSync(path.join(ROOT, "dist/server/commands/admin.js"), "utf8"), context);
     const run = (args) => context.exports.adminCommand.run({ player, args, reply: { line: (text) => replies.push(text) }, usage: () => usages.push("usage") });
@@ -481,9 +484,41 @@ test("/admin is one of the commands a plain player may run, and takes exactly on
     assert.deepEqual(replies, []);
 
     assert.deepEqual(refreshed, [], "nothing to tell the panel while nothing changed");
+    assert.deepEqual(changed, [], "nor the combos");
 
     await run([`admin.${ADMIN_SECRET}`]);
     assert.match(replies.at(-1), /agora é administrador/);
     assert.equal(sut.api.roleOf(player), "admin");
     assert.deepEqual(refreshed, [player.id], "the panel hears the new role at once, so F3 opens without F2 first");
+    assert.deepEqual(changed, [player.id], "and the weapon combos are given at once (2026-10-26)");
+
+    await run(["sair"]);
+    assert.equal(sut.api.roleOf(player), "player");
+    assert.deepEqual(changed, [player.id, player.id], "and taken out of the game again when the role goes");
+});
+
+test("/admin sair turns an administrator back into a common player until they leave, and the ticket makes them one again", async () => {
+    const sut = load(config({ enforce: false, tickets: STANDARD }));
+    const player = await join(sut, connection({ ticket: `admin.${ADMIN_SECRET}` }));
+    assert.equal(sut.api.roleOf(player), "admin");
+
+    const back = sut.api.demote(player);
+    assert.equal(back.ok, true);
+    assert.match(back.message, /jogador comum/);
+    assert.equal(sut.api.roleOf(player), "player");
+    assert.equal(sut.api.canRun(player, "give"), false);
+    assert.equal(sut.api.canRun(player, "admin"), true, "the way back stays open");
+    assert.ok(sut.lines.some((line) => line.includes("voltou a ser jogador comum")));
+
+    assert.match(sut.api.demote(player).message, /já é um jogador comum/);
+    assert.equal((await sut.api.promote(player, `admin.${ADMIN_SECRET}`)).ok, true);
+    assert.equal(sut.api.roleOf(player), "admin");
+});
+
+test("with no file everybody is an administrator, and nobody stops being one", async () => {
+    const sut = load();
+    const player = await join(sut, connection());
+    const result = sut.api.demote(player);
+    assert.equal(result.ok, false);
+    assert.equal(sut.api.roleOf(player), "admin");
 });

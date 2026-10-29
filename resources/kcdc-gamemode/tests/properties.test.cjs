@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 /** A fake disk with the handful of calls store.js makes, so a write can be followed back into a read. */
 function fakeDisk() {
@@ -91,8 +92,8 @@ function makeArea(id, name, links, box = [0, 0, 0, 0]) {
  * world holds what the level places: doors, stashes and areas. doorAnswer is what the next Door.queryNearest resolves with;
  * nearestStash what Stash.nearest finds. inventories maps steamId -> rows the test or Inventory.add put there.
  */
-function load({ doors = [], stashes = [], areas = [], seed = null } = {}) {
-    const disk = fakeDisk();
+function load({ doors = [], stashes = [], areas = [], seed = null, gates = [], disk: given = null } = {}) {
+    const disk = given ?? fakeDisk();
     if (seed) disk.files.set("playerdata/properties.json", JSON.stringify(seed));
     const store = loadStore(disk);
 
@@ -132,6 +133,7 @@ function load({ doors = [], stashes = [], areas = [], seed = null } = {}) {
             find: (guid) => stashes.find((stash) => stash.levelGuid === guid) ?? null,
             all: () => stashes,
         },
+        Gate: { all: () => gates },
         Area: { all: () => areas, getAt: (position) => areas.filter((area) => area.contains(position)) },
         Items: {
             register: (id, definition) => {
@@ -157,6 +159,7 @@ function load({ doors = [], stashes = [], areas = [], seed = null } = {}) {
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/properties.js"), "utf8"), context);
     return {
         api: context.exports,
+        disk,
         files: disk.files,
         itemCalls,
         addCalls,
@@ -300,7 +303,7 @@ function village() {
     const west = [makeDoor("1000000000000001", { x: 520, y: 3250, name: "Door/front[structures/living/houses/house_1s_3r_c6]" }), makeDoor("1000000000000002", { x: 521, y: 3251, name: "Door/inner" })];
     const east = [makeDoor("2000000000000001", { x: 700, y: 3300, name: "Door/front[structures/living/houses/house_1s_4r_d]" }), makeDoor("2000000000000002", { x: 701, y: 3300, name: "Door/storeroom" })];
     const barn = makeDoor("3000000000000001", { x: 610, y: 3260, name: "Door/barn[structures/industrial/barns/barn_r4]" });
-    const farAway = makeDoor("4000000000000001", { x: 3200, y: 500, name: "Door/front[structures/living/houses/house_far]" });
+    const farAway = makeDoor("4000000000000001", { x: 9200, y: 500, name: "Door/front[structures/living/houses/house_far]" }); // off the map: no place is mapped there
     // A door of the fortress: the castle's own, which the census leaves out unless asked.
     const loose = makeDoor("5000000000000001", { x: 763, y: 3333, name: "AnimDoor[structures/defensive/fortresses/suchdol1:Door/door_village_right29[x]]" });
     const doors = [...west, ...east, barn, farAway, loose];
@@ -308,7 +311,7 @@ function village() {
         makeArea("a2", "SmartArea64[structures/living/houses/house_1s_4r_d_1]", [[east[0], "entrance"], [east[1], "storage"]], [680, 720, 3280, 3320]),
         makeArea("a1", "SmartArea[structures/living/houses/house_1s_3r_c6_1]", [[west[0], "entrance"], [west[1], "basic"]], [500, 545, 3235, 3265]),
         makeArea("a3", "WH_TriggerArea22[structures/industrial/barns/barn_r4_1]", [[barn, "entrance"]], [600, 620, 3250, 3270]),
-        makeArea("a4", "SmartArea[structures/living/houses/house_far_1]", [[farAway, "entrance"]], [3190, 3210, 490, 510]),
+        makeArea("a4", "SmartArea[structures/living/houses/house_far_1]", [[farAway, "entrance"]], [9190, 9210, 490, 510]),
         // A tower: an area with no door of its own, which only gives a hint to the chests standing in it.
         makeArea("a5", "TriggerArea[structures/military/tower_1]", [], [790, 810, 3340, 3360]),
     ];
@@ -317,7 +320,7 @@ function village() {
         makeStash("c000000000000002", { x: 800, y: 3350 }),
         makeStash("c000000000000004", { x: 525, y: 3252 }),
         makeStash("b000000000000001", { x: 600, y: 3240, name: "Stash12[Stash/barrel_with_arrows29_x]" }),
-        makeStash("c000000000000003", { x: 3300, y: 600 }),
+        makeStash("c000000000000003", { x: 9300, y: 600 }),
         makeStash("", { x: 600, y: 3240, name: "spawned_stash_1" }),
     ];
     return { doors, areas, stashes, west, east, barn, farAway, loose };
@@ -508,14 +511,17 @@ test("a key can go straight to another player, and the administrator keeps nothi
     assert.equal(sut.addCalls.filter((call) => call.steamId === "9").length, 0);
 });
 
-test("a chest locked by the server stays unlocked in the game, which then offers only its own Abrir", () => {
+test("a chest locked on purpose is locked in the game too (2026-10-19): the game then offers only its key and its lockpick", () => {
     const { world, sut, find } = mapped();
     const chest = find("Baú 01");
 
     sut.api.setLocked(chest.id, true);
     const stash = world.stashes.find((s) => s.levelGuid === chest.stashGuid);
-    assert.equal(stash.locked, false);
+    assert.equal(stash.locked, true);
+    assert.equal(stash.lockedByServer, true);
     assert.equal(sut.api.lockedNow(chest.stashGuid), true);
+    sut.api.setLocked(chest.id, false);
+    assert.equal(stash.locked, false);
 });
 
 test("granting an unknown property's key fails cleanly", () => {
@@ -538,8 +544,8 @@ test("holding the right key toggles the server's lock of every door of the house
     assert.match(locked.message, /trancada/);
     assert.equal(sut.api.lockState(sut.api.getProperty(house.id)), "all", "the storage room with it");
     assert.equal(sut.api.getProperty(house.id).locked, true, "and the choice is what a restart keeps");
-    assert.equal(world.east[0].locked, false, "the game never holds the lock");
-    assert.equal(world.east[1].locked, false);
+    assert.equal(world.east[0].locked, true, "the game holds the lock");
+    assert.equal(world.east[1].locked, true);
 
     const unlocked = await sut.api.useKeyAt(tenant);
     assert.match(unlocked.message, /destrancada/);
@@ -590,7 +596,7 @@ test("a chest within reach is unlocked with its key, and not without it", async 
 // ---------------------------------------------------------------------------------------------
 // Starting up.
 
-test("at start every key type is registered again, every door and chest of a property is unlocked in the game, and the record keeps the locks", () => {
+test("at start every key type is registered again, and the record's locks stand in the game; the rest as the level built it", () => {
     const world = village();
     const first = load(world);
     first.api.mapRegion("suchdol");
@@ -602,15 +608,16 @@ test("at start every key type is registered again, every door and chest of a pro
     first.api.setLocked(baul.id, true);
     const seed = first.saved();
 
-    // A restart: the level builds its doors and chests the way it does, some of them locked.
-    world.doors.forEach((door) => { door.locked = true; });
-    world.stashes.forEach((stash) => { stash.locked = true; });
+    // A restart: the level builds its doors and chests the way it does, and the server's locks are gone with it.
+    world.doors.forEach((door) => { door.locked = false; });
+    world.loose.locked = true;
+    world.stashes.forEach((stash) => { stash.locked = false; });
     const sut = load({ ...world, seed });
     sut.api.installProperties();
 
     assert.equal(sut.itemCalls.length, 2, "the two key types that were handed out exist before anybody connects; the other four were never made");
-    assert.deepEqual([world.east[0].locked, world.east[1].locked, world.west[0].locked, world.stashes[0].locked], [false, false, false, false], "unlocked in the game");
-    assert.equal(sut.api.lockedNow(world.east[0].guid), true, "and locked by the server's record");
+    assert.deepEqual([world.east[0].locked, world.east[1].locked, world.west[0].locked, world.stashes[0].locked], [true, true, false, true], "what was locked on purpose is locked in the game again");
+    assert.equal(sut.api.lockedNow(world.east[0].guid), true, "and by the server's record");
     assert.equal(sut.api.lockedNow(world.stashes[0].levelGuid), true);
     assert.equal(sut.api.lockedNow(world.west[0].guid), false, "a property nobody locked follows the level, which built this one open");
     assert.equal(world.loose.locked, true, "a door that is no property is the game's own business");
@@ -641,6 +648,84 @@ test("a place the level's map names gives a region its outline, and any named pl
     assert.equal(sut.api.mapRegion("sedletz").region, "Sedletz");
 });
 
+test("every listed region takes the map's outline where the level has one, as regionFor gives it, in one reading of the level (2026-10-25, the chat's reach)", () => {
+    const world = village();
+    world.areas.push({ id: "loc-raborsch", name: "SmartArea", location: "Raborsch", doors: [], bounds: { min: { x: 1400, y: 3800, z: 0 }, max: { x: 1600, y: 3900, z: 0 } }, contains: () => false });
+    world.areas.push({ id: "loc-estalagem", name: "SmartArea", location: "Pschitoky Wagoners' Inn", doors: [], bounds: { min: { x: 2116, y: 1442, z: 0 }, max: { x: 2220, y: 1578, z: 0 } }, contains: () => false });
+    world.areas.push({ id: "loc-sedletz", name: "SmartArea", location: "Sedletz", doors: [], bounds: { min: { x: 100, y: 100, z: 0 }, max: { x: 300, y: 260, z: 0 } }, contains: () => false });
+    const sut = load(world);
+    const regions = Array.from(sut.api.mappedRegions());
+    const listed = Array.from(sut.api.REGIONS, (region) => region.id);
+    assert.deepEqual(regions.map((region) => region.id).slice(0, listed.length), listed, "the whole list, in its order; a place that is no listed region (Sedletz) is not added");
+    assert.deepEqual(regions.map((region) => region.id).slice(listed.length), ["haras-malesov", "estalagem-stara-kutna", "estalagem-pschitoky", "toca-do-diabo"], "then the compounds that lie away from their region (the Devil's Den is 770 m from Minas: a zone of its own too)");
+    const box = (region) => [region.minX, region.maxX, region.minY, region.maxY];
+    const raborsch = regions.find((region) => region.id === "raborsch");
+    assert.deepEqual(box(raborsch), [1375, 1625, 3775, 3925], "the outline, a little wider");
+    assert.equal(raborsch.looseDoors, true, "what the list says of the region goes along");
+    assert.deepEqual(box(regions.find((region) => region.id === "estalagem-pschitoky")), [2091, 2245, 1417, 1603], "the inn is a zone of its own for the chat, with the map's outline of it");
+    assert.deepEqual(box(regions.find((region) => region.id === "haras-malesov")), [395, 485, 700, 775], "no outline on the map: its box");
+    assert.deepEqual(box(regions.find((region) => region.id === "toca-do-diabo")), [2850, 2975, 2890, 2990], "the Devil's Den: its box, no outline in this level");
+    assert.deepEqual(box(regions.find((region) => region.id === "wysoka")), [250, 540, 2320, 2600], "no outline on the map: the box of the list");
+    assert.deepEqual(box(regions.find((region) => region.id === "suchdol")), [430, 900, 3140, 3480], "a region with no names for the map keeps its box");
+    for (const region of regions.slice(0, listed.length)) {
+        assert.deepEqual(box(region), box(sut.api.regionFor(region.id)), `${region.id}: the same as regionFor gives`);
+    }
+});
+
+test("a level that cannot list its areas leaves the boxes of the list", () => {
+    const world = village();
+    world.areas = null;
+    const sut = load(world);
+    const regions = Array.from(sut.api.mappedRegions());
+    assert.equal(regions.length, 20, "the 16 regions of the list and the four compounds away from theirs");
+    assert.deepEqual([regions[0].minX, regions[0].maxX], [430, 900]);
+});
+
+test("the whole map is listed (2026-10-20): the great town and every village the level has doors in, boxes that do not overlap, each holding the heart the level gives its place", () => {
+    const sut = load(village());
+    const regions = Array.from(sut.api.REGIONS);
+    assert.equal(regions.length, 16);
+    assert.deepEqual(regions.map((region) => region.id), ["suchdol", "wysoka", "raborsch", "malesov", "bylany", "bohunowitz", "kuttenberg", "miskowitz", "pschitoky", "grunta", "horschan", "stara-kutna", "stara-lhota", "danemark", "rabstein", "opatowitz"]);
+    assert.equal(new Set(regions.map((region) => region.name)).size, 16, "a name each");
+    for (let i = 0; i < regions.length; i += 1) {
+        const a = regions[i];
+        assert.ok(a.maxX > a.minX && a.maxY > a.minY, `${a.id}: a box`);
+        for (const b of regions.slice(i + 1)) {
+            assert.ok(a.maxX <= b.minX || b.maxX <= a.minX || a.maxY <= b.minY || b.maxY <= a.minY, `${a.id} and ${b.id} overlap`);
+        }
+    }
+    // The points the level itself gives each place (its fast-travel point or its settlement's centre, read out of level.pak).
+    const hearts = {
+        suchdol: [698, 3288], wysoka: [426, 2489], raborsch: [1579, 3813], malesov: [556, 355], bylany: [1699, 1035], bohunowitz: [1993, 3441],
+        kuttenberg: [3182, 974], miskowitz: [1555, 1982], pschitoky: [2301, 1824], grunta: [3216, 2187], horschan: [2617, 2629], "stara-kutna": [3068, 1359],
+        "stara-lhota": [597, 922], danemark: [1526, 223], rabstein: [953, 1045], opatowitz: [1790, 2972],
+    };
+    for (const region of regions) {
+        const [x, y] = hearts[region.id];
+        assert.ok(x >= region.minX && x <= region.maxX && y >= region.minY && y <= region.maxY, `${region.id} holds its place's heart`);
+    }
+    // The great town is the largest, and answers to the names the game gives it.
+    const area = (region) => (region.maxX - region.minX) * (region.maxY - region.minY);
+    assert.equal(regions.reduce((best, region) => (area(region) > area(best) ? region : best)).id, "kuttenberg");
+    assert.equal(sut.api.regionFor("Kutná Hora").id, "kuttenberg");
+    assert.equal(sut.api.regionFor("Grund").name, "Minas", "the game's English name of Minas (2026-10-26: on the map Grund is Minas, above Stará Kutná)");
+    assert.equal(sut.api.regionFor("Minas").id, "grunta", "the id the census, the coach stop and the gardens have always had");
+    assert.equal(sut.api.regionFor("Grunta").id, "grunta", "the old name still finds it");
+    assert.equal(sut.api.regionFor("Old Kutna").name, "Stará Kutná");
+    assert.equal(sut.api.regionFor("Devil's Den"), null, "the Devil's Den is no region: it is a property of Minas (2026-10-26)");
+    assert.equal(sut.api.regionFor("Pschitoky Wagoners' Inn"), null, "the inn is no region any more: it is a property of Pschitoky");
+    assert.ok(!regions.some((region) => /estalagem|inn\b/i.test(region.id + region.name)));
+    // The army camp is left out on purpose; the Devil's Den is the one property of Minas that nobody lives in.
+    assert.ok(!regions.some((region) => /zikmund|camp/i.test(region.id + region.name)));
+    const minas = regions.find((region) => region.id === "grunta");
+    assert.equal(minas.name, "Minas");
+    assert.equal(minas.wild, undefined, "Minas is a village people live in");
+    assert.deepEqual(Array.from(minas.compounds, (compound) => [compound.name, compound.wild]), [["Toca do Diabo", true]], "its Devil's Den is the wild part");
+    // The first start maps each of them once, 20 s in, one after the other.
+    sut.api.installProperties();
+    assert.equal(sut.timers.filter((timer) => timer.ms === 20_000).length, 1);
+});
+
 test("the first start maps Suchdol by itself, a little later, and says what it found", () => {
     const sut = load(village());
     sut.api.installProperties();
@@ -667,7 +752,7 @@ test("a catalog written before houses and chests had a kind still loads, locked 
     assert.equal(property.lockSet, true, "a property registered before was locked by hand");
     assert.equal(property.keys, 0);
     assert.equal(sut.api.lockedNow(door.guid), true);
-    assert.equal(door.locked, false, "and the game is not told");
+    assert.equal(door.locked, true, "and so is the game");
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -703,31 +788,36 @@ test("renaming keeps the id, shows the new name on the key at once, and refuses 
     assert.equal(sut.api.renameProperty("nope", "Qualquer").ok, false);
 });
 
-test("locking a chest by id makes no key type: the lock is the server's, and nobody has a key until one is made", () => {
+test("locking a chest by id makes no key type: nobody has a key until one is made", () => {
     const { world, sut, find } = mapped();
     const chest = find("Baú 01");
     sut.api.setLocked(chest.id, true);
     assert.equal(sut.itemCalls.length, 0);
-    assert.equal(world.stashes.find((s) => s.levelGuid === chest.stashGuid).locked, false);
+    assert.equal(world.stashes.find((s) => s.levelGuid === chest.stashGuid).locked, true);
     assert.equal(sut.api.lockedNow(chest.stashGuid), true);
 });
 
 test("an administrator can lock or unlock a property by id, and a door that stood open is shut with the lock", () => {
     const { world, sut, find } = mapped();
     const house = find("Casa 02");
+    assert.equal(sut.api.doorStandsOpen(world.east[1].guid), false, "shut");
     world.east[1].setOpen(true);
+    assert.equal(sut.api.doorStandsOpen(world.east[1].guid), true, "the world says it stands open (what F is not offered at)");
+    assert.equal(sut.api.doorStandsOpen("00000000deadbeef"), false, "a door nobody knows is not open");
 
     assert.match(sut.api.setLocked(house.id, true).message, /trancada/);
     assert.equal(sut.api.lockedNow(world.east[0].guid), true);
-    assert.equal(world.east[0].locked, false);
+    assert.equal(world.east[0].locked, true);
     assert.equal(world.east[1].open, false, "a lock is turned on a shut door");
+    assert.equal(world.east[1].locked, true, "and it is shut and locked in the game");
     assert.match(sut.api.setLocked(house.id, false).message, /destrancada/);
     assert.equal(sut.api.lockedNow(world.east[0].guid), false);
+    assert.equal(world.east[0].locked, false);
     assert.equal(sut.api.setLocked("nope", true).ok, false);
 });
 
-test("a door the level has not reported at start is unlocked in the game once it is", () => {
-    const door = makeDoor("8000000000000001", { locked: true });
+test("a door the level has not reported at start takes its lock in the game once it is", () => {
+    const door = makeDoor("8000000000000001", { locked: false });
     const seed = { casa: { id: "casa", name: "Casa", region: "Suchdol", kind: "house", doorGuid: "8000000000000001", doors: ["8000000000000001"], keyItem: "kcdc-property:casa", locked: true, keys: 1 } };
     const doors = [];
     const sut = load({ doors, seed });
@@ -736,12 +826,12 @@ test("a door the level has not reported at start is unlocked in the game once it
     const retry = sut.intervals[0];
 
     retry.fn();
-    assert.equal(door.locked, true, "still nothing there");
+    assert.equal(door.locked, false, "still nothing there");
     assert.equal(sut.cleared.length, 0);
 
     doors.push(door);
     retry.fn();
-    assert.equal(door.locked, false);
+    assert.equal(door.locked, true);
     assert.equal(sut.cleared.length, 1, "done, so the retrying stops");
     assert.equal(sut.api.lockedNow(door.guid), true, "the lock is the record's all along");
 });
@@ -755,79 +845,35 @@ test("a property that never turns up is reported after the last try, and left to
     assert.ok(sut.logs.some((line) => /1 propriedade\(s\) o nível ainda não mostrou/.test(line)));
 });
 
-test("the sweep keeps the world in line: what the level reports late, and a locked door found open, which it shuts", () => {
+test("the sweep keeps the world in line: a lock the level dropped is put back, a locked door found open is shut, and an open door nobody locked is left", () => {
     const { world, sut, find } = mapped();
     const house = find("Casa 02");
     sut.api.setLocked(house.id, true);
-    world.east[0].locked = true;
-    world.east[1].setOpen(true);
     world.west[0].setOpen(true);
+    // A door stands open while locked: only behind this server's back (a client out of step).
+    const open = world.east[1];
+    Object.defineProperty(open, "open", { get: () => true, configurable: true });
+    open.setOpen = () => { Object.defineProperty(open, "open", { get: () => false, configurable: true }); return true; };
 
-    const closed = Array.from(sut.api.sweepWorld());
-    assert.equal(world.east[0].locked, false);
-    assert.deepEqual(closed, [world.east[1].guid], "opened behind the server's back while locked");
+    const { closed, picked } = sut.api.sweepWorld();
+    assert.deepEqual(Array.from(closed), [world.east[1].guid], "opened behind the server's back while locked");
+    assert.deepEqual(Array.from(picked), []);
     assert.equal(world.west[0].open, true, "an unlocked door that stands open is left so");
 });
 
-test("a lockpicking holds a real lock on in the game until it is let go, and the sweep leaves it alone meanwhile", () => {
+test("a lock this server set that the game reports open was picked: the record follows, that door only, and the sweep says which", () => {
     const { world, sut, find } = mapped();
     const house = find("Casa 02");
     sut.api.setLocked(house.id, true);
-
-    assert.equal(sut.api.holdShut(world.east[0].guid, true), true);
     assert.equal(world.east[0].locked, true);
-    sut.api.sweepWorld();
-    assert.equal(world.east[0].locked, true, "held for the minigame");
-    assert.equal(sut.api.holdShut(world.east[0].guid, false), true);
-    assert.equal(world.east[0].locked, false);
-    assert.equal(sut.api.holdShut("deadbeefdeadbeef", true), false, "nothing the level has reported");
-    assert.equal(sut.api.lockpickableOf(world.east[0].guid), true);
-    assert.equal(sut.api.lockpickableOf("deadbeefdeadbeef"), false);
-});
-
-
-test("a look holds a real lock on in the game for as long as it lasts, which the sweep and a lock from the menu leave alone", () => {
-    const { world, sut, find } = mapped();
-    const house = find("Casa 02");
-    const guid = world.east[0].guid;
-
-    assert.equal(sut.api.holdGaze(guid, true), true);
-    assert.equal(world.east[0].locked, true);
-    sut.api.sweepWorld();
-    assert.equal(world.east[0].locked, true, "the sweep keeps the world open to everybody, but not under a look");
-    sut.api.setLocked(house.id, false);
-    assert.equal(world.east[0].locked, true, "nor does the menu's own unlocking take it off under the player's eyes");
-
-    assert.equal(sut.api.holdGaze(guid, false), true);
-    assert.equal(world.east[0].locked, false, "the world is open again");
-    assert.equal(sut.api.holdGaze(guid, false), false, "a look that was not held has nothing to let go");
-    assert.equal(sut.api.holdGaze("deadbeefdeadbeef", true), false, "nothing the level has reported");
-});
-
-test("a lockpicking keeps its lock through a look, and a look cannot take a door a lockpicking holds", () => {
-    const { world, sut } = mapped();
-    const guid = world.east[0].guid;
-    assert.equal(sut.api.holdShut(guid, true), true);
-    assert.equal(sut.api.holdGaze(guid, true), false, "held for the minigame already");
-    sut.api.holdShut(guid, false);
-
-    assert.equal(sut.api.holdGaze(guid, true), true);
-    assert.equal(sut.api.holdShut(guid, true), true, "a picking begun under a look");
-    assert.equal(sut.api.holdGaze(guid, false), true);
-    assert.equal(world.east[0].locked, true, "the look lets go and the picking's lock stays");
-    assert.equal(sut.api.holdShut(guid, false), true);
-    assert.equal(world.east[0].locked, false);
-});
-
-test("a door that was opened by hand while it was held is not locked again when the look lets go", () => {
-    const { world, sut } = mapped();
-    const guid = world.east[0].guid;
-    sut.api.holdGaze(guid, true);
-    world.east[0].setOpen(true);
-    assert.equal(world.east[0].locked, false, "opening a locked door unlocks it, as the game's own Open does");
-    sut.api.holdGaze(guid, false);
-    assert.equal(world.east[0].locked, false);
-    assert.equal(world.east[0].open, true);
+    // The game's own lockpick worked: the door is unlocked in the world.
+    world.east[0].locked = false;
+    const { picked } = sut.api.sweepWorld();
+    assert.deepEqual(Array.from(picked), [world.east[0].guid]);
+    assert.equal(sut.api.lockedNow(world.east[0].guid), false, "it stays open");
+    assert.equal(sut.api.lockedNow(world.east[1].guid), true, "the other door of the house is still locked");
+    assert.equal(world.east[1].locked, true);
+    assert.deepEqual(Array.from(sut.api.sweepWorld().picked), [], "said once");
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -877,7 +923,7 @@ test("handing a house to a player makes them its owner, and hands them no key: t
 
     const result = sut.api.assignOwner(makePlayer("9", "Mauro"), house.id, hans);
     assert.equal(result.ok, true);
-    assert.match(result.message, /Casa 01 agora é de Hans\. As chaves ficam no painel/);
+    assert.match(result.message, /Casa 01 agora é de Hans\. Quem o novo dono quiser deixar entrar, escolhe no painel/);
     assert.deepEqual({ ...sut.api.ownerOf(house) }, { steamId: "10", name: "Hans" });
     assert.deepEqual({ ...sut.api.ownerOf(chest) }, { steamId: "10", name: "Hans" }, "a chest has its house's owner");
     assert.equal(sut.addCalls.length, 0, "no key goes with it");
@@ -1083,6 +1129,138 @@ test("the castle of Suchdol is one property with every door inside its walls, an
     assert.equal(sut.saved()[castle.id].name, "Castelo de Suchdol", "kept on disk");
 });
 
+// ---------------------------------------------------------------------------------------------
+// Compounds (2026-10-26): the castle of Pschitoky, its inn, the stud farm of Malešov and the Devil's Den.
+
+const fortressDoor = (guid, x, y) => makeDoor(guid, { x, y, name: "AnimDoor[structures/defensive/fortresses/pritoky_fortress1:Door/door_village_left43[x]]" });
+const KORAND = makePlayer("66", "Korand");
+
+/** Pschitoky as the live catalog stood: a house east of the fortress with its chest, the fortress's chests put under it by the tidying, and the old inn region. */
+function pschitoky() {
+    const fort = [fortressDoor("6000000000000001", 2268, 1808), fortressDoor("6000000000000002", 2262, 1802)];
+    const house = makeDoor("6000000000000003", { x: 2291, y: 1781, name: "Door/front[structures/living/houses/house_1s_3r_d_wb14]" });
+    const innDoors = [makeDoor("7000000000000001", { x: 2181, y: 1523, name: "Door/front[structures/living/houses/unique/kutna_hora/chmelna/chmelna_12_house1]" }), makeDoor("7000000000000002", { x: 2186, y: 1518, name: "Door/storeroom" }), makeDoor("7000000000000003", { x: 2155, y: 1496, name: "AnimDoor[Door/door_village_right25_x]" })];
+    const stashes = [
+        makeStash("d000000000000001", { x: 2262, y: 1808 }),
+        makeStash("d000000000000002", { x: 2268, y: 1804 }),
+        makeStash("d000000000000003", { x: 2288, y: 1785 }),
+        makeStash("e000000000000001", { x: 2158, y: 1520 }),
+        makeStash("e000000000000002", { x: 2188, y: 1518 }),
+        makeStash("e000000000000003", { x: 2152, y: 1496 }),
+        makeStash("b000000000000009", { x: 2170, y: 1520, name: "Stash12[Stash/barrel_with_arrows3_x]" }),
+    ];
+    const areas = [makeArea("p1", "SmartArea[structures/living/houses/house_1s_3r_d_wb14_1]", [[house, "entrance"]], [2285, 2295, 1775, 1790])];
+    return { doors: [...fort, house, ...innDoors], stashes, areas, fort, house, innDoors };
+}
+
+/** The state the live server had: the village mapped, the tidying done, the old inn region with a house and its chests, Pschitoky ceded to its lord. */
+function pschitokyAsItWas(world) {
+    const seed = {};
+    const base = (id, name, region, kind, extra) => ({ id, name, region, kind, doorGuid: "", doors: [], stashGuid: "", keyItem: "", x: 0, y: 0, z: 0, createdAt: 1, createdBy: "census", auto: true, keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", description: "", ...extra });
+    seed["pschitoky-casa-01"] = base("pschitoky-casa-01", "Casa 01", "Pschitoky", "house", { doorGuid: "6000000000000003", doors: ["6000000000000003"], x: 2291, y: 1781, z: 128, ownerSteamId: "66", ownerName: "Korand", keys: 1, locked: true });
+    seed["pschitoky-casa-01-bau-1"] = base("pschitoky-casa-01-bau-1", "Casa 01 · Baú 1", "Pschitoky", "chest", { stashGuid: "d000000000000003", parentId: "pschitoky-casa-01", x: 2288, y: 1785, z: 128 });
+    seed["pschitoky-casa-01-bau-3"] = base("pschitoky-casa-01-bau-3", "Casa 01 · Baú 3", "Pschitoky", "chest", { stashGuid: "d000000000000001", parentId: "pschitoky-casa-01", x: 2262, y: 1808, z: 134 });
+    seed["pschitoky-casa-01-bau-7"] = base("pschitoky-casa-01-bau-7", "Casa 01 · Baú 7", "Pschitoky", "chest", { stashGuid: "d000000000000002", parentId: "pschitoky-casa-01", x: 2268, y: 1804, z: 134 });
+    seed["estalagem-pschitoky-casa-01"] = base("estalagem-pschitoky-casa-01", "Casa 01", "Estalagem de Pschitoky", "house", { doorGuid: "7000000000000001", doors: ["7000000000000001", "7000000000000002"], x: 2181, y: 1523, z: 106 });
+    [["e000000000000002", "Baú 5", 2188, 1518], ["e000000000000001", "Baú 8", 2158, 1520], ["e000000000000003", "Baú 6", 2152, 1496]].forEach(([guid, label, x, y], at) => {
+        const id = `estalagem-pschitoky-casa-01-bau-${at + 1}`;
+        seed[id] = base(id, `Casa 01 · ${label}`, "Estalagem de Pschitoky", "chest", { stashGuid: guid, parentId: "estalagem-pschitoky-casa-01", x, y, z: 111 });
+    });
+    const sut = load({ ...world, seed });
+    return sut;
+}
+
+test("Pschitoky has a castle of its own: its doors, and the chests of the fortress taken from the house the tidying had put them under", () => {
+    const world = pschitoky();
+    const sut = pschitokyAsItWas(world);
+    sut.api.cedeRegion(CROWN, "Pschitoky", KORAND);
+    assert.equal(sut.api.REGIONS.find((region) => region.id === "pschitoky").fortress.minX, 2240);
+
+    const report = sut.api.mapCastle("pschitoky");
+    assert.deepEqual({ ...report }, { region: "Pschitoky", name: "Castelo de Pschitoky", created: true, doors: 2, chests: 2, absorbed: 0 });
+    const all = Array.from(sut.api.listProperties());
+    const castle = all.find((p) => p.name === "Castelo de Pschitoky");
+    assert.deepEqual(Array.from(castle.doors).sort(), ["6000000000000001", "6000000000000002"]);
+    assert.equal(castle.ownerSteamId, "66", "the lord of Pschitoky has it, as the rest of the village");
+    const fortress = all.filter((p) => p.parentId === castle.id).sort((a, b) => a.name.localeCompare(b.name));
+    assert.deepEqual(fortress.map((p) => [p.name, p.stashGuid]), [["Castelo de Pschitoky · Baú 1", "d000000000000001"], ["Castelo de Pschitoky · Baú 2", "d000000000000002"]], "west to east, renamed, out of Casa 01");
+    assert.equal(sut.api.getProperty("pschitoky-casa-01-bau-1").parentId, "pschitoky-casa-01", "the chest by the house stays the house's");
+    assert.equal(sut.api.getProperty("pschitoky-casa-01").locked, true, "and the house is left as it was");
+
+    const again = sut.api.mapCastle("pschitoky");
+    assert.deepEqual({ ...again }, { region: "Pschitoky", name: "Castelo de Pschitoky", created: false, doors: 2, chests: 0, absorbed: 0 });
+});
+
+test("the inn of Pschitoky is a property of Pschitoky, not a region: its old house and chests are folded into one property, renamed, in the village's region", () => {
+    const world = pschitoky();
+    const sut = pschitokyAsItWas(world);
+    sut.api.cedeRegion(CROWN, "Pschitoky", KORAND);
+    assert.deepEqual(Array.from(sut.api.regionNames()).sort(), ["Estalagem de Pschitoky", "Pschitoky"]);
+
+    const reports = sut.api.mapCompounds("pschitoky");
+    assert.equal(reports.length, 1);
+    assert.deepEqual({ ...reports[0] }, { region: "Pschitoky", name: "Estalagem de Pschitoky", created: true, doors: 3, chests: 3, absorbed: 1 });
+    assert.deepEqual(Array.from(sut.api.regionNames()), ["Pschitoky"], "the inn's own region is gone");
+
+    const all = Array.from(sut.api.listProperties());
+    const inn = all.find((p) => p.name === "Estalagem de Pschitoky");
+    assert.equal(inn.region, "Pschitoky");
+    assert.equal(inn.kind, "house");
+    assert.deepEqual(Array.from(inn.doors).sort(), ["7000000000000001", "7000000000000002", "7000000000000003"], "every door inside the place, the loose one too");
+    assert.equal(inn.ownerSteamId, "66", "the village's lord has it");
+    assert.equal(sut.api.getProperty("estalagem-pschitoky-casa-01"), null, "the old house is folded in");
+    const chests = all.filter((p) => p.parentId === inn.id).sort((a, b) => a.name.localeCompare(b.name));
+    assert.deepEqual(chests.map((p) => [p.name, p.region]), [["Estalagem de Pschitoky · Baú 1", "Pschitoky"], ["Estalagem de Pschitoky · Baú 2", "Pschitoky"], ["Estalagem de Pschitoky · Baú 3", "Pschitoky"]]);
+    assert.deepEqual(chests.map((p) => p.stashGuid), ["e000000000000003", "e000000000000001", "e000000000000002"], "west to east");
+    assert.ok(chests.every((p) => p.ownerSteamId === ""), "a chest has the property's owner, none of its own");
+
+    const again = sut.api.mapCompounds("pschitoky")[0];
+    assert.deepEqual({ ...again }, { region: "Pschitoky", name: "Estalagem de Pschitoky", created: false, doors: 3, chests: 0, absorbed: 0 }, "safe to run again");
+    assert.equal(all.filter((p) => p.name === "Estalagem de Pschitoky").length, 1);
+});
+
+test("the stud farm of Malešov and the Devil's Den are one property each, from scratch, with every door inside and every chest under it", () => {
+    const farm = [makeDoor("8000000000000001", { x: 441, y: 731, z: 115, name: "Door/front[structures/living/houses/house_2s_9r_b1]" }), makeDoor("8000000000000002", { x: 465, y: 733, z: 115, name: "Door/barn[structures/industrial/barns/barn_s2]" }), makeDoor("8000000000000003", { x: 438, y: 743, z: 115, name: "Door/stable[structures/industrial/stables/stable_i3]" })];
+    const den = [makeDoor("9000000000000001", { x: 2925, y: 2933, z: 106, name: "AnimDoor[structures/municipal/pubs/unique/certovka/certovka_inn1:Door/a[x]]" }), makeDoor("9000000000000002", { x: 2913, y: 2953, z: 106, name: "AnimDoor[structures/industrial/barns/barn_t_short3:Door/b[x]]" })];
+    const elsewhere = makeDoor("a000000000000001", { x: 570, y: 290, z: 111, name: "Door/front[structures/living/houses/house_1s_3r_g1]" });
+    const stashes = [
+        makeStash("f000000000000001", { x: 442, y: 717 }),
+        makeStash("f000000000000002", { x: 470, y: 729 }),
+        makeStash("f000000000000003", { x: 2921, y: 2931 }),
+        makeStash("f000000000000004", { x: 2857, y: 2974 }),
+        makeStash("f000000000000005", { x: 2900, y: 2900, name: "Stash12[Stash/barrel_with_arrows3_x]" }),
+        makeStash("f000000000000006", { x: 570, y: 280 }),
+    ];
+    const sut = load({ doors: [...farm, ...den, elsewhere], stashes, areas: [] });
+
+    const haras = sut.api.mapCompounds("malesov")[0];
+    assert.deepEqual({ ...haras }, { region: "Malešov", name: "Haras de Malešov", created: true, doors: 3, chests: 2, absorbed: 0 });
+    const toca = sut.api.mapCompounds("minas")[0];
+    assert.deepEqual({ ...toca }, { region: "Minas", name: "Toca do Diabo", created: true, doors: 2, chests: 2, absorbed: 0 });
+    assert.deepEqual(Array.from(sut.api.mapCompounds("Minas"))[0].created, false, "the name on the map finds the same region again, and nothing is filed twice");
+
+    const all = Array.from(sut.api.listProperties());
+    assert.deepEqual(all.filter((p) => p.parentId === "").map((p) => [p.name, p.region, p.kind]).sort(), [["Haras de Malešov", "Malešov", "house"], ["Toca do Diabo", "Minas", "house"]]);
+    assert.ok(!all.some((p) => p.stashGuid === "f000000000000006"), "a chest of the village itself is no part of it");
+
+    // The census of Minas has nothing left to file: all of it is the one property's.
+    const census = sut.api.mapRegion("minas");
+    assert.equal(census.housesAdded + census.chestsAdded + census.looseDoorsAdded, 0);
+    assert.equal(sut.api.mapCompounds("wysoka"), null, "a region with no compounds");
+    assert.deepEqual(sut.api.mapCompounds("narnia"), null);
+});
+
+test("four regions have places of their own (Malešov, Kuttenberg, Pschitoky, Minas), four in all, and the start files them twice, after the castles", () => {
+    const sut = load({ doors: [], stashes: [], areas: [] });
+    sut.api.installProperties();
+    assert.equal(sut.timers.filter((timer) => timer.ms === 30_000).length, 1);
+    assert.equal(sut.timers.filter((timer) => timer.ms === 120_000).length, 1);
+    const compounds = Array.from(sut.api.REGIONS).filter((region) => region.compounds !== undefined).map((region) => region.id);
+    assert.deepEqual(compounds, ["malesov", "kuttenberg", "pschitoky", "grunta"]);
+    const places = Array.from(sut.api.REGIONS).flatMap((region) => Array.from(region.compounds ?? [], (compound) => compound.name)).sort();
+    assert.deepEqual(places, ["Estalagem de Pschitoky", "Estalagem de Stará Kutná", "Haras de Malešov", "Toca do Diabo"]);
+});
+
 test("mapping a castle again adds only what is new: a door and a chest that appear later", () => {
     const world = village();
     const sut = load(world);
@@ -1121,6 +1299,25 @@ test("a cutscene's door inside the walls is never the castle's, and a plain door
     const castle = Array.from(sut.api.listProperties()).find((p) => p.name === "Castelo de Suchdol");
     assert.equal(report.doors, 1);
     assert.deepEqual(Array.from(castle.doors), ["a000000000000006"]);
+});
+
+test("a door a script or a world file hung (KCDC 1.7.2) is never filed by the census, in a castle or loose: its GUID lasts only until the server stops", () => {
+    const withHung = () => {
+        const fixture = strayDoors();
+        const hung = makeDoor("a000000000000009", { x: 773, y: 3359, name: "spawned_door_1" });
+        hung.spawned = true;
+        fixture.doors.push(hung);
+        return fixture;
+    };
+    const castleSut = load(withHung());
+    castleSut.api.mapCastle("suchdol");
+    const castle = Array.from(castleSut.api.listProperties()).find((p) => p.name === "Castelo de Suchdol");
+    assert.deepEqual(Array.from(castle.doors), ["a000000000000006"], "the hung door inside the walls is not the castle's");
+
+    const regionSut = load(withHung());
+    const report = regionSut.api.mapRegion("suchdol");
+    assert.equal(report.looseDoorsSeen, 8, "nor is it a loose door seen");
+    assert.ok(!Array.from(regionSut.api.listProperties()).some((p) => Array.from(p.doors).includes("a000000000000009")));
 });
 
 /** Raborsch's fortress as the census filed it: loose "Fortaleza" doors, and chests inside the walls. */
@@ -1265,18 +1462,21 @@ function castle(over = {}, doorOver = {}) {
     return { sut, doors, stash };
 }
 
-test("a property's lock is the level's until somebody sets one; what is forced or unbolted stays open only until the next start", () => {
+test("a property's lock is the level's until somebody sets one; what the game opens there is the game's", () => {
     const { sut, doors, stash } = castle({}, { locked: true });
     sut.api.sweepWorld();
-    assert.deepEqual(doors.map((door) => door.locked), [false, false, false], "unlocked in the game");
+    assert.deepEqual(doors.map((door) => door.locked), [true, true, true], "left as the level built them");
     assert.equal(sut.api.lockedNow(D1), true, "locked as the level built it");
     assert.equal(sut.api.lockedNow(stash.levelGuid), false, "a chest the level built unlocked");
     assert.equal(sut.api.lockedNow("nao-existe"), null);
 
+    // A level key, a lockpick, a bolt drawn from inside: the game opened it, and the server reads it so.
+    doors[1].locked = false;
     sut.api.unlockPart(D2);
-    assert.equal(sut.api.lockedNow(D2), false, "forced, or unbolted from inside");
+    assert.equal(sut.api.lockedNow(D2), false);
     assert.equal(sut.api.lockState(sut.api.getProperty("casa-grande")), "part");
     assert.equal(sut.api.getProperty("casa-grande").lockSet, undefined, "nothing written down: a restart shuts it again, as the level would");
+    assert.deepEqual(Array.from(sut.api.sweepWorld().picked), [], "the level's own lock, opened in the game, is no pick");
 
     sut.api.setLocked("casa-grande", false);
     assert.equal(sut.api.getProperty("casa-grande").lockSet, true, "set on purpose: the record decides from now on");
@@ -1293,7 +1493,8 @@ test("the doors of a house are named and counted like its chests: the entrance, 
     const house = sut.api.getProperty("casa-grande");
     assert.deepEqual(Array.from(sut.api.doorLines(house), (line) => line.name), ["Entrada", "Porta 2", "Porta 3"]);
     doors[1].locked = true;
-    assert.deepEqual(Array.from(sut.api.doorLines(house), (line) => line.locked), [false, false, false], "the world's lock is not the server's");
+    assert.deepEqual(Array.from(sut.api.doorLines(house), (line) => line.locked), [false, true, false], "a house nobody locked on purpose reads as the level has it");
+    doors[1].locked = false;
     sut.api.setDoorLocked("casa-grande", 1, true);
     assert.deepEqual(Array.from(sut.api.doorLines(sut.api.getProperty("casa-grande")), (line) => line.locked), [false, true, false], "as the server keeps them");
     assert.equal(sut.api.doorName(house, 0), "Entrada");
@@ -1343,7 +1544,7 @@ test("one door is locked on its own, the others stay as they were, and the prope
     assert.equal(result.ok, true);
     assert.match(result.message, /Porta 2 de Casa Grande: trancada/);
     assert.deepEqual([D1, D2, D3].map((guid) => sut.api.lockedNow(guid)), [false, true, false]);
-    assert.deepEqual(doors.map((door) => door.locked), [false, false, false], "unlocked in the game");
+    assert.deepEqual(doors.map((door) => door.locked), [false, true, false], "locked in the game as in the record");
 
     const house = sut.api.getProperty("casa-grande");
     assert.equal(house.locked, false, "the whole is not shut");
@@ -1380,7 +1581,7 @@ test("locking or unlocking the whole property clears the marks of the doors, and
     sut.api.setDoorLocked("casa-grande", 2, true);
     assert.equal(sut.api.grantKey(makePlayer("9", "Hans"), "casa-grande").ok, true);
     assert.deepEqual([D1, D2, D3].map((guid) => sut.api.lockedNow(guid)), [false, false, true], "a key is just a key");
-    assert.deepEqual(doors.map((door) => door.locked), [false, false, false]);
+    assert.deepEqual(doors.map((door) => door.locked), [false, false, true]);
 });
 
 test("at start each door keeps its own mark, and a house kept shut only by a door is not forgotten", () => {
@@ -1392,7 +1593,7 @@ test("at start each door keeps its own mark, and a house kept shut only by a doo
     const sut = load({ doors, stashes: [makeStash("c000000000000001")], seed });
     sut.api.installProperties();
     assert.deepEqual([D1, D2, D3].map((guid) => sut.api.lockedNow(guid)), [false, true, false]);
-    assert.deepEqual(doors.map((door) => door.locked), [false, false, false]);
+    assert.deepEqual(doors.map((door) => door.locked), [false, true, false], "and in the game");
     assert.ok(sut.logs.some((line) => /1 com tranca posta à mão/.test(line)), sut.logs.join(" | "));
 });
 
@@ -1503,6 +1704,80 @@ test("a region that a lord holds whole takes in what a census finds later, and a
     sut.api.noteNickname({ steamId: "55", nickname: "Radovan Novo" });
     assert.equal(sut.api.regionLordOf("Suchdol").name, "Radovan Novo");
     assert.equal(sut.api.getProperty("casa-04").ownerName, "Radovan Novo");
+});
+
+test("removing the lord of a region takes the region and the properties the lord holds in it; what others own there, and what the lord owns elsewhere, stays (2026-10-28)", () => {
+    const sut = region();
+    sut.api.cedeRegion(CROWN, "Suchdol", LORD);
+    sut.api.assignOwner(CROWN, "wysoka-01", LORD);
+    const owner = (id) => sut.api.getProperty(id).ownerSteamId;
+    assert.deepEqual([owner("casa-01"), owner("casa-04"), owner("casa-02"), owner("wysoka-01")], ["55", "55", "77", "55"]);
+
+    const would = sut.api.previewRelease("Suchdol");
+    assert.deepEqual([would.lord.steamId, would.released, would.kept], ["55", 2, 1], "counted first: two houses are the lord's, Hans's one is not");
+    assert.equal(owner("casa-01"), "55", "and counting changes nothing");
+    assert.equal(sut.api.regionLordOf("Suchdol").steamId, "55");
+
+    const report = sut.api.releaseRegion("suchdol");
+    assert.equal(report.ok, true);
+    assert.equal(report.lord.steamId, "55");
+    assert.deepEqual([report.released, report.kept], [2, 1]);
+    assert.equal(report.message, "Suchdol deixou de ser de Radovan: 2 propriedade(s) dele ficaram sem dono e 1 de outros donos continuam.");
+
+    assert.deepEqual([owner("casa-01"), owner("casa-04")], ["", ""], "what the lord held in the region goes back to nobody");
+    assert.equal(sut.api.getProperty("casa-04").ownerName, "");
+    assert.equal(sut.api.ownerOf(sut.api.getProperty("casa-01")), null);
+    assert.equal(sut.api.ownerOf(sut.api.getProperty("casa-01-bau-1")), null, "a chest follows its house");
+    assert.equal(owner("casa-02"), "77", "what somebody else owns there stays theirs");
+    assert.equal(owner("casa-03"), "", "the vendor's house was never anybody's");
+    assert.equal(owner("wysoka-01"), "55", "and what the lord owns in another region is not touched");
+    assert.equal(sut.saved()["casa-01"].ownerSteamId, "", "kept on disk");
+    assert.equal(sut.saved()["casa-02"].ownerSteamId, "77");
+
+    assert.equal(sut.api.regionLordOf("Suchdol"), null);
+    assert.deepEqual(Array.from(sut.api.regionsLordedBy("55")), []);
+    assert.equal(JSON.parse(sut.files.get("playerdata/regions.json")).Suchdol, undefined, "and the file says so");
+    assert.deepEqual(Array.from(sut.api.domainOf("55")), [], "nothing is left in their domain to look at");
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.api.landSummary("55"))), [{ region: "Wysoka", houses: 1, chests: 0, whole: false }], "only what they own elsewhere is left of their lands");
+
+    // What the census finds later goes to nobody now.
+    assert.equal(sut.api.adoptForLord("Suchdol"), 0);
+    assert.equal(owner("casa-04"), "");
+});
+
+test("a lord that holds nothing in the region just loses the region, and a region with no lord has nothing to release (the administrator's test of 2026-10-28)", () => {
+    const sut = region();
+    sut.api.cedeRegion(CROWN, "Suchdol", LORD);
+    sut.api.clearOwner("casa-01");
+    sut.api.clearOwner("casa-04");
+    const report = sut.api.releaseRegion("Suchdol");
+    assert.deepEqual([report.ok, report.released, report.kept], [true, 0, 1]);
+
+    // The way out of the case that came first: a region left without a lord with a hundred properties in the administrator's name is ceded
+    // to them again and released at once.
+    const mess = region();
+    mess.api.cedeRegion(CROWN, "Suchdol", CROWN);
+    assert.equal(mess.api.getProperty("casa-01").ownerSteamId, "1");
+    const first = mess.api.releaseRegion("Suchdol");
+    assert.deepEqual([first.released, first.kept], [2, 1]);
+    assert.equal(mess.api.getProperty("casa-01").ownerSteamId, "");
+});
+
+test("a region with no lord, or that is none, is told and nothing is written", () => {
+    const sut = region();
+    const none = sut.api.releaseRegion("Suchdol");
+    assert.deepEqual([none.ok, none.lord, none.released, none.kept], [false, null, 0, 0]);
+    assert.equal(none.message, "Suchdol não tem senhor.");
+    assert.match(sut.api.releaseRegion("Praga").message, /Não conheço a região 'Praga'/);
+    assert.equal(sut.files.has("playerdata/regions.json"), false);
+
+    sut.api.cedeRegion(CROWN, "Suchdol", LORD);
+    sut.api.releaseRegion("Suchdol");
+    assert.equal(sut.api.releaseRegion("Suchdol").ok, false, "a second time there is nobody to remove");
+    // Another region's lord is not touched.
+    sut.api.cedeRegion(CROWN, "Wysoka", LORD);
+    sut.api.releaseRegion("Suchdol");
+    assert.equal(sut.api.regionLordOf("Wysoka").steamId, "55");
 });
 
 test("a region that is none, a player with no Steam id and a second lord are told or handled", () => {
@@ -1617,16 +1892,6 @@ test("a door of a property left open with nobody near is closed after two minute
     assert.equal(sut.api.idleDoors.closeAfterMs, 120_000);
 });
 
-test("a door held shut for a lockpicking is not touched by the idle close", () => {
-    const { world, sut } = mapped();
-    const door = world.west[0];
-    door.setOpen(true);
-    sut.api.holdShut(door.guid, true);
-    sut.api.closeIdleDoors(1_000, []);
-    assert.deepEqual(Array.from(sut.api.closeIdleDoors(1_000_000, [])), []);
-    assert.equal(door.open, true);
-});
-
 // ---------------------------------------------------------------------------------------------
 // Tidying what the census left loose.
 
@@ -1698,4 +1963,513 @@ test("tidyLoose takes the chests and doors the cession stamped on the lord, but 
     assert.ok(byName["Porta 01"], "it stays a door of its own");
     assert.equal(done.chests, 1);
     assert.equal(done.doors, 0);
+});
+
+test("the castle's gates are the ones in and by its walls, worked by its owner or the lord of its lands, in one go", () => {
+    const toggles = [];
+    const gate = (guid, x, y, cycle = "closed") => ({ guid, position: { x, y, z: 140 }, cycle, toggle: (open) => { toggles.push([guid, open]); return { accepted: cycle !== (open ? "open" : "closed"), seconds: 3.2 }; } });
+    const gates = [gate("g1", 780, 3330), gate("g2", 770, 3300), gate("far", 1500, 3900)];
+    const sut = load({ ...village(), gates });
+    sut.api.mapRegion("suchdol");
+    sut.api.mapCastle("suchdol");
+    const castle = Array.from(sut.api.listProperties()).find((p) => p.name === "Castelo de Suchdol");
+    const house = Array.from(sut.api.listProperties()).find((p) => p.name === "Casa 01");
+
+    assert.deepEqual(Array.from(sut.api.castleGates(castle), (g) => g.guid), ["g1", "g2"], "the ones by the walls, not Raborsch's");
+    assert.deepEqual(Array.from(sut.api.castleGates(house)), [], "a house has none");
+    assert.equal(sut.api.gatesOpen(castle), false);
+    assert.equal(sut.api.gatesOpen(house), null);
+
+    const stranger = makePlayer("90", "Estranho");
+    assert.equal(sut.api.setCastleGates(stranger, castle, true).ok, false);
+    assert.equal(toggles.length, 0);
+
+    sut.api.cedeRegion(CROWN, "Suchdol", LORD);
+    const fresh = sut.api.getProperty(castle.id);
+    const opened = sut.api.setCastleGates(LORD, fresh, true);
+    assert.equal(opened.ok, true);
+    assert.match(opened.message, /^Abrindo os portões de Castelo de Suchdol \(4 s\)\.$/);
+    assert.deepEqual(toggles.map((t) => t.join(":")), ["g1:true", "g2:true"]);
+    assert.equal(sut.api.setCastleGates(stranger, fresh, true, true).ok, true, "an administrator may");
+    assert.equal(sut.api.setCastleGates(makePlayer("91", "Outro"), house, true).ok, false, "a house has no gates");
+});
+
+// 2026-10-19: "os portões só podem fechar se forem fechados manualmente pelo dono" -- the server keeps no gate past a restart.
+test("the castles' gates are put back as their lords left them: open when nobody chose, shut only when closed on purpose", () => {
+    const gate = (guid, x, y, cycle) => {
+        const made = { guid, kind: "portcullis", position: { x, y, z: 140 }, cycle, moving: false, toggles: [], toggle: (open) => { made.toggles.push(open); made.cycle = open ? "opening" : "closing"; return { accepted: true, seconds: 7 }; } };
+        return made;
+    };
+    const shutAtStart = gate("g1", 780, 3330, "closed");
+    const keptShut = gate("g2", 770, 3300, "closed");
+    const elsewhere = gate("far", 3000, 900, "closed");
+    const sut = load({ ...village(), gates: [shutAtStart, keptShut, elsewhere] });
+    sut.api.rememberGate("g2", false);
+    assert.equal(sut.api.keepGates(true), 1, "the one nobody chose for is opened");
+    assert.deepEqual(shutAtStart.toggles, [true]);
+    assert.deepEqual(keptShut.toggles, [], "the lord's shut gate stays shut");
+    assert.deepEqual(elsewhere.toggles, [], "a gate of no castle is left alone");
+    assert.ok(sut.logs.some((line) => /portões dos castelos: Suchdol portcullis g1 aberto \(padrão\); Suchdol portcullis g2 fechado \(escolhido\); 1 posto\(s\) de volta/.test(line)), sut.logs.join(" | "));
+    assert.equal(sut.api.keepGates(), 0, "opening already: nothing to do");
+
+    // The choice is written down, so the next start reads it.
+    sut.api.rememberGate("g1", false);
+    const again = load({ ...village(), gates: [gate("g1", 780, 3330, "open")], disk: sut.disk });
+    assert.equal(again.api.keepGates(), 1, "shut, as it was left");
+});
+
+// 2026-10-18: "as portas que ligam propriedade são da propriedade" -- the doors the census left loose in Suchdol had their lock
+// set on purpose (open), or stood at houses players own, and the tidy skipped every one of them.
+function tidyWorld() {
+    const at = (id, name, kind, x, y, extra = {}) => ({ id, name, region: "Suchdol", kind, doorGuid: "", doors: [], stashGuid: "", keyItem: "", x, y, z: 145, createdAt: 0, createdBy: "census", auto: true, keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", description: "", ...extra });
+    const door = (n, x, y, owner, extra = {}) => at(`porta-${n}`, `Porta 0${n}`, "door", x, y, { doorGuid: `d00000000000000${n}`, doors: [`d00000000000000${n}`], ownerSteamId: owner, ownerName: owner, lockSet: true, ...extra });
+    const seed = {};
+    for (const p of [
+        at("casa-01", "Casa 01", "house", 100, 100, { doorGuid: "e000000000000001", doors: ["e000000000000001"], ownerSteamId: "55", ownerName: "Radovan", lockSet: true }),
+        at("casa-01-bau-1", "Casa 01 · Baú 1", "chest", 100, 140, { stashGuid: "c000000000000011", parentId: "casa-01" }),
+        at("casa-02", "Casa 02", "house", 300, 100, { doorGuid: "e000000000000002", doors: ["e000000000000002"], ownerSteamId: "77", ownerName: "Tedrick" }),
+        at("casa-03", "Casa 03", "house", 500, 100, { doorGuid: "e000000000000003", doors: ["e000000000000003"], ownerSteamId: "88", ownerName: "Dondolfo" }),
+        door(1, 103, 100, "55"),
+        door(2, 104, 101, "55", { locked: true }),
+        door(3, 308, 100, "55"),
+        door(4, 320, 100, "55"),
+        door(5, 504, 100, "88"),
+        door(6, 305, 100, "88"),
+        at("bau-01", "Baú 01", "chest", 100, 175, { stashGuid: "c000000000000001", ownerSteamId: "55" }),
+        at("bau-02", "Baú 02", "chest", 300, 110, { stashGuid: "c000000000000002", ownerSteamId: "55" }),
+    ]) {
+        seed[p.id] = p;
+    }
+    const sut = load({ seed });
+    sut.files.set("playerdata/regions.json", JSON.stringify({ Suchdol: { steamId: "55", name: "Radovan", at: 0, by: "Mauro" } }));
+    return sut;
+}
+
+test("tidyLoose folds every door that opens into a building into it, its lock set on purpose or not, and keeps the door's own mark", () => {
+    const sut = tidyWorld();
+    const done = sut.api.tidyLoose();
+    const saved = sut.saved();
+    assert.deepEqual(Array.from(saved["casa-01"].doors).sort(), ["d000000000000001", "d000000000000002", "e000000000000001"], "the lord's two doors by the lord's house, though their lock was set");
+    assert.deepEqual(saved["casa-01"].doorLocks, { d000000000000002: true }, "the one kept shut stays shut among the house's doors");
+    assert.ok(Array.from(saved["casa-02"].doors).includes("d000000000000003"), "the lord's door right at Tedrick's house (8 m) is a door of that house");
+    assert.ok(!Array.from(saved["casa-02"].doors).includes("d000000000000004"), "not one 20 m from it");
+    assert.ok(saved["porta-4"], "which stays a door of its own");
+    assert.ok(Array.from(saved["casa-03"].doors).includes("d000000000000005"), "Dondolfo's own door goes into Dondolfo's own house");
+    assert.ok(saved["porta-6"] && !Array.from(saved["casa-02"].doors).includes("d000000000000006"), "but his door by Tedrick's house is still his");
+    assert.equal(done.doors, 4);
+    assert.match(done.moved.join("; "), /Porta 01 -> Casa 01 \(3\.0 m\)/);
+});
+
+test("tidyLoose measures a loose chest to the building's own chests too, and never puts one into a house another player owns", () => {
+    const sut = tidyWorld();
+    const done = sut.api.tidyLoose();
+    const saved = sut.saved();
+    assert.equal(saved["bau-01"].parentId, "casa-01", "75 m from where the house was put, 35 m from its chest");
+    assert.equal(saved["bau-01"].name, "Casa 01 · Baú 2");
+    assert.equal(saved["bau-02"].parentId, "", "the chest by Tedrick's house does not become Tedrick's");
+    assert.equal(done.chests, 1);
+    const again = sut.api.tidyLoose();
+    assert.equal(again.chests + again.doors, 0, "nothing moves the second time");
+});
+
+test("the key to a house opens the chests in it too; the key to one of its doors does not", () => {
+    const { sut } = castle({ ownerSteamId: "10", ownerName: "Hans" });
+    const hans = makePlayer("10", "Hans");
+    const kat = makePlayer("11", "Katerina");
+    const erik = makePlayer("12", "Erik");
+    const chest = sut.api.getProperty("casa-grande-bau-1");
+    assert.equal(sut.api.holdsKeyOf(kat, chest), false);
+    assert.equal(sut.api.issueKey(hans, "casa-grande", kat, false).ok, true);
+    assert.equal(sut.api.holdsKeyOf(kat, chest), true, "the house's key opens its chest (2026-10-18: the castle's key could not)");
+    assert.equal(sut.api.issueDoorKey(hans, "casa-grande", 1, erik, false).ok, true);
+    assert.equal(sut.api.holdsKeyOf(erik, chest), false, "a door's own key is no key to the chests");
+});
+
+test("a catalog filed before the map's own name was used reads Grunta as Minas, and the Devil's Den joins it with no second filing (2026-10-26)", () => {
+    const record = (id, name, region, extra = {}) => ({ id, name, region, kind: "house", doorGuid: "", doors: [], keyItem: "", x: 3200, y: 2200, z: 95, createdAt: 1, createdBy: "census", auto: true, keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", description: "", ...extra });
+    const seed = {
+        "casa-01": record("casa-01", "Casa 01", "Grunta"),
+        "taverna-de-grunta": record("taverna-de-grunta", "Taverna de Grunta", "Grunta", { npc: "Taberneiro" }),
+        "taverna-de-grunta-bau-1": record("taverna-de-grunta-bau-1", "Taverna de Grunta · Baú 1", "Grunta", { kind: "chest", parentId: "taverna-de-grunta", stashGuid: "f000000000000001" }),
+        "minas-toca-do-diabo": record("minas-toca-do-diabo", "Toca do Diabo", "Minas", { x: 2912, y: 2937 }),
+        "minas-toca-do-diabo-bau-1": record("minas-toca-do-diabo-bau-1", "Toca do Diabo · Baú 1", "Minas", { kind: "chest", parentId: "minas-toca-do-diabo", stashGuid: "f000000000000002", x: 2921, y: 2931 }),
+        "casa-01-suchdol": record("casa-01-suchdol", "Casa 01", "Suchdol", { x: 520, y: 3250 }),
+    };
+    const sut = load({ doors: [], stashes: [], areas: [], seed });
+    sut.api.installProperties();
+    const all = Array.from(sut.api.listProperties());
+    assert.deepEqual(all.map((p) => [p.region, p.name]).sort(), [
+        ["Minas", "Casa 01"], ["Minas", "Taverna de Minas"], ["Minas", "Taverna de Minas · Baú 1"], ["Minas", "Toca do Diabo"], ["Minas", "Toca do Diabo · Baú 1"], ["Suchdol", "Casa 01"],
+    ], "one region of the old village and the den, with the word changed in the names that carried it, and no other region touched");
+    assert.deepEqual(Array.from(sut.api.regionNames()), ["Minas", "Suchdol"]);
+    assert.equal(sut.saved()["casa-01"].region, "Minas", "the file says so after the start");
+    assert.equal(sut.saved()["taverna-de-grunta"].name, "Taverna de Minas");
+    assert.equal(sut.api.getProperty("taverna-de-grunta").npc, "Taberneiro", "what the record says of a vendor's house is kept");
+});
+
+test("the sweep goes through the catalog a fifth at a time: every property once in five turns, none twice, and the whole-catalog call still does all (2026-10-26)", () => {
+    const { world, sut } = mapped();
+    const doors = [...world.west, ...world.east];
+    for (const door of doors) door.setOpen(true);
+    const at = doors[0].position;
+    const far = [{ position: { x: at.x + 5000, y: at.y, z: at.z } }];
+    const T = 20_000_000;
+    const parts = [0, 1, 2, 3, 4].map((index) => ({ index, of: 5 }));
+    for (const part of parts) sut.api.closeIdleDoors(T, far, part);
+    const closedBy = parts.map((part) => Array.from(sut.api.closeIdleDoors(T + 121_000, far, part)));
+    const all = closedBy.flat();
+    assert.equal(new Set(all).size, all.length, "no door closed by two parts");
+    const owned = new Set(Array.from(sut.api.listProperties()).flatMap((property) => Array.from(property.doors)));
+    assert.deepEqual([...all].sort(), doors.map((door) => door.guid).filter((guid) => owned.has(guid)).sort(), "together they closed every open door of a property");
+    assert.ok(closedBy.filter((list) => list.length > 0).length >= 2, "and not all in one turn");
+
+    // The whole catalog in one call, as the admin tools and the tests ask for it.
+    for (const door of doors) door.setOpen(true);
+    sut.api.closeIdleDoors(T + 500_000, far);
+    assert.equal(Array.from(sut.api.closeIdleDoors(T + 500_000 + 121_000, far)).length, all.length);
+});
+
+test("installed, the sweep runs every second over a fifth of the catalog, so that a property is still looked at every five seconds", () => {
+    const { sut } = mapped();
+    sut.api.installProperties();
+    const sweeps = sut.intervals.filter((timer) => timer.ms === 1_000);
+    assert.equal(sweeps.length, 1);
+    assert.equal(sut.intervals.filter((timer) => timer.ms === 5_000).length, 0, "no turn of five seconds over the whole catalog");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Tidying by the level's private areas, and the longer reach (2026-10-28: "os mapeamentos de Kuttenberg estão errados, tem baú avulso e porta também; tudo é propriedade").
+
+/** A level area labelled the way the trespass areas of the level are (`private`), with the bounds the engine reports. */
+function makePrivateArea(id, name, box, { labels = ["private", "personal", "interior"], links = [] } = {}) {
+    return {
+        ...makeArea(id, name, links, box),
+        kind: "level",
+        labels,
+        bounds: { min: { x: box[0], y: box[2], z: 0 }, max: { x: box[1], y: box[3], z: 200 } },
+    };
+}
+
+/** A chest or a door of the catalog standing alone, as the census leaves it. */
+function loneChest(guid, name, x, y, over = {}) {
+    return record({ id: guid, name, kind: "chest", doorGuid: "", doors: [], stashGuid: guid, x, y, z: 30, ownerSteamId: "", ownerName: "", ...over });
+}
+
+function loneDoor(guid, name, x, y, over = {}) {
+    return record({ id: guid, name, kind: "door", doorGuid: guid, doors: [guid], stashGuid: "", x, y, z: 30, ownerSteamId: "", ownerName: "", ...over });
+}
+
+test("two chests in a shed's private area, with no door the level links, are one place of their own: 'Galpão 01' with both under it", () => {
+    const shed = makePrivateArea("p-shed", "WH_TriggerArea34[structures/industrial/sheds/shed_kh_b2_5d4e]", [875, 895, 3195, 3215], { labels: ["private", "personal", "interior", "animals_publicSpace"] });
+    const c1 = makeStash("c000000000000011", { x: 880, y: 3200 });
+    const c2 = makeStash("c000000000000012", { x: 888, y: 3208 });
+    const seed = { c000000000000011: loneChest("c000000000000011", "Baú 121 (Galpão)", 880, 3200), c000000000000012: loneChest("c000000000000012", "Baú 122 (Galpão)", 888, 3208) };
+    const sut = load({ stashes: [c1, c2], areas: [shed], seed });
+
+    const done = sut.api.tidyLoose();
+
+    const byName = Object.fromEntries(Array.from(sut.api.listProperties(), (p) => [p.name, p]));
+    assert.equal(done.places, 1);
+    assert.equal(done.chests, 2);
+    const place = byName["Galpão 01"];
+    assert.ok(place, "the shed is a property now");
+    assert.equal(place.kind, "house");
+    assert.equal(place.region, "Suchdol");
+    assert.deepEqual(Array.from(place.doors), []);
+    assert.equal(place.doorGuid, "");
+    assert.equal(byName["Galpão 01 · Baú 1"].parentId, place.id);
+    assert.equal(byName["Galpão 01 · Baú 2"].parentId, place.id);
+    assert.ok(!byName["Baú 121 (Galpão)"], "the chests are named after the place");
+    assert.ok(done.moved.some((line) => /Galpão 01 <- WH_TriggerArea34/.test(line)), "and the log says why");
+
+    const again = sut.api.tidyLoose();
+    assert.equal(again.chests + again.doors + again.places, 0, "nothing is left to do the second time");
+});
+
+test("a smithy's yard, a door and a chest in a private area: 'Ferraria 01', named by the prefab of its door, with the door as its entrance", () => {
+    const smithy = "AnimDoor[structures/industrial/smitheries/unique/nebakov/smithery2:Door/door_village_left36[x]]";
+    const door = makeDoor("d000000000000013", { x: 850, y: 3200, z: 30, name: smithy });
+    const chest = makeStash("c000000000000013", { x: 856, y: 3206, name: "stash[hostinaProChude_wineChest_5d5a]" });
+    const yard = makePrivateArea("p-yard", "kkut_trespassPach14Area_1", [840, 870, 3190, 3225], { labels: ["private", "prohibited", "suppressHorseCall"] });
+    const seed = { d000000000000013: loneDoor("d000000000000013", "Porta 13", 850, 3200), c000000000000013: loneChest("c000000000000013", "Baú 23", 856, 3206) };
+    const sut = load({ doors: [door], stashes: [chest], areas: [yard], seed });
+
+    const done = sut.api.tidyLoose();
+
+    const byName = Object.fromEntries(Array.from(sut.api.listProperties(), (p) => [p.name, p]));
+    const place = byName["Ferraria 01"];
+    assert.ok(place, "named for what it is, as the census names a smithy");
+    assert.equal(done.places, 1);
+    assert.equal(done.doors, 1);
+    assert.equal(done.chests, 1);
+    assert.deepEqual(Array.from(place.doors), ["d000000000000013"]);
+    assert.equal(place.doorGuid, "d000000000000013");
+    assert.ok(!byName["Porta 13"], "the loose door is a door of the place");
+    assert.equal(byName["Ferraria 01 · Baú 1"].parentId, place.id);
+});
+
+test("a loose chest in the area the level links to a building's doors goes under that building, a gate tower's for one", () => {
+    const gate = makeDoor("d000000000000014", { x: 700, y: 3200, z: 30, name: "AnimDoor[structures/defensive/walls/unique/kutna_hora/gate:Door/d[x]]" });
+    const tower = makePrivateArea("p-gate", "AreaUnion3[structures/defensive/walls/unique/kutna_hora/gate]", [690, 710, 3190, 3210], { labels: ["private", "prohibited", "interior"], links: [[gate, "entrance"]] });
+    const chest = makeStash("c000000000000014", { x: 703, y: 3203 });
+    const seed = {
+        "fortaleza-01": record({ id: "fortaleza-01", name: "Fortaleza 01", doorGuid: "d000000000000014", doors: ["d000000000000014"], x: 700, y: 3200, ownerSteamId: "", ownerName: "" }),
+        c000000000000014: loneChest("c000000000000014", "Baú 40", 703, 3203),
+    };
+    const sut = load({ doors: [gate], stashes: [chest], areas: [tower], seed });
+
+    const done = sut.api.tidyLoose();
+
+    const byName = Object.fromEntries(Array.from(sut.api.listProperties(), (p) => [p.name, p]));
+    assert.equal(done.places, 0, "the tower is a property already");
+    assert.equal(byName["Fortaleza 01 · Baú 1"].parentId, "fortaleza-01");
+});
+
+test("an area the level does not mark private makes no place, and a place is never made of what a player holds or what has a key out", () => {
+    const open = makePrivateArea("p-open", "kkut_gossipAreaNamet_1", [875, 895, 3195, 3215], { labels: [] });
+    const own = makePrivateArea("p-own", "TriggerArea6[structures/living/houses/wooden/small_roof_to_g]", [695, 705, 3295, 3305]);
+    const a = makeStash("c000000000000015", { x: 880, y: 3200 });
+    const b = makeStash("c000000000000016", { x: 700, y: 3300 });
+    const c = makeStash("c000000000000017", { x: 701, y: 3301 });
+    const seed = {
+        c000000000000015: loneChest("c000000000000015", "Baú 31", 880, 3200),
+        c000000000000016: loneChest("c000000000000016", "Baú 32", 700, 3300, { ownerSteamId: "9", ownerName: "Hans" }),
+        c000000000000017: loneChest("c000000000000017", "Baú 33", 701, 3301, { keys: 1 }),
+    };
+    const sut = load({ stashes: [a, b, c], areas: [open, own], seed });
+
+    const done = sut.api.tidyLoose();
+
+    assert.equal(done.places, 0);
+    assert.equal(done.chests, 0);
+    assert.ok(Array.from(sut.api.listProperties()).every((p) => p.parentId === ""));
+});
+
+test("a free chest or door joins the nearest free building from farther than it did (120 m and 60 m), unless a building another player owns is nearer and close", () => {
+    const home = makeDoor("d000000000000018", { x: 520, y: 3250, z: 30, name: "Door/front[structures/living/houses/house_1s_3r_c6]" });
+    const far = makeStash("c000000000000018", { x: 520, y: 3345 }); // 95 m
+    const farther = makeStash("c000000000000019", { x: 520, y: 3400 }); // 150 m
+    const near = makeDoor("d000000000000019", { x: 520, y: 3305, z: 30, name: "AnimDoor[Door/door_village_right61]" }); // 55 m
+    const seed = {
+        casa: record({ id: "casa", name: "Casa 01", doorGuid: "d000000000000018", doors: ["d000000000000018"], x: 520, y: 3250, ownerSteamId: "", ownerName: "" }),
+        c000000000000018: loneChest("c000000000000018", "Baú 41", 520, 3345),
+        c000000000000019: loneChest("c000000000000019", "Baú 42", 520, 3400),
+        d000000000000019: loneDoor("d000000000000019", "Porta 41", 520, 3305),
+    };
+    const sut = load({ doors: [home, near], stashes: [far, farther], seed });
+
+    const done = sut.api.tidyLoose();
+
+    const byName = Object.fromEntries(Array.from(sut.api.listProperties(), (p) => [p.name, p]));
+    assert.ok(byName["Casa 01 · Baú 1"], "95 m is within reach now");
+    assert.ok(byName["Baú 42"] && byName["Baú 42"].parentId === "", "150 m is not");
+    assert.ok(Array.from(byName["Casa 01"].doors).includes("d000000000000019"), "a door 55 m off is a door of the house");
+    assert.equal(done.places, 0);
+
+    // The same, with a neighbour's house nearer to the chest: it stays where it is.
+    const neighbour = makeDoor("d00000000000001a", { x: 520, y: 3330, z: 30, name: "Door/front[structures/living/houses/house_1s_4r_d]" });
+    const seed2 = {
+        casa: record({ id: "casa", name: "Casa 01", doorGuid: "d000000000000018", doors: ["d000000000000018"], x: 520, y: 3250, ownerSteamId: "", ownerName: "" }),
+        vizinho: record({ id: "vizinho", name: "Casa 02", doorGuid: "d00000000000001a", doors: ["d00000000000001a"], x: 520, y: 3330, ownerSteamId: "77", ownerName: "Vizinho" }),
+        c000000000000018: loneChest("c000000000000018", "Baú 41", 520, 3345),
+    };
+    const sut2 = load({ doors: [home, neighbour], stashes: [far], seed: seed2 });
+    const again = sut2.api.tidyLoose();
+    assert.equal(again.chests, 0, "15 m from the neighbour's house: most likely the neighbour's");
+});
+
+test("a place made for an area goes to the lord of a ceded region, as everything new there does", () => {
+    const shed = makePrivateArea("p-shed2", "WH_TriggerArea34[structures/industrial/sheds/shed_kh_b2_5d4e]", [875, 895, 3195, 3215]);
+    const c1 = makeStash("c000000000000021", { x: 880, y: 3200 });
+    const seed = { c000000000000021: loneChest("c000000000000021", "Baú 51", 880, 3200) };
+    const sut = load({ stashes: [c1], areas: [shed], seed });
+    sut.api.cedeRegion(CROWN, "Suchdol", LORD);
+
+    sut.api.tidyLoose();
+
+    const place = Array.from(sut.api.listProperties()).find((p) => p.name === "Galpão 01");
+    assert.ok(place);
+    assert.equal(place.ownerSteamId, "55", "the lord's, like the rest of the region");
+    const chest = Array.from(sut.api.listProperties()).find((p) => p.name === "Galpão 01 · Baú 1");
+    assert.equal(chest.parentId, place.id);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Access instead of keys (2026-10-28: "ao invés de chaves vamos usar dar acesso: o dono escolhe um jogador; no painel, duas abas, as dele e as que ele tem acesso").
+
+/** Casa 01 (with its chest) handed to Ana. */
+function ownedByAna() {
+    const { sut, find, world } = mapped();
+    const house = find("Casa 01");
+    const chest = find("Casa 01 · Baú 1");
+    const ana = makePlayer("10", "Ana");
+    sut.api.assignOwner(makePlayer("9", "Mauro"), house.id, ana);
+    return { sut, find, world, house, chest, ana, bruno: makePlayer("11", "Bruno"), carla: makePlayer("12", "Carla"), admin: makePlayer("9", "Mauro") };
+}
+
+test("the owner gives a player access: it is the house's, its chest follows it, it is written to the record, and it stands for the key", () => {
+    const { sut, house, chest, ana, bruno, carla } = ownedByAna();
+    assert.equal(sut.api.hasAccess("11", house), false);
+
+    const result = sut.api.grantAccess(ana, house.id, bruno, false);
+
+    assert.equal(result.ok, true);
+    assert.match(result.message, /Bruno agora tem acesso a Casa 01: abre, tranca e destranca as portas e os baús\./);
+    assert.equal(result.steamId, "11");
+    assert.equal(sut.api.hasAccess("11", house), true);
+    assert.equal(sut.api.hasAccess("11", chest), true, "a chest in the house is the house's");
+    assert.equal(sut.api.hasAccess("12", house), false);
+    assert.equal(sut.api.hasAccess("", house), false, "no Steam id, no access");
+    assert.deepEqual(Array.from(sut.api.accessOf(chest), (grant) => grant.name), ["Bruno"], "the chest shows the house's list");
+    assert.deepEqual(Array.from(sut.saved()[house.id].access, (grant) => grant.steamId), ["11"]);
+    assert.ok(!("access" in sut.saved()[chest.id]), "kept on the house alone");
+    assert.equal(sut.addCalls.length, 0, "no key is made");
+
+    assert.equal(sut.api.holdsKeyOf(bruno, house), true, "access stands for the key");
+    assert.equal(sut.api.holdsKeyOf(bruno, chest), true);
+    assert.equal(sut.api.holdsKeyOf(bruno, house, "1000000000000001"), true, "for any door of the house");
+    assert.equal(sut.api.holdsKeyOf(carla, house), false, "and a player with none still has no key");
+});
+
+test("only the owner gives access (an administrator may too), never twice, never to the owner or to a player with no Steam id, and not beyond the limit", () => {
+    const { sut, house, chest, ana, bruno, carla, admin } = ownedByAna();
+    const stranger = makePlayer("13", "Katerina");
+
+    const refused = sut.api.grantAccess(stranger, house.id, bruno, false);
+    assert.equal(refused.ok, false);
+    assert.match(refused.message, /Só o dono pode dar acesso a essa propriedade\./);
+    assert.equal(sut.api.hasAccess("11", house), false);
+
+    assert.equal(sut.api.grantAccess(admin, chest.id, bruno, true).ok, true, "an administrator gives it, and asking through the chest is asking through the house");
+    assert.deepEqual(Array.from(sut.api.accessOf(house), (grant) => grant.steamId), ["11"]);
+    assert.equal(sut.api.grantAccess(bruno, house.id, carla, false).ok, false, "someone with access does not pass it on");
+    assert.match(sut.api.grantAccess(ana, house.id, bruno, false).message, /Bruno já tem acesso a Casa 01\./);
+    assert.match(sut.api.grantAccess(ana, house.id, ana, false).message, /Ana já é o dono de Casa 01\./);
+    assert.match(sut.api.grantAccess(ana, house.id, makePlayer("", "Sem"), false).message, /Sem não tem identificação Steam/);
+    assert.equal(sut.api.grantAccess(ana, "nao-existe", carla, false).message, "Propriedade não encontrada.");
+
+    for (let n = 1; n < sut.api.ACCESS_LIMIT; n += 1) {
+        assert.equal(sut.api.grantAccess(ana, house.id, makePlayer(`2${n}`, `Amigo ${n}`), false).ok, true);
+    }
+    assert.equal(sut.api.accessOf(house).length, sut.api.ACCESS_LIMIT);
+    const full = sut.api.grantAccess(ana, house.id, carla, false);
+    assert.equal(full.ok, false);
+    assert.match(full.message, /Casa 01 já tem 12 pessoas com acesso, o limite\./);
+});
+
+test("a vendor's house is never given access to, whoever asks", () => {
+    const seed = { casa: record({ id: "casa", name: "Casa do Ferreiro", doors: [D1], doorGuid: D1, npc: "Ferreiro", ownerSteamId: "", ownerName: "" }) };
+    const sut = load({ doors: [makeDoor(D1)], seed });
+    const result = sut.api.grantAccess(makePlayer("9", "Mauro"), "casa", makePlayer("11", "Bruno"), true);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /Casa do Ferreiro é a casa de Ferreiro \(NPC\): não se dá acesso a ela\./);
+    assert.deepEqual(Array.from(sut.api.propertiesSharedWith("11")), []);
+});
+
+test("the owner takes access back by its place in the list and the name (a list that moved is read by the name); the last one leaves no field behind", () => {
+    const { sut, house, chest, ana, bruno, carla } = ownedByAna();
+    const stranger = makePlayer("13", "Katerina");
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    sut.api.grantAccess(ana, house.id, carla, false);
+
+    assert.equal(sut.api.revokeAccess(stranger, house.id, 0, "Bruno", false).ok, false);
+    assert.match(sut.api.revokeAccess(stranger, house.id, 0, "Bruno", false).message, /Só o dono pode tirar o acesso\./);
+    assert.equal(sut.api.hasAccess("11", house), true, "a stranger takes nothing");
+
+    const first = sut.api.revokeAccess(ana, house.id, 0, "Bruno", false);
+    assert.equal(first.ok, true);
+    assert.equal(first.steamId, "11");
+    assert.match(first.message, /Bruno não tem mais acesso a Casa 01\./);
+    assert.equal(sut.api.hasAccess("11", house), false);
+    assert.equal(sut.api.hasAccess("12", house), true);
+
+    // Bruno is back at the end of the list; the page, drawn before, still names place 0.
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    const moved = sut.api.revokeAccess(ana, chest.id, 0, "Bruno", false);
+    assert.equal(moved.steamId, "11", "found by the name, through the chest's id");
+    assert.equal(sut.api.hasAccess("12", house), true);
+
+    assert.equal(sut.api.revokeAccess(ana, house.id, 0, "Carla", false).ok, true);
+    assert.ok(!("access" in sut.saved()[house.id]), "an empty list is no field");
+    assert.equal(sut.api.revokeAccess(ana, house.id, 0, "Carla", false).message, "Essa pessoa não tem mais acesso.");
+});
+
+test("whoever was given access may let go of it, once", () => {
+    const { sut, house, ana, bruno } = ownedByAna();
+    sut.api.grantAccess(ana, house.id, bruno, false);
+
+    const done = sut.api.leaveAccess("11", house.id);
+    assert.equal(done.ok, true);
+    assert.equal(done.message, "Você deixou de ter acesso a Casa 01.");
+    assert.equal(sut.api.hasAccess("11", house), false);
+    assert.equal(sut.api.leaveAccess("11", house.id).message, "Você não tem acesso a essa propriedade.");
+    assert.equal(sut.api.leaveAccess("11", "nao-existe").message, "Propriedade não encontrada.");
+});
+
+test("what a player was given access to is the houses with their chests, sorted, and nothing that is theirs or only the chest of a house they are not in", () => {
+    const { sut, find, house, ana, bruno, carla } = ownedByAna();
+    const other = find("Casa 02");
+    sut.api.assignOwner(makePlayer("9", "Mauro"), other.id, carla);
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    sut.api.grantAccess(carla, other.id, bruno, false);
+
+    const shared = Array.from(sut.api.propertiesSharedWith("11"), (property) => property.name);
+    assert.ok(shared.includes("Casa 01") && shared.includes("Casa 02") && shared.includes("Casa 01 · Baú 1"), shared.join("|"));
+    assert.equal(shared.indexOf("Casa 01") < shared.indexOf("Casa 01 · Baú 1"), true, "the house, then its chest");
+    assert.deepEqual(Array.from(sut.api.propertiesSharedWith("12"), (property) => property.name), [], "Carla was given none");
+    assert.deepEqual(Array.from(sut.api.propertiesSharedWith("")), []);
+    assert.deepEqual(Array.from(sut.api.propertiesOwnedBy("11")), [], "access is no ownership");
+});
+
+test("the access an owner gave goes when the property changes hands, is taken off, or its owner's character is deleted; what a deleted character was given goes with them", () => {
+    const { sut, house, ana, bruno, carla, admin } = ownedByAna();
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    sut.api.grantAccess(ana, house.id, carla, false);
+
+    // Handed to Carla: the access Ana gave is Ana's, and goes.
+    assert.equal(sut.api.assignOwner(admin, house.id, carla).ok, true);
+    assert.deepEqual(Array.from(sut.api.accessOf(house)), []);
+    assert.ok(!("access" in sut.saved()[house.id]));
+
+    // Taken off: the same.
+    sut.api.grantAccess(carla, house.id, bruno, false);
+    assert.equal(sut.api.clearOwner(house.id).ok, true);
+    assert.deepEqual(Array.from(sut.api.accessOf(house)), []);
+    assert.match(sut.api.clearOwner(house.id).message, /já está sem dono/);
+
+    // A deleted character: its own properties lose their lists, and so does what it was given elsewhere.
+    sut.api.assignOwner(admin, house.id, ana);
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    const gone = sut.api.releaseAllOf("11");
+    assert.equal(gone.properties, 0, "Bruno owned nothing");
+    assert.equal(sut.api.hasAccess("11", house), false, "what Bruno was given goes with him");
+    assert.equal(sut.api.propertiesSharedWith("11").length, 0);
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    assert.equal(sut.api.releaseAllOf("10").properties >= 1, true);
+    assert.deepEqual(Array.from(sut.api.accessOf(house)), [], "and what Ana gave goes with her");
+});
+
+test("access is read back as it was saved, with a list that is not one, a repeat, an empty id and anything past the limit left out; a renamed character is renamed in it", () => {
+    const { sut, house, ana, bruno } = ownedByAna();
+    sut.api.grantAccess(ana, house.id, bruno, false);
+    const saved = sut.saved();
+
+    saved[house.id].access.push({ steamId: "11", name: "Repetido", at: 1 }, { steamId: "", name: "Sem id", at: 1 }, "lixo", null, { steamId: 5 });
+    for (let n = 0; n < 30; n += 1) {
+        saved[house.id].access.push({ steamId: `3${n}`, name: `Extra ${n}`, at: n });
+    }
+    saved["casa-bau-fantasma"] = record({ id: "casa-bau-fantasma", name: "Outra", kind: "house", doors: [], doorGuid: "", access: "nada" });
+    sut.files.set("playerdata/properties.json", JSON.stringify(saved));
+
+    const reread = load({ ...village(), seed: saved });
+    const list = Array.from(reread.api.accessOf(reread.api.getProperty(house.id)), (grant) => grant.steamId);
+    assert.equal(list.length, reread.api.ACCESS_LIMIT);
+    assert.deepEqual(list.slice(0, 3), ["11", "30", "31"]);
+    assert.equal(new Set(list).size, list.length, "each player once");
+    assert.deepEqual(Array.from(reread.api.accessOf(reread.api.getProperty("casa-bau-fantasma"))), []);
+
+    // The name follows the character, as the owner's does.
+    bruno.characterName = "Bruno Sedlak";
+    reread.api.noteNickname(bruno);
+    assert.equal(reread.api.accessOf(reread.api.getProperty(house.id))[0].name, "Bruno Sedlak");
 });

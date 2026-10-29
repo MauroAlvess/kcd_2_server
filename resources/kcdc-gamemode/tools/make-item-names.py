@@ -20,6 +20,13 @@ OUT = Path(__file__).resolve().parent.parent / "data" / "item-names.json"
 # Classes nobody carries or hands over.
 SKIP_CLASSES = {"NPCTool", "QuestItem", "ItemAlias", "DiceBadge"}
 
+# Names the game's own texts get wrong, by the text's key (user, 2026-10-24: "as cotoveleiras em forma de folha na real são de joelhos e não
+# braço; esse erro fez jogadores fabricarem errado"). `LegsPlate07` is a piece of the leg armour -- the game's English calls it "Leaf-shaped
+# couters", elbow guards, and the Portuguese follows -- and it was listed, and forged, with the arms.
+NAME_FIXES = {
+    "ui_nm_legsplate07_m01": "Joelheiras em forma de folha",
+}
+
 
 def translated(language: str) -> dict[str, str]:
     """Key -> the translated cell of the game's item texts (the second cell is the English source, the third the translation)."""
@@ -55,7 +62,7 @@ def main() -> None:
     for guid, item in items().items():
         if item["class"] in SKIP_CLASSES:
             continue
-        name = names.get(item["ui"], "")
+        name = NAME_FIXES.get(item["ui"].lower(), names.get(item["ui"], ""))
         if name and not name.startswith("@"):
             table[guid] = name
     OUT.parent.mkdir(exist_ok=True)

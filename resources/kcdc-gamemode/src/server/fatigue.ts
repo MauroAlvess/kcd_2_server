@@ -74,6 +74,8 @@ interface Look {
 export class FatiguePace {
     private readonly reports = new Map<number, Report>();
     private readonly looks = new Map<number, Look>();
+    /** Bodies a script has put in a seat or a bed (`furniture.ts`): rested as said, whatever the stance tag. */
+    private readonly held = new Map<number, Posture>();
 
     constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -82,9 +84,22 @@ export class FatiguePace {
         this.reports.set(playerId, { tag, asleep, at: this.now() });
     }
 
+    /** A script has put the body in a seat or a bed, or (null) taken it out again. */
+    hold(playerId: number, posture: Posture | null): void {
+        if (posture === null || posture === "up") {
+            this.held.delete(playerId);
+        } else {
+            this.held.set(playerId, posture);
+        }
+    }
+
     /** How the player is resting now, as last said; "up" when nothing fresh was said. */
     posture(playerId: number): { readonly posture: Posture; readonly tag: number | null } {
         const report = this.reports.get(playerId);
+        const held = this.held.get(playerId);
+        if (held !== undefined) {
+            return { posture: held, tag: report?.tag ?? null };
+        }
         if (report === undefined || this.now() - report.at > REPORT_FRESH_MS) {
             return { posture: "up", tag: report?.tag ?? null };
         }
@@ -142,6 +157,7 @@ export class FatiguePace {
         for (const id of [...this.reports.keys()]) {
             if (!present.has(id)) {
                 this.reports.delete(id);
+                this.held.delete(id);
             }
         }
     }

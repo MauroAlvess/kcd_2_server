@@ -1,4 +1,4 @@
-// Packs the pages of this resource for the players: the status panel and the character creator.
+// Packs the pages of this resource for the players: the status panel, the character creator, the free camera page and the chat.
 //
 // `ui-src/<page>.html` is the page as it is written and read, comments and indentation included. What travels to every
 // joining player is `ui/<page>.html`, which this script writes from it: comments and indentation are the part of a page
@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
 /** The pages: each is written in ui-src/<name>.html and packed into ui/<name>.html. */
-export const PAGES = ["status", "creator", "freecam"];
+export const PAGES = ["status", "creator", "freecam", "chat", "craft", "emotes", "voice", "welcome", "mural"];
 
 const note = (name) => `<!-- Written by scripts/pack-ui.mjs from ui-src/${name}.html: edit that one. -->`;
 

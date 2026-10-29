@@ -1,5 +1,5 @@
 import type { Command, CommandContext } from "../command.js";
-import { getCharacter, saveCharacter } from "../characters.js";
+import { allCharacters, askRedo, getCharacter, redoPending, saveCharacter } from "../characters.js";
 import { closeCreatorFor, openCreatorFor, tuneCreatorFor } from "../creator.js";
 import { isAdmin } from "../auth.js";
 import { ensureStarter } from "../kits.js";
@@ -100,10 +100,44 @@ function tuneCamera(context: CommandContext): void {
     Chat.sendToPlayer(player, "Câmera do criador: ajustada (o jogo mostra os valores); vale já num criador aberto e nos próximos.");
 }
 
+/**
+ * `/creator refazer <jogador>`: an administrator asks for somebody's character to be made again. Online, the creator opens for
+ * them now; otherwise at their next entry. Found by the name of the character, the nickname or the Steam id.
+ */
+function redoFor(context: CommandContext): void {
+    const { player, args } = context;
+    if (!isAdmin(player)) {
+        Chat.sendToPlayer(player, "Pedir para alguém refazer o personagem é só do administrador.");
+        return;
+    }
+    const wanted = args.slice(1).join(" ").trim();
+    if (wanted === "") {
+        const waiting = redoPending();
+        Chat.sendToPlayer(player, waiting.length === 0 ? "Ninguém está esperando para refazer o personagem. /creator refazer <jogador>" : `Vão refazer o personagem na próxima entrada: ${waiting.map((entry) => entry.name).join(", ")}.`);
+        return;
+    }
+    const key = wanted.toLowerCase();
+    const matches = allCharacters().filter((entry) => entry.steamId === wanted || entry.name.toLowerCase() === key || entry.nickname.toLowerCase() === key);
+    if (matches.length !== 1) {
+        Chat.sendToPlayer(player, matches.length === 0 ? `Nenhum personagem chamado "${wanted}".` : `Mais de um personagem com "${wanted}": use o Steam id.`);
+        return;
+    }
+    const target = matches[0]!;
+    askRedo(target.steamId);
+    const online = Player.all().find((other) => other.steamId === target.steamId);
+    if (online !== undefined) {
+        Chat.sendToPlayer(online, "A administração pediu que você refaça o seu personagem.");
+        openCreatorFor(online, "both");
+        Chat.sendToPlayer(player, `${target.name} está refazendo o personagem agora.`);
+        return;
+    }
+    Chat.sendToPlayer(player, `${target.name} vai refazer o personagem na próxima vez que entrar.`);
+}
+
 export const creatorCommand: Command = {
     name: "creator",
     summary: "Abre o criador de personagem: visual, nome e alcunha. `nativo` abre o criador do próprio jogo.",
-    usage: ["/creator [male|female|both]", "/creator nativo [male|female|both]", "/creator stop", "/creator camera [distancia] [figura] [fov] [altura] [luz]  (admin)", "/creator camera padrao  (admin)"],
+    usage: ["/creator [male|female|both]", "/creator nativo [male|female|both]", "/creator stop", "/creator camera [distancia] [figura] [fov] [altura] [luz]  (admin)", "/creator camera padrao  (admin)", "/creator refazer [jogador]  (admin) -- o jogador refaz o personagem (agora, ou na próxima entrada)"],
     run(context: CommandContext): void {
         const { player, args } = context;
         if (args[0] === "stop") {
@@ -117,6 +151,11 @@ export const creatorCommand: Command = {
 
         if (args[0] === "camera") {
             tuneCamera(context);
+            return;
+        }
+
+        if (args[0] === "refazer") {
+            redoFor(context);
             return;
         }
 

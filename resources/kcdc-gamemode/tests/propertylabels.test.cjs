@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -19,7 +20,8 @@ function load({ ready = true } = {}) {
     const screens = [];
     const hints = [];
     const keys = new Map();
-    const me = { ready, alive: true };
+    // The player's body at the origin: a hit is as far from it as its `distance` says (2026-10-22: the reach is the body's, not the camera's).
+    const me = { ready, alive: true, position: { x: 0, y: 0, z: 0 } };
 
     const makeField = (options) => {
         const field = { options, style: null, text: "", visible: null, setTextStyle(style) { this.style = style; return true; }, setText(text) { this.text = text; return true; }, set(values) { if ("visible" in values) this.visible = values.visible; return true; } };
@@ -42,6 +44,7 @@ function load({ ready = true } = {}) {
                 return hints.length;
             },
             remove: (id) => { hints[id - 1].removed = true; return true; },
+            setText: (id, text) => { hints[id - 1].spec = { ...hints[id - 1].spec, text }; return true; },
             isKeyInUse: (key) => { if (state.promptThrows) throw new Error("no such control"); return state.gameKeys.has(key); },
         },
         World: { raycastAll: () => state.hits },
@@ -66,14 +69,18 @@ function load({ ready = true } = {}) {
     };
     const interaction = {};
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/interaction.js"), "utf8"), { exports: interaction });
-    context.require = (name) => { assert.equal(name, "./interaction.js"); return interaction; };
+    // The cart beside the player, as src/client/carts.ts says it (the E is then the cart's).
+    const carts = { cartIsNear: () => state.cartNear === true };
+    // The players of a dice match, as src/client/dice-quiet.ts says it (nobody's to talk to).
+    const dice = { playingDice: (id) => state.dicePlayers?.has(id) === true };
+    context.require = (name) => (name === "./interaction.js" ? interaction : name === "./carts.js" ? carts : name === "./dice-quiet.js" ? dice : assert.fail(`unexpected ${name}`));
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/property-labels.js"), "utf8"), context);
     context.exports.installPropertyLabels();
 
     const tick = () => timers[0].fn();
-    const hit = (guid, over = {}) => ({ distance: 1.5, entityGuid: guid, entityClass: "AnimDoor", ...over });
+    const hit = (guid, over = {}) => ({ distance: over.distance ?? 1.5, position: { x: over.distance ?? 1.5, y: 0, z: 0 }, entityGuid: guid, entityClass: "AnimDoor", ...over });
     const answer = (guid, label) => events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid, label }));
-    const body = (id, over = {}) => ({ distance: 1.8, entityGuid: "ffffffffffffffff", entityClass: "PlayerEntity", player: { id, local: false }, ...over });
+    const body = (id, over = {}) => ({ distance: over.distance ?? 1.8, position: { x: over.distance ?? 1.8, y: 0, z: 0 }, entityGuid: "ffffffffffffffff", entityClass: "PlayerEntity", player: { id, local: false }, ...over });
     const named = (id, label) => events.get(`${RESOURCE}:players.label`)(JSON.stringify({ id, label }));
     const main = () => fields[fields.length - 1];
     const shadow = () => fields[fields.length - 2];
@@ -103,7 +110,7 @@ test("the text is the game's own font, white, centred, with a dark shadow under 
     assert.equal(sut.timers[0].ms, 150);
 });
 
-test("looking at a door asks the server once, and shows the answer under the crosshair until the look moves off", () => {
+test("looking at a door asks the server once and writes its name under the crosshair, with a shadow, until the look moves off", () => {
     const sut = load();
     openScreen(sut);
     sut.state.hits = [sut.hit("a1b2c3d4e5f60718")];
@@ -115,10 +122,10 @@ test("looking at a door asks the server once, and shows the answer under the cro
 
     sut.answer("a1b2c3d4e5f60718", "Casa 03 - Hans");
     sut.tick();
+    assert.equal(sut.main().visible, true, "the name of a door is back (user, 2026-10-19)");
     assert.equal(sut.main().text, "Casa 03 - Hans");
-    assert.equal(sut.shadow().text, "Casa 03 - Hans");
-    assert.equal(sut.main().visible, true);
     assert.equal(sut.shadow().visible, true);
+    assert.equal(sut.shadow().text, "Casa 03 - Hans");
     assert.equal(sut.emitted.length, 1, "and it is not asked again while it is known");
 
     sut.state.hits = [];
@@ -157,13 +164,14 @@ test("an answer is kept for half a minute and then asked again, and a chest behi
     sut.answer("aaaaaaaaaaaaaaaa", "");
     sut.answer("bbbbbbbbbbbbbbbb", "Casa 01 · Baú 1");
     sut.tick();
-    assert.equal(sut.main().text, "Casa 01 · Baú 1", "the first thing that has a name wins");
+    assert.equal(sut.main().text, "Casa 01 · Baú 1", "a chest's name is written too");
+    assert.equal(sut.main().visible, true);
 
     sut.clock.now += 31_000;
     sut.emitted.length = 0;
     sut.tick();
     assert.ok(sut.emitted.some((entry) => entry.payload.guid === "bbbbbbbbbbbbbbbb"), "an old answer is asked again");
-    assert.equal(sut.main().text, "Casa 01 · Baú 1", "and the old one shows meanwhile");
+    assert.equal(sut.main().text, "Casa 01 · Baú 1", "the old name stays up while the new answer comes");
 });
 
 test("nothing is drawn, asked or even opened while the player is not in the world yet", () => {
@@ -224,6 +232,36 @@ test("another player close by is asked about once, named under the crosshair, an
     sut.tick();
     assert.equal(sut.hints[0].removed, true, "the key goes with the look");
     assert.equal(sut.main().visible, false);
+});
+
+test("a player in a dice match has neither a name nor the talk key, nor is asked about, while the others keep both (2026-10-20)", () => {
+    const sut = load();
+    openScreen(sut);
+    sut.named(7, "Desconhecido");
+    sut.named(8, "Desconhecido");
+    sut.state.hits = [sut.body(7)];
+    sut.tick();
+    assert.equal(sut.hints.length, 1, "before the match, the hint");
+    assert.equal(sut.main().text, "Desconhecido");
+
+    sut.state.dicePlayers = new Set([7]);
+    sut.tick();
+    assert.equal(sut.hints[0].removed, true, "the key goes the moment the server says they play");
+    assert.equal(sut.main().visible, false, "and so does the name");
+    sut.tick();
+    assert.equal(sut.hints.length, 1, "no new one");
+    assert.equal(sut.asked("players.peek").length, 0, "the player of a match is not even asked about");
+
+    sut.state.hits = [sut.body(8)];
+    sut.tick();
+    assert.equal(sut.hints.length, 2, "somebody else under the crosshair is still talked to");
+    assert.equal(sut.main().text, "Desconhecido");
+
+    assert.equal(sut.interaction.getPersonInView(), 8);
+    sut.state.dicePlayers = new Set();
+    sut.state.hits = [sut.body(7)];
+    sut.tick();
+    assert.equal(sut.interaction.getPersonInView(), 7, "the match over, they are people again");
 });
 
 test("while the talk key is up for somebody, the dice table's key gives way to it", () => {
@@ -361,7 +399,7 @@ test("a garbled answer is ignored, and the screen is closed with the resource", 
     assert.equal(sut.screens[0].closed, true);
 });
 
-test("a door or chest of a property gets no hint of ours: the game's own Abrir is the one thing on offer there", () => {
+test("a door or chest of a property gets its name under the crosshair, and no hint of ours until the server says F may work it", () => {
     const sut = load();
     openScreen(sut);
     sut.state.hits = [sut.hit("a1b2c3d4e5f60718")];
@@ -369,8 +407,9 @@ test("a door or chest of a property gets no hint of ours: the game's own Abrir i
     sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid: "a1b2c3d4e5f60718", label: "Casa 03", use: true }));
     sut.tick();
 
-    assert.equal(sut.main().text, "Casa 03", "the name is still written under the crosshair");
-    assert.equal(sut.hints.length, 0, "no [E] of ours beside the game's own");
+    assert.equal(sut.main().text, "Casa 03", "the name under the crosshair");
+    assert.equal(sut.main().visible, true);
+    assert.equal(sut.hints.length, 0, "no [E] of ours beside the game's own, and no [F] without the server's word");
 });
 
 test("E pressed at a property in reach is told to the server, for a client whose door the game does not report", () => {
@@ -382,7 +421,7 @@ test("E pressed at a property in reach is told to the server, for a client whose
     sut.tick();
 
     sut.pressE();
-    assert.deepEqual(sut.asked("props.use"), [{ name: `${RESOURCE}:props.use`, payload: { guid: "a1b2c3d4e5f60718", prompt: false } }]);
+    assert.deepEqual(sut.asked("props.use"), [{ name: `${RESOURCE}:props.use`, payload: { guid: "a1b2c3d4e5f60718", use: false } }]);
     sut.pressE();
     assert.equal(sut.asked("props.use").length, 1, "a second press at once is the same one");
     sut.clock.now += 700;
@@ -425,11 +464,11 @@ test("E is not told to the server at what is no property, behind somebody, while
 test("while the free camera flies, nothing is written and no hint is up", () => {
     const sut = load();
     openScreen(sut);
-    sut.state.hits = [sut.hit("a1b2c3d4e5f60718")];
+    sut.state.hits = [sut.body(7)];
     sut.tick();
-    sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid: "a1b2c3d4e5f60718", label: "Casa 03", use: true }));
+    sut.named(7, "Desconhecido");
     sut.tick();
-    assert.equal(sut.main().visible, true);
+    assert.equal(sut.main().visible, true, "a person under the crosshair is named");
 
     sut.state.flying = true;
     sut.tick();
@@ -442,10 +481,11 @@ test("while the free camera flies, nothing is written and no hint is up", () => 
 });
 
 // ---------------------------------------------------------------------------------------------
-// The look: the door of a property under the crosshair is told to the server, and where the server holds it locked
-// (and the game offers nothing) our own "Abrir" takes the game's place.
+// The look: the door or chest of a property under the crosshair is told to the server, which says what F does there
+// (user, 2026-10-19: "o E é apenas abrir, o F destrancar ou trancar").
 
 const DOOR_GUID = "a1b2c3d4e5f60718";
+const CHEST_GUID = "c0c0c0c0c0c0c0c0";
 
 /** The player looks at a door of a property that the server has named, and the first beat has been. */
 function atDoor(options) {
@@ -455,232 +495,148 @@ function atDoor(options) {
     sut.tick();
     sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid: DOOR_GUID, label: "Casa 03", use: true, door: true }));
     sut.tick();
-    const held = (guid) => sut.events.get(`${RESOURCE}:props.gazed`)(JSON.stringify({ guid }));
-    return { sut, held };
+    const can = (guid, lock) => sut.events.get(`${RESOURCE}:props.can`)(JSON.stringify({ guid, lock }));
+    const lockHints = () => sut.hints.filter((one) => one.spec.key === "attack_special" && !one.removed);
+    return { sut, can, lockHints };
 }
 
-test("the door under the crosshair is told to the server, again every 700 ms while the look lasts, and told when it moves off", () => {
+test("the part under the crosshair, door or chest, is told to the server, again every 700 ms while the look lasts, and once when it moves off", () => {
     const { sut } = atDoor();
-    assert.deepEqual(sut.asked("props.gaze").map((entry) => entry.payload), [{ guid: DOOR_GUID }]);
+    const looks = () => sut.asked("props.look").map((entry) => entry.payload.guid);
+    assert.deepEqual(looks(), [DOOR_GUID]);
+    sut.clock.now += 300;
+    sut.tick();
+    assert.deepEqual(looks(), [DOOR_GUID], "not again so soon");
+    sut.clock.now += 500;
+    sut.tick();
+    assert.deepEqual(looks(), [DOOR_GUID, DOOR_GUID], "again while it lasts");
 
-    sut.clock.now += 150;
+    sut.state.hits = [sut.hit(CHEST_GUID, { entityClass: "Stash" })];
     sut.tick();
-    sut.clock.now += 150;
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").length, 1, "not at every beat");
-
-    sut.clock.now += 450;
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").length, 2, "said again, so that the server does not let the door go");
-
-    sut.state.hits = [];
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: "" });
-    sut.tick();
-    sut.clock.now += 5_000;
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").length, 3, "and nothing more once it has been said");
-});
-
-test("a new door is not told faster than the server takes a look, and a look that ends is told at once", () => {
-    const { sut } = atDoor();
-    const OTHER = "b2c3d4e5f6071829";
-    sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid: OTHER, label: "Casa 04", use: true, door: true }));
-    sut.clock.now += 150;
-    sut.state.hits = [sut.hit(OTHER)];
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").length, 1, "150 ms after the last: it waits for the next beat");
-    sut.clock.now += 150;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: OTHER });
-
-    sut.clock.now += 50;
-    sut.state.hits = [];
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: "" }, "a release does not wait");
-});
-
-test("a chest, a property that is not a door, a person or the free camera are no look at a door", () => {
-    const sut = load();
-    openScreen(sut);
-    const label = (guid, door) => sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid, label: "Casa 01 · Baú 1", use: true, door }));
-
-    sut.state.hits = [sut.hit("cccccccccccccccc")];
-    sut.tick();
-    label("cccccccccccccccc", false);
-    sut.tick();
-    sut.clock.now += 1_000;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze"), [], "a chest is not held for a look");
-
-    sut.state.hits = [sut.body(7), sut.hit(DOOR_GUID)];
-    label(DOOR_GUID, true);
-    sut.named(7, "Desconhecido");
-    sut.clock.now += 1_000;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze"), [], "a person in front of the door comes first");
-
-    sut.state.hits = [sut.hit(DOOR_GUID, { distance: 1.5 })];
-    sut.clock.now += 1_000;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: DOOR_GUID });
-    sut.state.flying = true;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: "" }, "a flight is no look");
-});
-
-test("a door the server holds gets our own Abrir once the game's prompt is gone, never beside it, and it goes with the look", () => {
-    const { sut, held } = atDoor();
-    held(DOOR_GUID);
-    sut.state.gameKeys.add("use");
-    sut.tick();
-    assert.equal(sut.hints.length, 0, "the game's own prompt is still up: the lock has not reached its door");
-
-    sut.state.gameKeys.clear();
-    sut.tick();
-    assert.equal(sut.hints.length, 1);
-    assert.deepEqual({ ...sut.hints[0].spec }, { key: "primary_action", text: "Abrir" }, "the game's own key and its own word");
-    assert.ok(sut.logs.some((line) => /a dica "Abrir" própria subiu na porta a1b2c3d4e5f60718/.test(line)));
-
-    // its own presence is not taken for the game's: no flapping while the look lasts
-    sut.state.gameKeys.add("primary_action");
-    sut.tick();
-    sut.tick();
-    assert.equal(sut.hints.length, 1);
-    assert.equal(sut.hints[0].removed, false);
-
-    sut.state.hits = [];
-    sut.tick();
-    assert.equal(sut.hints[0].removed, true);
-});
-
-test("the press of our Abrir is the E told to the server, and the hint and the key are one press", () => {
-    const { sut, held } = atDoor();
-    held(DOOR_GUID);
-    sut.tick();
-    sut.state.gameKeys.add("primary_action");
-    sut.hints[0].fn();
-    assert.deepEqual(sut.asked("props.use"), [{ name: `${RESOURCE}:props.use`, payload: { guid: DOOR_GUID, prompt: false } }], "our own Abrir on the key is not the game's prompt");
-    sut.pressE();
-    assert.equal(sut.asked("props.use").length, 1, "the key pressed with it is the same press");
-    sut.state.inDialogue = true;
-    sut.clock.now += 700;
-    sut.hints[0].fn();
-    assert.equal(sut.asked("props.use").length, 1, "not with a menu on screen");
-});
-
-test("no hint of ours where the server does not hold the door: no word, another door, an old word, or a door let go", () => {
-    const { sut, held } = atDoor();
-    sut.tick();
-    assert.equal(sut.hints.length, 0, "the server said nothing");
-
-    held("b2c3d4e5f6071829");
-    sut.tick();
-    assert.equal(sut.hints.length, 0, "it holds another door");
-
-    held(DOOR_GUID);
-    sut.tick();
-    assert.equal(sut.hints.length, 1);
-    held("");
-    sut.tick();
-    assert.equal(sut.hints[0].removed, true, "let go: the game's own prompt is back");
-
-    held(DOOR_GUID);
-    sut.tick();
-    assert.equal(sut.hints.length, 2);
-    sut.clock.now += 2_600;
-    sut.tick();
-    assert.equal(sut.hints[1].removed, true, "a word not said again is not believed for ever");
-});
-
-test("a word from the server that is not a door's guid or empty changes nothing", () => {
-    const { sut } = atDoor();
-    const said = (payload) => sut.events.get(`${RESOURCE}:props.gazed`)(payload);
-    said("not json");
-    said(JSON.stringify({ guid: 5 }));
-    said(JSON.stringify({ guid: "../../etc" }));
-    said(JSON.stringify({}));
-    sut.tick();
-    assert.equal(sut.hints.length, 0);
-});
-
-test("a game prompt that stays up at a held door lets the hold go for that look: the server is told which door, and it is not told again until the look leaves", () => {
-    const { sut, held } = atDoor();
-    held(DOOR_GUID);
-    sut.state.gameKeys.add("use");
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").filter((entry) => entry.payload.released).length, 0, "a moment is allowed for the lock to arrive");
-    sut.clock.now += 700;
-    held(DOOR_GUID);
-    sut.tick();
-    assert.equal(sut.asked("props.gaze").filter((entry) => entry.payload.released).length, 0, "still within it");
-
-    sut.clock.now += 150;
-    sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: "", released: DOOR_GUID });
-    const said = sut.logs.filter((line) => /o "Abrir" do jogo continua na tela .*a trava foi solta/.test(line));
-    assert.equal(said.length, 1);
-    assert.match(said[0], /a1b2c3d4e5f60718/);
-    assert.equal(sut.hints.length, 0, "no hint of ours beside the game's");
-
-    // the look stays: the door is not told again, nothing more is said
-    const count = sut.asked("props.gaze").length;
-    held("");
-    for (let beat = 0; beat < 10; beat += 1) {
-        sut.clock.now += 150;
-        sut.tick();
-    }
-    assert.equal(sut.asked("props.gaze").length, count);
-
-    // the look leaves and comes back: told again, and the log does not repeat itself
-    sut.state.hits = [];
-    sut.tick();
-    sut.state.hits = [sut.hit(DOOR_GUID)];
+    sut.events.get(`${RESOURCE}:props.label`)(JSON.stringify({ guid: CHEST_GUID, label: "Baú 1", use: true }));
     sut.clock.now += 400;
     sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: DOOR_GUID });
-    held(DOOR_GUID);
-    sut.clock.now += 900;
+    assert.equal(looks().at(-1), CHEST_GUID, "a chest too");
+
+    sut.state.hits = [];
+    sut.clock.now += 100;
     sut.tick();
-    assert.deepEqual(sut.asked("props.gaze").at(-1).payload, { guid: "", released: DOOR_GUID });
-    assert.equal(sut.logs.filter((line) => /a trava foi solta/.test(line)).length, 1);
+    sut.tick();
+    assert.deepEqual(looks().slice(looks().lastIndexOf(CHEST_GUID) + 1), [""], "the end of a look is told once");
 });
 
-test("E with the game's own prompt on the screen says so to the server", () => {
-    const { sut, held } = atDoor();
-    held(DOOR_GUID);
+test("the server's word puts [F] Trancar or [F] Destrancar up at that part only; its press asks to work it, and it goes with the look", () => {
+    const { sut, can, lockHints } = atDoor();
+    assert.equal(lockHints().length, 0, "nothing of ours before the server says so");
+    can(DOOR_GUID, "lock");
+    sut.tick();
+    assert.equal(lockHints().length, 1);
+    assert.equal(lockHints()[0].spec.text, "Trancar", "on F (attack_special): the E stays the door's");
+    lockHints()[0].fn();
+    assert.deepEqual(sut.asked("props.toggle").map((entry) => entry.payload), [{ guid: DOOR_GUID }]);
+
+    can(DOOR_GUID, "unlock");
+    sut.tick();
+    assert.equal(lockHints().length, 1, "the same hint");
+    assert.equal(lockHints()[0].spec.text, "Destrancar", "with the other word");
+
+    sut.state.hits = [];
+    sut.tick();
+    assert.equal(lockHints().length, 0, "the look moved off");
+    sut.state.hits = [sut.hit(DOOR_GUID)];
+    sut.tick();
+    assert.equal(lockHints().length, 1, "back at the part, back up");
+    can(DOOR_GUID, "");
+    sut.tick();
+    assert.equal(lockHints().length, 0, "the server took it back (no key any more)");
+    can("c0c0c0c0c0c0c0c0", "lock");
+    sut.tick();
+    assert.equal(lockHints().length, 0, "a word about another part is not this one's");
+});
+
+test("a word from the server that is not a part's guid, or not lock or unlock, changes nothing", () => {
+    const { sut, can, lockHints } = atDoor();
+    can("not-a-guid", "lock");
+    can(DOOR_GUID, "open");
+    sut.tick();
+    assert.equal(lockHints().length, 0);
+});
+
+test("E with the game's own Abrir on the screen says so to the server (that is how inside is told, where nothing else says)", () => {
+    const { sut } = atDoor();
     sut.state.gameKeys.add("use");
-    sut.tick();
     sut.pressE();
-    assert.deepEqual(sut.asked("props.use").at(-1).payload, { guid: DOOR_GUID, prompt: true });
+    assert.deepEqual(sut.asked("props.use").map((entry) => entry.payload), [{ guid: DOOR_GUID, use: true }]);
+    sut.state.promptThrows = true;
+    sut.clock.now += 700;
+    sut.pressE();
+    assert.deepEqual(sut.asked("props.use").at(-1).payload, { guid: DOOR_GUID, use: false }, "a game that cannot say counts as no prompt");
 });
 
-test("a game that cannot say what prompts are up lets the hold go rather than guess, and one without the control is told once", () => {
-    const blind = atDoor();
-    blind.sut.state.promptThrows = true;
-    blind.held(DOOR_GUID);
-    blind.sut.tick();
-    assert.equal(blind.sut.hints.length, 0, "no hint of ours: the game's own prompt may be up");
-    blind.sut.clock.now += 900;
-    blind.sut.tick();
-    assert.deepEqual(blind.sut.asked("props.gaze").at(-1).payload, { guid: "", released: DOOR_GUID }, "the door works the old way, nobody shut in");
-
-    const broken = atDoor();
-    broken.sut.state.hintThrows = true;
-    broken.held(DOOR_GUID);
-    broken.sut.tick();
-    broken.sut.tick();
-    broken.sut.tick();
-    assert.equal(broken.sut.hints.length, 0);
-    assert.equal(broken.sut.errors.length, 1);
-    assert.match(broken.sut.errors[0], /door hint could not be put up: .*no such control/);
+test("a game without the F control still works the E, and says so once", () => {
+    const { sut, can } = atDoor();
+    sut.state.hintThrows = true;
+    can(DOOR_GUID, "lock");
+    sut.tick();
+    sut.tick();
+    assert.equal(sut.errors.filter((line) => /lock hint could not be put up/.test(line)).length, 1);
+    sut.pressE();
+    assert.equal(sut.asked("props.use").length, 1);
 });
 
-test("with the resource the door hint comes down", () => {
-    const { sut, held } = atDoor();
-    held(DOOR_GUID);
+test("with the resource the lock hint comes down", () => {
+    const { sut, can, lockHints } = atDoor();
+    can(DOOR_GUID, "unlock");
+    sut.tick();
+    assert.equal(lockHints().length, 1);
+    sut.events.get("resourceStop")(RESOURCE);
+    assert.equal(lockHints().length, 0);
+});
+
+test("beside a cart the talk key stays down, so the E is the cart's; it comes back once the cart is left behind", () => {
+    const sut = load();
+    openScreen(sut);
+    sut.state.hits = [sut.body(7)];
+    sut.tick();
+    sut.named(7, "Desconhecido");
+    sut.state.cartNear = true;
+    sut.tick();
+    assert.equal(sut.main().text, "Desconhecido", "the name is still written");
+    assert.equal(sut.hints.length, 0, "but no talk key over \"Subir na carroça\"");
+
+    sut.state.cartNear = false;
     sut.tick();
     assert.equal(sut.hints.length, 1);
-    sut.events.get("resourceStop")(RESOURCE);
-    assert.equal(sut.hints[0].removed, true);
+    sut.state.cartNear = true;
+    sut.tick();
+    assert.equal(sut.hints[0].removed, true, "taken down when a cart comes near");
+});
+
+test("a door, a chest or a person is read within two metres of the BODY, the one reach of our prompts; the camera's own distance does not count (2026-10-22)", () => {
+    const sut = load();
+    openScreen(sut);
+    // In the mod's third person the camera is 3.5 m behind the body: the ray starts there, and the door is 5.3 m along it, 1.8 m from the player.
+    sut.state.ray = { origin: { x: -3.5, y: 0, z: 1.6 }, direction: { x: 1, y: 0, z: 0 }, target: { x: 6.5, y: 0, z: 1.6 } };
+    sut.state.hits = [sut.hit("a1b2c3d4e5f60718", { distance: 5.3, position: { x: 1.8, y: 0, z: 1 } })];
+    sut.tick();
+    assert.deepEqual(sut.emitted.map((entry) => entry.payload.guid), ["a1b2c3d4e5f60718"], "read from behind, as in first person");
+
+    const far = load();
+    openScreen(far);
+    far.state.hits = [far.hit("9999999999999999", { distance: 2.4 })];
+    far.tick();
+    assert.deepEqual(far.emitted, [], "2.4 m from the body is out of reach (it was 2.8 from the camera)");
+    far.state.hits = [far.hit("9999999999999999", { distance: 1.95 })];
+    far.tick();
+    assert.equal(far.emitted.length, 1, "inside two metres it is read");
+
+    const person = load();
+    openScreen(person);
+    person.named(5, "Radovan");
+    person.state.hits = [person.body(5, { distance: 2.4 })];
+    person.tick();
+    assert.equal(person.hints.length, 0, "no [E] Conversar at 2.4 m (it was 3)");
+    person.state.hits = [person.body(5, { distance: 1.8 })];
+    person.tick();
+    assert.equal(person.hints.length, 1, "at 1.8 m, there it is");
 });

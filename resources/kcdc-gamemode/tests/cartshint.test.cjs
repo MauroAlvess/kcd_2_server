@@ -9,6 +9,8 @@ function load({ hintThrows = false } = {}) {
     const handlers = new Map();
     const created = [];
     const removed = [];
+    /** Hints the game took down by itself. */
+    const gone = new Set();
     const emitted = [];
     const context = {
         exports: {},
@@ -20,11 +22,12 @@ function load({ hintThrows = false } = {}) {
                 return created.length;
             },
             remove: (id) => removed.push(id),
+            setText: (id) => id >= 1 && id <= created.length && !removed.includes(id) && !gone.has(id),
         },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/carts.js"), "utf8"), context);
     context.exports.installCarts();
-    return { near: (payload) => handlers.get("kcdc-gamemode:cart.near")(payload), created, removed, emitted, handlers };
+    return { api: context.exports, near: (payload) => handlers.get("kcdc-gamemode:cart.near")(payload), created, removed, emitted, handlers, gone };
 }
 
 test("the hint goes up once when a cart is near, on the interaction key, and comes down when none is", () => {
@@ -64,4 +67,18 @@ test("a message that is not one, or a key the game refuses, changes nothing", ()
     assert.equal(broken.created.length, 0);
     assert.doesNotThrow(() => broken.near(JSON.stringify({ id: 0 })));
     assert.deepEqual(broken.removed, []);
+});
+
+test("a hint the game took down is put back the next time the server says the cart is there", () => {
+    const sut = load();
+    sut.near(JSON.stringify({ id: 300 }));
+    assert.equal(sut.api.cartIsNear(), true);
+    sut.gone.add(1);
+    sut.near(JSON.stringify({ id: 300 }));
+    assert.equal(sut.created.length, 2, "up again");
+    sut.near(JSON.stringify({ id: 300 }));
+    assert.equal(sut.created.length, 2, "and only once");
+    sut.near(JSON.stringify({ id: 0 }));
+    assert.equal(sut.api.cartIsNear(), false);
+    assert.deepEqual(sut.removed, [2]);
 });

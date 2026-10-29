@@ -1,7 +1,6 @@
 import { readQuoted } from "../args.js";
 import type { Command, CommandContext } from "../command.js";
 import { retarget } from "../players.js";
-import { propertyMenus } from "../property-menu.js";
 import {
     assignOwner,
     clearOwner,
@@ -13,6 +12,7 @@ import {
     getProperty,
     listProperties,
     mapCastle,
+    mapCompounds,
     mapLocations,
     mapRegion,
     ownerOf,
@@ -45,8 +45,8 @@ export const propertyCommand: Command = {
     usage: [
         "/propriedade mapear <região> [portas]  -- cataloga sozinho os edifícios e baús da região (suchdol, wysoka, raborsch, ou um lugar do mapa); 'portas' inclui portas soltas",
         "/propriedade locais  -- os lugares que o mapa do jogo nomeia, para mapear",
-        "/propriedade castelo [região]  -- junta as portas e os baús dentro das muralhas num só imóvel, o castelo (suchdol, raborsch); sem região, todos",
-        "/propriedade organizar  -- põe os baús e as portas soltos para dentro da propriedade mais perto (até 35 m; um baú com o nome de um lugar, como (Taverna), até 75 m)",
+        "/propriedade castelo [região]  -- junta as portas e os baús dentro das muralhas num só imóvel, o castelo (suchdol, raborsch, malesov, pschitoky); sem região, todos",
+        "/propriedade organizar  -- põe os baús e as portas soltos para dentro da propriedade mais perto (baú até 50 m, ou 75 m com o nome do lugar, como (Taverna); porta até 35 m, e na casa de outro jogador só a que está colada nela, até 12 m)",
         "/propriedade perto [metros]  -- o que há perto de você, com a distância",
         "/propriedade ir <id>  -- leva você até a propriedade",
         '/propriedade renomear <id> "<nome>"',
@@ -56,10 +56,10 @@ export const propertyCommand: Command = {
         "/propriedade dono <id> nenhum  -- tira o dono (as chaves entregues continuam com quem as tem)",
         "/propriedade regioes  -- as regiões que já existem",
         "/propriedade trancar <id>  |  /propriedade destrancar <id>",
-        "/propriedade olhar [ligar|desligar]  -- a trava ao olhar: a porta que o menu vai abrir fica trancada no mundo enquanto o jogador olha para ela, para o boneco não abrir e fechar a porta antes do menu (desligue se alguma porta ficar estranha)",
         '/propriedade registrar "<nome>" [região]  -- a porta mais próxima vira essa propriedade, trancada',
         "/propriedade remover <id>",
         "/propriedade listar [região]",
+        "/propriedade lugar [região]  -- junta numa propriedade só cada lugar da região (a estalagem, o haras, a Toca do Diabo)",
         "/propriedade <id>  -- detalhes de uma propriedade",
     ],
 
@@ -90,9 +90,27 @@ export const propertyCommand: Command = {
                 return;
             }
 
+            case "lugar": {
+                // The places that are one property of a region each (the inn of Pschitoky, the stud farm of Malešov, the Devil's Den), 2026-10-26.
+                const named = rest.join(" ").replace(/^"|"$/g, "");
+                const ids = named === "" ? REGIONS.filter((region) => region.compounds !== undefined).map((region) => region.id) : [named];
+                const lines: string[] = [];
+                for (const id of ids) {
+                    const reports = mapCompounds(id);
+                    if (reports === null) {
+                        lines.push(`'${id}' não tem lugares próprios (${REGIONS.filter((region) => region.compounds !== undefined).map((region) => region.id).join(", ")}).`);
+                        continue;
+                    }
+                    lines.push(...reports.map((report) => (report.doors === 0 ? `${report.name}: nenhuma porta por enquanto (o nível pode ainda não ter dito onde estão).` : describeCastle(report))));
+                }
+                reply.lines(lines);
+                return;
+            }
+
             case "organizar": {
                 const done = tidyLoose();
                 reply.line(done.chests === 0 && done.doors === 0 ? "Nenhum baú ou porta solto perto de uma propriedade: está tudo no lugar." : `${done.chests} baú(s) foram para dentro da propriedade mais perto e ${done.doors} porta(s) passaram a ser portas dela.`);
+                reply.lines(done.moved.slice(0, 20).map((line) => `  ${line}`));
                 return;
             }
 
@@ -201,24 +219,6 @@ export const propertyCommand: Command = {
                     return;
                 }
                 reply.line(setLocked(id, sub === "trancar").message);
-                return;
-            }
-
-            case "olhar": {
-                const wish = (rest[0] ?? "").toLowerCase();
-                if (wish !== "" && wish !== "ligar" && wish !== "desligar") {
-                    usage();
-                    return;
-                }
-                if (wish !== "") {
-                    propertyMenus.setGazeLock(wish === "ligar");
-                }
-                const seen = propertyMenus.gazing();
-                reply.lines([
-                    `Trava ao olhar: ${propertyMenus.gazeLockOn() ? "ligada" : "desligada"}. A porta que o menu vai abrir fica trancada no mundo, só para o jogo, enquanto o jogador olha para ela por fora; isso evita que o boneco abra a porta e ela feche sozinha antes do menu. Por dentro a porta abre direto.`,
-                    `Portas travadas agora: ${seen.doors}. Desde que o servidor ligou: ${seen.holds} travas, e ${seen.leaks} vezes o jogo ofereceu a porta mesmo travada (se esse número crescer, a trava não está calando o "Abrir" do jogo); ${seen.releases ?? 0} travas soltas pelo cliente porque o "Abrir" do jogo continuava na tela (lado do ferrolho).`,
-                    `Portas sem área do jogo com o lado já aprendido pelo uso: ${seen.sides ?? 0}.`,
-                ]);
                 return;
             }
 

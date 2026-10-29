@@ -20,10 +20,20 @@
  * the doors within reach and what they are: that is how the real ones are found.
  */
 
+import { cure } from "./heal.js";
+
 const RESOURCE = "kcdc-gamemode";
 
 export const RESPAWN_DELAY_MS = 8_000;
 const MOVE_AFTER_REVIVE_MS = 600;
+
+/**
+ * Death is told as a wound one survived (user, 2026-10-18: "quando um jogador morrer, tem que dar a descrição: você foi ferido e
+ * sobreviveu, sendo arrastado para X local; procure um médico alquimista o mais rápido para curar suas feridas"), and the body
+ * wakes hurt to match: its health brought down to this share of the whole, a moment after it is up.
+ */
+export const WOUNDED_SHARE = 0.3;
+const WOUND_AFTER_SPAWN_MS = 1_500;
 /** How near a church's donation box a door is looked at (a village church is some twenty metres long). */
 const CHURCH_DOOR_M = 40;
 /** What a church door's own name says: the prefab path it stands in. */
@@ -48,7 +58,7 @@ export const CHURCHES: readonly Church[] = [
     { id: "arrabalde", place: "Kuttenberg, no arrabalde", x: 3072.62, y: 977.45, z: 66.02 },
     { id: "sao-tiago", place: "São Tiago, em Kuttenberg", x: 3046.69, y: 683.8, z: 52.13 },
     { id: "stara-kutna", place: "Stará Kutná", x: 3058.87, y: 1441.77, z: 105.95 },
-    { id: "grunta", place: "Grunta", x: 3197.21, y: 2183.47, z: 95.94 },
+    { id: "grunta", place: "Minas", x: 3197.21, y: 2183.47, z: 95.94 },
 ];
 
 /** The church nearest a point, on the map (height left out: a church on a hill is no farther for it). */
@@ -114,7 +124,7 @@ export function onDeath(player: Player): void {
     const church = nearestChurch(player.position);
     const home = homeOf(steamId);
     forget(id);
-    tell(player, `Você morreu. Em ${Math.round(RESPAWN_DELAY_MS / 1000)} segundos você acorda ${home !== null ? `em ${home.text}` : `na igreja de ${church.place}`}.`);
+    tell(player, `Você caiu gravemente ferido. Em ${Math.round(RESPAWN_DELAY_MS / 1000)} segundos você é levado ${home !== null ? `para ${home.text}` : `para a igreja de ${church.place}`}.`);
     pending.set(
         id,
         setTimeout(() => {
@@ -128,12 +138,37 @@ export function onDeath(player: Player): void {
             setTimeout(() => {
                 const woken = stillThere(id, steamId);
                 if (woken !== null && woken.spawn(point)) {
-                    tell(woken, `Você acordou ${home !== null ? "em " : "na "}${where}.`);
+                    tell(woken, `Você foi ferido e sobreviveu: foi arrastado até ${home !== null ? "" : "a "}${where}. Procure um médico alquimista o mais rápido possível para curar as suas feridas.`);
                     console.log(`respawn: ${woken.nickname} acordou ${home !== null ? "em " : "na "}${where}`);
+                    setTimeout(() => wound(id, steamId), WOUND_AFTER_SPAWN_MS);
                 }
             }, MOVE_AFTER_REVIVE_MS);
         }, RESPAWN_DELAY_MS),
     );
+}
+
+/** Brings a body just woken down to `WOUNDED_SHARE` of its health, never up. */
+function wound(id: number, steamId: string): void {
+    const woken = stillThere(id, steamId);
+    if (woken === null || typeof woken.setStat !== "function") {
+        return;
+    }
+    // A body that died bleeding woke bleeding and died again, three times in ten minutes (Garcia, 2026-10-19 21:32): it wakes hurt,
+    // not bleeding.
+    try {
+        cure(woken, "sangramento");
+    } catch {
+        // The cure is a kindness; the wound below is the rule.
+    }
+    const whole = Number.isFinite(woken.maxHealth) && woken.maxHealth > 0 ? woken.maxHealth : 100;
+    const target = Math.round(whole * WOUNDED_SHARE);
+    if (woken.health > target) {
+        try {
+            woken.setStat("health", target);
+        } catch {
+            // A body that went away meanwhile.
+        }
+    }
 }
 
 /** Unlocks the church doors the level locked. Returns how many it unlocked. */

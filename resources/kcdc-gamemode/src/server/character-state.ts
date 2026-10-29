@@ -18,10 +18,16 @@
  * be read or put back locks the session read-only, and an empty inventory never replaces a full one. The worst
  * a bug here can do is fail to save; it cannot wipe a character.
  *
+ * Levels only climb (a start again wipes the record, `discardCharacter`): a track that reads lower than the file says
+ * is a restore that did not hold, never a loss to be written (2026-10-23: a player's whole progression read as a fresh
+ * character's). `keepClimbs` keeps the saved track in what is written, and the restore is asked again a few seconds
+ * after the first and at the periodic looks (`verifyProgression`), logged when it was needed.
+ *
  * Identity is the Steam id the client reports, which the server does not verify (see `auth.ts`). Anyone who
  * can join as another Steam id can load that character; closing that needs `enforce` tickets, not this file.
  */
 
+import { leaveOutCombos, takeOutCombos } from "./esgrima.js";
 import { cleanSnapshot } from "./perk-guard.js";
 import { ensureDir, read, write } from "./store.js";
 
@@ -30,6 +36,16 @@ const RESOURCE = "kcdc-gamemode";
 
 /** How often the online characters are checked for changes. */
 const TICK_MS = 30_000;
+
+/**
+ * Everybody is looked at once in `TICK_MS`, but not in one breath: a look costs about a millisecond and a half (the inventory and the progression read out of the
+ * game, a write when something changed; 17 ms at the worst, measured live with seven players), so two hundred in one go would stop the server for a third of a
+ * second every half minute. With more than `SPREAD_FROM` characters the looks are spread, a `SPREAD_GAP_MS` apart at most, over the first `SPREAD_SHARE` of the
+ * interval.
+ */
+const SPREAD_FROM = 4;
+const SPREAD_GAP_MS = 250;
+const SPREAD_SHARE = 0.8;
 
 /** A change of this much in health, hunger, energy or stamina is worth a write on its own. */
 const VITALS_STEP = 4;
@@ -48,8 +64,37 @@ const STEAM_ID = /^[0-9]{5,20}$/;
 
 const FULL_RECIPE = 536870911;
 
+/** When, after the progression was put back, it is looked at again, and how many times a session may have it put back again. */
+const VERIFY_AFTER_MS: readonly number[] = [5_000, 20_000];
+const MAX_REPAIRS = 3;
+
+/** The tracks the game computes itself (the fencing from the weapon skills): they may read otherwise than they were saved and are not compared. */
+const DERIVED_TRACKS: ReadonlySet<string> = new Set(["fencing"]);
+
 /** Gaps shorter than this between a change and its write are merged into one. */
 const SAVE_DELAY_MS = 2_500;
+/**
+ * The least time between two early saves of one player (the 30-second round and their leaving still save what changed): an inventory that keeps changing (a
+ * trade, a loot, a craft) was written every 2.5 seconds, each time read whole through the engine, and one such save took 599 ms (perf-watch, 2026-10-26).
+ */
+const SAVE_GAP_MS = 8_000;
+const lastEarlySave = new Map<number, number>();
+
+declare const performance: { now(): number } | undefined;
+/** Times a part of a save for perf-watch (`__kcdcSection`, which exists only while it watches). */
+function part<T>(label: string, work: () => T): T {
+    const report = (globalThis as unknown as { __kcdcSection?: (name: string, took: number) => void }).__kcdcSection;
+    if (report === undefined) {
+        return work();
+    }
+    const clock = (): number => (typeof performance !== "undefined" && performance !== undefined ? performance.now() : Date.now());
+    const began = clock();
+    try {
+        return work();
+    } finally {
+        report(label, clock() - began);
+    }
+}
 
 export interface SavedRow {
     id: string;
@@ -101,6 +146,10 @@ interface Session {
     /** The game said it has no inventory for them yet: the restore is tried again as they get further in. */
     restorePending: boolean;
     progressionRestored: boolean;
+    /** How many times the progression had to be put back again (`verifyProgression`). */
+    repairs: number;
+    /** What the game was asked to take at the start (the file's, with the perks the alchemy tables cannot work with left out). */
+    restored: ProgressionSnapshot | null;
     knowledgeRestored: boolean;
     /** Vitals are not read back before this moment. */
     vitalsAfter: number;
@@ -175,7 +224,74 @@ function sanitize(raw: unknown, steamId: string, nickname: string): CharacterRec
 }
 
 // ---------------------------------------------------------------------------------------------
+// Levels only climb.
+
+/** A track's place on its climb: the level, then the XP into the next. */
+const climb = (track: { readonly level: number; readonly xp: number }): number => track.level * 1_000_000 + track.xp;
+
+/**
+ * The live progression, with every track that has fallen behind what was saved put back as it was saved (the tracks the game computes itself
+ * are left out of the comparison). `kept` names them. Nothing else of the live progression is touched.
+ */
+export function keepClimbs(live: ProgressionSnapshot, saved: ProgressionSnapshot | null): { readonly snapshot: ProgressionSnapshot; readonly kept: string[] } {
+    if (saved === null) {
+        return { snapshot: live, kept: [] };
+    }
+    const tracks = { ...live.tracks };
+    const kept: string[] = [];
+    for (const [name, was] of Object.entries(saved.tracks)) {
+        if (DERIVED_TRACKS.has(name) || typeof was?.level !== "number" || typeof was.xp !== "number") {
+            continue;
+        }
+        const now = tracks[name];
+        if (now === undefined || climb(now) < climb(was) - 1) {
+            tracks[name] = { level: was.level, xp: was.xp };
+            kept.push(name);
+        }
+    }
+    return { snapshot: kept.length === 0 ? live : { ...live, tracks }, kept };
+}
+
+/**
+ * Looks at the player's progression against what is saved and, when a track reads lower, asks the game to take it again: in the first looks
+ * after the restore everything that was asked for (`whole`: the perks and points too, which a restore that did not hold lost with the levels),
+ * later only the tracks that lag. Each track is the better of the two. A few times per session, then it is left to the writer's `keepClimbs`.
+ */
+function verifyProgression(player: Player, session: Session, when: string, whole: boolean): void {
+    const saved = whole ? session.restored : session.record.progression;
+    const live = player.progression;
+    if (saved === null || live === null || !session.tracked || session.locked || !session.progressionRestored || session.repairs >= MAX_REPAIRS) {
+        return;
+    }
+    const { snapshot, kept } = keepClimbs(live, saved);
+    if (kept.length === 0) {
+        return;
+    }
+    session.repairs += 1;
+    const lines = kept.map((name) => `${name} ${live.tracks[name]?.level ?? 0} < ${saved.tracks[name]?.level ?? 0}`).join(", ");
+    // Later only the tracks: a restore replaces the perk set it is given, and since KCDC 1.7.2 leaves a blocked perk (a weapon combo, `esgrima.ts`) out of it, so the live perks are not sent back.
+    const accepted = player.restoreProgression((whole ? { ...saved, tracks: snapshot.tracks } : { tracks: snapshot.tracks }) as ProgressionSnapshot);
+    console.log(`characters: ${player.nickname}: ${kept.length} trilha(s) abaixo do salvo (${lines}); ${accepted ? "restaurei de novo" : "o jogo não aceitou restaurar de novo"} (${when}, vez ${session.repairs})`);
+}
+
+// ---------------------------------------------------------------------------------------------
 // What other modules ask.
+
+/**
+ * A player starts again (`character-reset.ts`): what was saved of the character is wiped, and the sessions of this Steam id
+ * stop writing, so the save at their leaving does not bring it back. The next entry has nothing to restore.
+ */
+export function discardCharacter(steamId: string): void {
+    if (!STEAM_ID.test(steamId)) {
+        return;
+    }
+    for (const session of sessions.values()) {
+        if (session.steamId === steamId) {
+            session.tracked = false;
+        }
+    }
+    write(pathFor(steamId), freshRecord(steamId, ""));
+}
 
 /** Whether this player's character is being kept, and so may be given a kit. A locked or unfiled one may not. */
 export function canKeep(player: Player): boolean {
@@ -200,6 +316,43 @@ export function markKit(player: Player, kit: string): void {
 /** Every kit marked for this player. */
 export function kitsOf(player: Player): readonly string[] {
     return sessions.get(player.id)?.record.kits ?? [];
+}
+
+// ---------------------------------------------------------------------------------------------
+// An administrator's hand on the file of a character who is not here (`commands/nivel.ts`).
+
+/** What the file says of a character's progression, or null when there is no file or no progression in it. */
+export function savedProgression(steamId: string): ProgressionSnapshot | null {
+    if (!STEAM_ID.test(steamId)) {
+        return null;
+    }
+    const loaded = read<unknown>(pathFor(steamId));
+    return loaded.status === "ok" ? sanitize(loaded.value, steamId, "").progression : null;
+}
+
+export type Raise = "feito" | "sem personagem" | "sem trilha" | "já está";
+
+/** Raises a track in the file of a character who is not here to `level`, with no XP into the next; the file is otherwise as it was. */
+export function raiseSavedTrack(steamId: string, track: string, level: number): Raise {
+    if (!STEAM_ID.test(steamId)) {
+        return "sem personagem";
+    }
+    const loaded = read<unknown>(pathFor(steamId));
+    if (loaded.status !== "ok" || typeof loaded.value !== "object" || loaded.value === null) {
+        return "sem personagem";
+    }
+    const record = loaded.value as { progression?: { tracks?: Record<string, { level?: unknown; xp?: unknown } | undefined> } };
+    const entry = record.progression?.tracks?.[track];
+    if (entry === undefined || entry === null || typeof entry.level !== "number") {
+        return "sem trilha";
+    }
+    if (entry.level >= level) {
+        return "já está";
+    }
+    entry.level = level;
+    entry.xp = 0;
+    write(pathFor(steamId), record);
+    return "feito";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -375,7 +528,8 @@ function collect(player: Player, session: Session, now: number): CharacterRecord
     if (session.progressionRestored) {
         const progression = player.progression;
         if (progression !== null) {
-            next.progression = progression;
+            // The weapon combos are the Esgrima's, in its own file: never saved here (what the game holds of them may be an administrator's loan).
+            next.progression = leaveOutCombos(keepClimbs(progression, session.record.progression).snapshot);
         }
     }
 
@@ -415,8 +569,11 @@ function save(player: Player, session: Session, reason: string, force: boolean):
         return;
     }
     const now = Date.now();
-    const next = collect(player, session, now);
-    const core = coreOf(next);
+    if (reason === "periódico") {
+        verifyProgression(player, session, "olhada periódica", false);
+    }
+    const next = part("chars.coletar", () => collect(player, session, now));
+    const core = part("chars.comparar", () => coreOf(next));
     const coreChanged = core !== session.lastCore;
     const vitalsChanged = vitalsDiffer(next.vitals, session.lastVitals) && now - session.lastWriteAt >= 10_000;
     const vitalsDue = next.vitals !== null && now - session.lastWriteAt >= VITALS_EVERY_MS;
@@ -426,7 +583,7 @@ function save(player: Player, session: Session, reason: string, force: boolean):
 
     next.savedAt = now;
     try {
-        write(pathFor(session.steamId), next);
+        part("chars.gravar", () => write(pathFor(session.steamId), next));
     } catch (error: unknown) {
         console.log(`characters: ${player.nickname}: não consegui salvar (${reason}): ${error instanceof Error ? error.message : String(error)}`);
         return;
@@ -440,19 +597,37 @@ function save(player: Player, session: Session, reason: string, force: boolean):
     }
 }
 
+/**
+ * Saves everybody here now: before an announced restart, and once more at the very end of a stop, after every other module
+ * has handed back what it held (`index.ts`). `force` writes even a record that has not changed. How many were saved.
+ */
+export function saveAllCharacters(reason: string, force: boolean): number {
+    let saved = 0;
+    for (const [id, session] of sessions) {
+        const player = Player.getById(id);
+        if (player) {
+            save(player, session, reason, force);
+            saved += 1;
+        }
+    }
+    return saved;
+}
+
 function saveSoon(playerId: number): void {
     if (pendingSaves.has(playerId)) {
         return;
     }
     pendingSaves.add(playerId);
+    const wait = Math.max(SAVE_DELAY_MS, (lastEarlySave.get(playerId) ?? Number.NEGATIVE_INFINITY) + SAVE_GAP_MS - Date.now());
     setTimeout(() => {
         pendingSaves.delete(playerId);
+        lastEarlySave.set(playerId, Date.now());
         const player = Player.getById(playerId);
         const session = sessions.get(playerId);
         if (player && session) {
             save(player, session, "agendado", true);
         }
-    }, SAVE_DELAY_MS);
+    }, wait);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -470,6 +645,8 @@ export function installCharacterState(): void {
             inventoryRestored: false,
             restorePending: false,
             progressionRestored: false,
+            repairs: 0,
+            restored: null,
             knowledgeRestored: false,
             vitalsAfter: 0,
             lastCore: "",
@@ -535,11 +712,22 @@ export function installCharacterState(): void {
                 Chat.sendToPlayer(player, `Você tinha ${cleaned.removed.join(" e ")}, que impede as mesas de alquimia de funcionarem no servidor por enquanto: o talento foi tirado e o ponto voltou para você, para gastar em outro.`);
                 console.log(`characters: ${player.nickname}: ${cleaned.removed.join(", ")} tirado(s), o ponto devolvido`);
             }
+            // The weapon combos are the Esgrima's to keep (`esgrima.ts`): left out of what the game is asked to restore, written down there and put back by it a little after.
+            session.record.progression = takeOutCombos(player.steamId, session.record.progression);
             if (!player.restoreProgression(session.record.progression)) {
                 console.log(`characters: ${player.nickname}: a progressão salva não foi aceita`);
             }
         }
+        session.restored = session.record.progression;
         session.progressionRestored = true;
+        for (const delay of VERIFY_AFTER_MS) {
+            setTimeout(() => {
+                const again = Player.getById(player.id);
+                if (again !== null && sessions.get(player.id) === session) {
+                    verifyProgression(again, session, `${delay / 1000} s depois`, true);
+                }
+            }, delay);
+        }
         if (session.record.vitals !== null) {
             restoreVitals(player, session.record.vitals);
             session.vitalsAfter = Date.now() + VITALS_SETTLE_MS;
@@ -582,15 +770,26 @@ export function installCharacterState(): void {
         save(player, session, "saída", true);
         sessions.delete(player.id);
         pendingSaves.delete(player.id);
+        lastEarlySave.delete(player.id);
     });
 
     const timer = setInterval(() => {
-        for (const [id, session] of sessions) {
-            const player = Player.getById(id);
-            if (player) {
-                save(player, session, "periódico", false);
+        const ids = [...sessions.keys()];
+        const gap = ids.length > SPREAD_FROM ? Math.min(SPREAD_GAP_MS, Math.floor((TICK_MS * SPREAD_SHARE) / ids.length)) : 0;
+        ids.forEach((id, index) => {
+            const look = (): void => {
+                const session = sessions.get(id);
+                const player = Player.getById(id);
+                if (session !== undefined && player) {
+                    save(player, session, "periódico", false);
+                }
+            };
+            if (gap === 0) {
+                look();
+            } else {
+                setTimeout(look, index * gap);
             }
-        }
+        });
     }, TICK_MS);
 
     Events.on("resourceStop", (name) => {

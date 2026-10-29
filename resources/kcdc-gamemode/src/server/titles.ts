@@ -14,6 +14,7 @@ import { getCharacter } from "./characters.js";
 import { bloodTitleOf, known, labelOf, order, titleById, TITLES } from "./nobility.js";
 import type { TitleDef } from "./nobility.js";
 import { ensureDir, read, write } from "./store.js";
+import { onThiefChange, thiefMark } from "./thieves.js";
 
 const DIR = "playerdata";
 const FILE = `${DIR}/titles.json`;
@@ -42,6 +43,8 @@ interface StoreFile {
 /** The panel's gold (213, 161, 86), opaque. */
 const TITLE_COLOUR = 0xffd5a156;
 const PLAIN_COLOUR = 0xffffffff;
+/** The thief's mark: red, over whatever title they hold, for as long as it lasts (`thieves.ts`). */
+const THIEF_COLOUR = 0xffd23c32;
 
 let cache: Record<string, Holder> | null = null;
 
@@ -133,6 +136,15 @@ function persist(): void {
 
 // ---------------------------------------------------------------------------------------------
 // Reading.
+
+/** A player starts again (`character-reset.ts`): every title they hold, and the one they showed, goes. */
+export function forgetTitles(steamId: string): void {
+    const store = load();
+    if (store[steamId] !== undefined) {
+        delete store[steamId];
+        persist();
+    }
+}
 
 export function grantsOf(steamId: string): readonly Grant[] {
     return steamId === "" ? [] : (load()[steamId]?.grants ?? []);
@@ -315,7 +327,12 @@ export function applyNametag(player: Player): void {
     const chosen = shownOf(player.steamId);
     const title = chosen === null ? null : titleById(chosen);
     try {
-        if (title === null) {
+        if (thiefMark(player.steamId) !== null) {
+            player.setNametagText(isFemale(player) ? "Ladra" : "Ladrão");
+            player.setNametagColor(THIEF_COLOUR);
+            player.setNametagHealthVisible(false);
+            player.setNametagVisible(true);
+        } else if (title === null) {
             player.setNametagVisible(false);
             player.setNametagText("");
             player.setNametagColor(PLAIN_COLOUR);
@@ -329,6 +346,9 @@ export function applyNametag(player: Player): void {
         // A player gone between the event and here.
     }
 }
+
+// A mark put on or run out redraws the head it is over.
+onThiefChange((player) => applyNametag(player));
 
 /** The nametag as the game had it: the player's own name, untinted. When the resource stops. */
 export function restoreNametag(player: Player): void {

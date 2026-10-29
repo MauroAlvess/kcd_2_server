@@ -14,6 +14,11 @@
  * is back up, and the page closes on the release of that key or of Escape, never on the press.
  */
 
+import { onLarge } from "./big-events.js";
+import { isRestrained } from "./restraint.js";
+import { thirstGauge } from "./thirst.js";
+import { scaleView } from "./ui-scale.js";
+
 const RESOURCE = "kcdc-gamemode";
 
 /**
@@ -58,8 +63,8 @@ const SAMPLE_MS = 500;
 /** A press of the panel key this soon after the panel opened or closed is the same press, not a new one. */
 const TOGGLE_DEBOUNCE_MS = 250;
 
-/** Messages a new page needs at once (the server's answers, the camera's state); a notice is of the moment and is not kept. */
-const KEPT_MESSAGES = ["status:social", "status:options", "status:dict"];
+/** Messages a new page needs at once (the server's answers, the camera's and the microphone's state); a notice is of the moment and is not kept. */
+const KEPT_MESSAGES = ["status:social", "status:options", "status:voice", "status:dict", "status:image"];
 
 /** How long after the panel has gone the free camera starts, so the click that asked for it is over. */
 const FREE_CAMERA_DELAY_MS = 300;
@@ -84,13 +89,15 @@ const lastTabOf: Record<Mode, string> = { common: "", admin: "" };
 function selfPayload(): Record<string, unknown> {
     const me = LocalPlayer;
     if (!me || !me.ready) {
-        return { name: "", health: [0, 0], stamina: [0, 0], hunger: [0, 0], energy: [0, 0] };
+        return { name: "", health: [0, 0], stamina: [0, 0], hunger: [0, 0], thirst: [0, 0], energy: [0, 0] };
     }
     return {
         name: characterName !== "" ? characterName : me.nickname,
         health: [me.health, me.maxHealth],
         stamina: [me.stamina, me.maxStamina],
         hunger: [me.hunger, me.maxHunger],
+        // The server's own thirst, as it last said (`thirst.ts`).
+        thirst: thirstGauge(),
         energy: [me.exhaust, me.maxExhaust],
     };
 }
@@ -135,7 +142,7 @@ type FieldKind = "string" | "string?" | "number" | "number?";
  * Hands what the page chose to the server, which decides whether it is a valid choice. A page event
  * that is missing a field, or has one of the wrong type, goes no further; fields not listed are dropped.
  */
-function relay(pageEvent: string, fields: Readonly<Record<string, FieldKind>>, closing = false): void {
+function relay(pageEvent: string, fields: Readonly<Record<string, FieldKind>>, closing = false, answer?: (forwarded: Record<string, unknown>, id: number) => boolean): void {
     const id = view;
     Web.on(view, pageEvent, (payload) => {
         const source = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {};
@@ -151,6 +158,10 @@ function relay(pageEvent: string, fields: Readonly<Record<string, FieldKind>>, c
             }
             forwarded[key] = value;
         }
+        // A request this side can answer itself (a picture it already holds) is not sent on.
+        if (answer?.(forwarded, id) === true) {
+            return;
+        }
         const send = (): void => Events.emitServer(`${RESOURCE}:${pageEvent.replace(":", ".")}`, JSON.stringify(forwarded));
         // A request that opens one of the game's own screens (a transfer screen) puts the panel away first, then asks.
         if (closing && id === view) {
@@ -160,6 +171,24 @@ function relay(pageEvent: string, fields: Readonly<Record<string, FieldKind>>, c
             send();
         }
     });
+}
+
+/** The pictures the page asked for before it was ready: each is answered from what is kept the moment it is. */
+const askedEarly = new Set<string>();
+
+/** A picture the server has already sent this session is given to the page from here, with no round trip. True when it was. */
+function answerImage(forwarded: Record<string, unknown>, id: number): boolean {
+    const name = typeof forwarded["name"] === "string" ? forwarded["name"].slice(0, 40) : "";
+    const kept = latest.get(`status:image:${name}`);
+    if (kept === undefined) {
+        return false;
+    }
+    if (id === view && pageReady) {
+        Web.emit(view, "status:image", kept);
+    } else if (id === view) {
+        askedEarly.add(name);
+    }
+    return true;
 }
 
 function create(): boolean {
@@ -183,6 +212,7 @@ function create(): boolean {
     }
 
     pageReady = false;
+    askedEarly.clear();
     // A page closed while it loaded can still answer before its browser is gone; only this one counts.
     const id = view;
 
@@ -191,12 +221,25 @@ function create(): boolean {
             return;
         }
         pageReady = true;
+        scaleView(view);
         Web.emit(view, "status:key", { common: KEY_INFO[keyOf.common] ?? KEY_INFO["f2"], admin: KEY_INFO[keyOf.admin] ?? null });
         // The camera's state comes back as camera.state, kept like the server's answers.
         void Events.emitLocal("camera.ask").catch(() => undefined);
+        // So does the microphone's (voice.ts).
+        void Events.emitLocal("voice.ask").catch(() => undefined);
+        // The pictures are not replayed: the page asks for the ones it draws, and is answered from what is kept (`answerImage`).
         for (const [channel, payload] of latest) {
-            Web.emit(view, channel, payload);
+            if (!channel.startsWith("status:image:")) {
+                Web.emit(view, channel, payload);
+            }
         }
+        for (const name of askedEarly) {
+            const kept = latest.get(`status:image:${name}`);
+            if (kept !== undefined) {
+                Web.emit(view, "status:image", kept);
+            }
+        }
+        askedEarly.clear();
         // After the server's answers: the page shows the administrator's door only to somebody it already knows is one,
         // and a door asked for before that turned it back to the common one (F3 opened the same panel as F2).
         Web.emit(view, "status:mode", { mode });
@@ -249,26 +292,57 @@ function create(): boolean {
     relay("status:citizenChoose", { town: "string" });
     relay("status:citizens", { town: "string", page: "number" });
     relay("status:citizenDepose", { town: "string", key: "string", page: "number" });
+    relay("status:citizenClose", { town: "string", closed: "number" });
+    // The Escrivão section (scribe.ts, 2026-10-29): the list with its filters, the guild handed, the guild taken off.
+    relay("status:scribe", { guild: "string?", town: "string?", search: "string?", page: "number?" });
+    relay("status:scribeGrant", { key: "string", guild: "string", fguild: "string?", ftown: "string?", fsearch: "string?", fpage: "number?" });
+    relay("status:scribeRevoke", { key: "string", fguild: "string?", ftown: "string?", fsearch: "string?", fpage: "number?" });
     relay("status:supporterGrant", { targetId: "number" });
+    relay("status:supporterRevoke", { targetId: "number" });
+    relay("status:ban", { targetId: "number" });
+    relay("status:animalStuck", { kind: "string", key: "string?" });
+    relay("status:unban", { targetId: "number" });
     relay("status:propLock", { id: "string", locked: "number" });
+    relay("status:propGates", { id: "string", open: "number" });
+    relay("status:resetCharacter", { confirm: "number" });
+    // "Refazer aparência": the creator comes up over the body, so the panel is put away first.
+    relay("status:remakeLook", { confirm: "number" }, true);
     relay("status:setSocial", { targetId: "number", status: "string", family: "number" });
     // The Nomeação section (nominations.ts): naming and taking away a title, the title worn over the head, and the hierarchy.
     relay("status:nominate", { targetId: "number", title: "string" });
     relay("status:revokeTitle", { targetId: "number?", key: "string?", title: "string", self: "number?" });
     relay("status:shownTitle", { title: "string" });
     relay("status:hierarchy", {});
+    relay("status:image", { name: "string" }, false, answerImage);
+    // Chaves and Propriedades open one region at a time (src/server/status.ts, `propertiesFor`).
+    relay("status:propRegion", { tab: "string", region: "string" });
     // One door of a house, a property given on by its owner, and a whole region ceded by an administrator.
     relay("status:doorLock", { id: "string", index: "number", locked: "number" });
     relay("status:propGive", { id: "string", targetId: "number" });
-    relay("status:regionCede", { region: "string", targetId: "number?", confirm: "number?" });
+    // Access (2026-10-28), instead of keys: given to a player, taken back by the owner, let go by the one who has it.
+    relay("status:propAccess", { id: "string", targetId: "number" });
+    relay("status:propAccessRemove", { id: "string", index: "number", name: "string" });
+    relay("status:propAccessLeave", { id: "string" });
+    relay("status:roomSave", { house: "string", room: "string?", name: "string", doors: "string", chests: "string" });
+    relay("status:roomGive", { room: "string", targetId: "number?" });
+    relay("status:roomVacate", { room: "string", self: "number?" });
+    relay("status:roomDelete", { room: "string" });
+    relay("status:regionCede", { region: "string", targetId: "number?", confirm: "number?", remove: "number?" });
     relay("status:animals", {});
+    // Esgrima (esgrima.ts): the combos a player knows, what one of them is, and teaching and taking one away.
+    relay("status:esgrima", {});
+    relay("status:esgrimaInfo", { id: "string" });
+    relay("status:esgrimaTeach", { id: "string", targetId: "number" });
+    relay("status:esgrimaRetire", { id: "string", targetId: "number" });
     relay("status:animalName", { kind: "string", key: "string?", name: "string" });
     relay("status:animalCall", { kind: "string", key: "string?" });
-    relay("status:dogOrder", { order: "string" });
     relay("status:horseBags", { key: "string" }, true);
     relay("status:cartName", { key: "string", name: "string" });
     relay("status:cartBring", { key: "string" });
+    relay("status:animalGive", { kind: "string", key: "string", targetId: "number" });
+    relay("status:craftOpen", { station: "string" }, true);
     relay("status:horseShared", { key: "string", shared: "number" });
+    relay("status:horseActive", { key: "string" });
     relay("status:cartShared", { key: "string", shared: "number" });
 
     // The "Opções" section: the camera is this machine's own (camera.ts), which keeps the choice through the server.
@@ -280,6 +354,29 @@ function create(): boolean {
             return;
         }
         void Events.emitLocal("camera.choose", { thirdPerson: third, view: chosen }).catch(() => undefined);
+    });
+    // The microphone is this machine's own as well (voice.ts): how it opens, and how sensitive it is when it is open.
+    Web.on(view, "status:voice", (payload) => {
+        const fields = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {};
+        const mic = fields["mic"];
+        const sensitivity = fields["sensitivity"];
+        const change: Record<string, string> = {};
+        if (mic === "aberto" || mic === "apertar") {
+            change["mic"] = mic;
+        }
+        if (sensitivity === "alta" || sensitivity === "media" || sensitivity === "baixa") {
+            change["sensitivity"] = sensitivity;
+        }
+        if (Object.keys(change).length > 0) {
+            void Events.emitLocal("voice.choose", change).catch(() => undefined);
+        }
+    });
+    // The size of the server's pages (Opções, Resolução da interface): every page of ours, kept by the server (ui-scale.ts).
+    Web.on(view, "status:ui", (payload) => {
+        const ui = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>)["ui"] : undefined;
+        if (typeof ui === "string") {
+            void Events.emitLocal("ui.choose", { ui }).catch(() => undefined);
+        }
     });
     Web.on(view, "status:freeCam", () => {
         if (id !== view) {
@@ -334,6 +431,10 @@ function hide(): void {
 function toggle(which: Mode): void {
     const now = Date.now();
     if (focusOnRelease || now - lastToggleAt < TOGGLE_DEBOUNCE_MS) {
+        return;
+    }
+    // Handcuffed or in the pillory (arrest.ts, 2026-10-29): no menu but the pause menu's. A panel that was up when the cuffs went on can still be put away.
+    if (isRestrained() && !wanted) {
         return;
     }
     // The character creator holds the camera and the screen (creator-page.ts): the panel does not open over it.
@@ -404,9 +505,20 @@ function langIn(payload: unknown): string | null {
     return lang === "en" ? "en" : lang === "pt" ? "pt" : null;
 }
 
+/** The name a picture the server sent goes by: each is kept apart, so a page opened again gets every one the panel has had. */
+function imageName(payload: unknown): string {
+    try {
+        const value = typeof payload === "string" ? (JSON.parse(payload) as unknown) : payload;
+        const name = typeof value === "object" && value !== null ? (value as { name?: unknown }).name : undefined;
+        return typeof name === "string" ? name.slice(0, 40) : "";
+    } catch {
+        return "";
+    }
+}
+
 function keep(channel: string, payload: unknown): void {
     if (KEPT_MESSAGES.includes(channel)) {
-        latest.set(channel, payload);
+        latest.set(channel === "status:image" ? `status:image:${imageName(payload)}` : channel, payload);
     }
     if (view >= 0 && pageReady) {
         Web.emit(view, channel, payload);
@@ -429,7 +541,7 @@ export function installStatus(): void {
         }
     }
 
-    Events.on(`${RESOURCE}:status.social`, (payload) => {
+    onLarge("status.social", (payload) => {
         keep("status:social", payload);
         // English: the server sends the page's dictionary once (a piece at a time); back to Portuguese: it is dropped.
         let lang: string | null = null;
@@ -468,7 +580,7 @@ export function installStatus(): void {
     Events.onLocal("status.open", (payload) => {
         const next = typeof payload === "object" && payload !== null ? (payload as { mode?: unknown }).mode : undefined;
         // Up already: the key reached the panel by its own way as well, and a second opening would only blink it.
-        if (wanted || (next !== "common" && next !== "admin") || (next === "admin" && admin !== true)) {
+        if (wanted || isRestrained() || (next !== "common" && next !== "admin") || (next === "admin" && admin !== true)) {
             return;
         }
         mode = next;
@@ -492,11 +604,16 @@ export function installStatus(): void {
     Events.on(`${RESOURCE}:status.roster`, (payload) => keep("status:roster", payload));
     Events.on(`${RESOURCE}:status.guildMembers`, (payload) => keep("status:guildMembers", payload));
     Events.on(`${RESOURCE}:status.citizens`, (payload) => keep("status:citizens", payload));
+    Events.on(`${RESOURCE}:status.scribe`, (payload) => keep("status:scribe", payload));
     Events.on(`${RESOURCE}:status.notice`, (payload) => keep("status:notice", payload));
     Events.on(`${RESOURCE}:status.animals`, (payload) => keep("status:animals", payload));
+    Events.on(`${RESOURCE}:status.esgrima`, (payload) => keep("status:esgrima", payload));
+    Events.on(`${RESOURCE}:status.esgrimaInfo`, (payload) => keep("status:esgrimaInfo", payload));
     // The hierarchy is asked for while its page is open and is not kept: it goes stale in seconds.
-    Events.on(`${RESOURCE}:status.hierarchy`, (payload) => keep("status:hierarchy", payload));
+    onLarge("status.hierarchy", (payload) => keep("status:hierarchy", payload));
+    onLarge("status.image", (payload) => keep("status:image", payload));
     Events.onLocal("camera.state", (payload) => keep("status:options", payload));
+    Events.onLocal("voice.state", (payload) => keep("status:voice", payload));
 
     Events.on("browserLoadingFailed", (event) => {
         if (event.isMainFrame && view >= 0 && event.viewId === view) {

@@ -1,0 +1,232 @@
+{
+  "areas": [],
+  "effects": [],
+  "format": "kcdc.world",
+  "level": "kutnohorsko",
+  "lights": [],
+  "objects": [],
+  "patrolRoutes": [],
+  "version": 2,
+  "world": [
+    {
+      "at": [
+        2991.939208984375,
+        844.2711791992188,
+        61.49504089355469
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_b_doors_v2.cgf"
+    },
+    {
+      "at": [
+        2993.822998046875,
+        845.3630981445312,
+        61.57209014892578
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/vehicles/wagons/wagon_b.cgf"
+    },
+    {
+      "at": [
+        3078.80029296875,
+        717.963134765625,
+        54.153377532958984
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/structures/defensive/gatehouses/unique/nebakov/gate_nebakov.cgf"
+    },
+    {
+      "at": [
+        3081.89990234375,
+        720.4163208007812,
+        53.93178176879883
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/barn_door_a_right.cgf"
+    },
+    {
+      "at": [
+        3086.405029296875,
+        710.806396484375,
+        54.271751403808594
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/barn_door_a_left.cgf"
+    },
+    {
+      "at": [
+        3086.212890625,
+        710.2738037109375,
+        55.480770111083984
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/structures/logistical/fences/fence_planks_a_end.cgf"
+    },
+    {
+      "at": [
+        3085.85888671875,
+        698.3165283203125,
+        53.50434875488281
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/barn_door_a_right.cgf"
+    },
+    {
+      "at": [
+        3082.208984375,
+        696.6546630859375,
+        53.51271057128906
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/structures/defensive/gatehouses/unique/nebakov/gate_nebakov.cgf"
+    },
+    {
+      "at": [
+        3085.68994140625,
+        681.9487915039062,
+        53.45246887207031
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        3103.89599609375,
+        656.5681762695312,
+        52.826358795166016
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        3145.948974609375,
+        623.4279174804688,
+        51.686038970947266
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        3134.541015625,
+        574.9014282226562,
+        49.953758239746094
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/lvl4_doors_townhouse_i_h_door_static.cgf"
+    },
+    {
+      "at": [
+        3069.135009765625,
+        626.9058227539062,
+        50.3720817565918
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/lvl4_doors_townhouse_i_h_door_static.cgf"
+    },
+    {
+      "at": [
+        3062.552001953125,
+        627.1207885742188,
+        50.41025924682617
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        3069.135009765625,
+        626.9058227539062,
+        50.3720817565918
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/characters/assets/doors/lvl4_doors_townhouse_j_doorway.cgf"
+    },
+    {
+      "at": [
+        3126.87890625,
+        577.77490234375,
+        50.29518127441406
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/lvl3_door_townhouse_b_woodb_static.cgf"
+    },
+    {
+      "at": [
+        2977.222900390625,
+        841.5521240234375,
+        62.264488220214844
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        2939.31396484375,
+        863.4243774414062,
+        65.73555755615234
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        2935.2099609375,
+        860.9674072265625,
+        65.8331298828125
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    },
+    {
+      "at": [
+        3003.285888671875,
+        681.265625,
+        51.69044876098633
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/lvl4_doors_townhouse_i_h_door_static.cgf"
+    },
+    {
+      "at": [
+        3003.285888671875,
+        681.265625,
+        51.69044876098633
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/characters/assets/doors/lvl4_doors_townhouse_i_h_doorway.cgf"
+    },
+    {
+      "at": [
+        2962.81103515625,
+        471.00299072265625,
+        30.791900634765625
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/doors/gate_a_doors.cgf"
+    }
+  ]
+}

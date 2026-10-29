@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const inventoryAdd = require("./inventory-add-module.cjs");
 
 // The skill teachers (src/server/teachers.ts): a lesson up to the next step of the game's table, for its price.
 
@@ -48,7 +49,7 @@ function load({ money = 100_000, levels = { weapon_sword: 0, marksmanship: 0, sc
         },
     };
     const money_ = (() => {
-        const context = { ...base, exports: {} };
+        const context = { ...base, require: (id) => (id === "./inventory-add.js" ? inventoryAdd(context) : assert.fail(`unexpected require ${id}`)), exports: {} };
         vm.runInNewContext(dist("money"), context);
         return context.exports;
     })();

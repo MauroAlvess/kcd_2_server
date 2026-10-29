@@ -8,7 +8,9 @@
  *
  * The sky is one of the game's own time-of-day presets, the ones its own scripts blend to
  * (`EnvironmentModule.BlendTimeOfDay` in Scripts.pak); rain and wind are separate from the preset, so they are
- * ramped along with each change. A weather lasts twenty to forty-five real minutes and blends into the next over four.
+ * ramped along with each change. A weather lasts twenty to forty-five real minutes and blends into the next over four. Rain is
+ * the exception rather than the rule (2026-10-20: "está chovendo muito"): the three rainy kinds together are about a tenth of the
+ * draws, last half as long as the rest, never follow one another, and fall lighter.
  *
  * The framework forgets the clock at every restart, so the day and hour are kept in `playerdata/world.json`.
  */
@@ -39,15 +41,17 @@ export interface WeatherKind {
     readonly rain: readonly [number, number];
     /** Wind speed in m/s, drawn between these. */
     readonly wind: readonly [number, number];
+    /** How long it lasts, in real minutes, drawn between these; the usual twenty to forty-five where not said. */
+    readonly lasts?: readonly [number, number];
 }
 
 export const WEATHER: readonly WeatherKind[] = [
-    { id: "limpo", label: "Céu limpo", presets: ["cloudless_sunny", "cloudless_sunny_B"], weight: 26, rain: [0, 0], wind: [0.5, 3] },
-    { id: "poucas-nuvens", label: "Poucas nuvens", presets: ["semicloudy_clear", "semicloudy_clear_B"], weight: 22, rain: [0, 0], wind: [1, 4] },
-    { id: "nublado", label: "Nublado", presets: ["cloudy_no_rain", "cloudy_no_rain_B", "cloudy_no_rain_C", "summer_overcast", "summer_overcast_B", "summer_overcast_C"], weight: 18, rain: [0, 0], wind: [2, 6] },
-    { id: "pancadas", label: "Pancadas de chuva", presets: ["cloudy_frequent_showers", "cloudy_frequent_showers_B"], weight: 12, rain: [0.35, 0.6], wind: [3, 7] },
-    { id: "garoa", label: "Neblina com garoa", presets: ["foggy_drizzly", "foggy_drizzly_B"], weight: 8, rain: [0.15, 0.3], wind: [0.5, 2] },
-    { id: "tempestade", label: "Tempestade", presets: ["foggy_storm", "foggy_storm_B"], weight: 10, rain: [0.8, 1], wind: [10, 18] },
+    { id: "limpo", label: "Céu limpo", presets: ["cloudless_sunny", "cloudless_sunny_B"], weight: 32, rain: [0, 0], wind: [0.5, 3] },
+    { id: "poucas-nuvens", label: "Poucas nuvens", presets: ["semicloudy_clear", "semicloudy_clear_B"], weight: 26, rain: [0, 0], wind: [1, 4] },
+    { id: "nublado", label: "Nublado", presets: ["cloudy_no_rain", "cloudy_no_rain_B", "cloudy_no_rain_C", "summer_overcast", "summer_overcast_B", "summer_overcast_C"], weight: 22, rain: [0, 0], wind: [2, 6] },
+    { id: "pancadas", label: "Pancadas de chuva", presets: ["cloudy_frequent_showers", "cloudy_frequent_showers_B"], weight: 5, rain: [0.25, 0.45], wind: [3, 7], lasts: [10, 20] },
+    { id: "garoa", label: "Neblina com garoa", presets: ["foggy_drizzly", "foggy_drizzly_B"], weight: 3, rain: [0.1, 0.2], wind: [0.5, 2], lasts: [10, 20] },
+    { id: "tempestade", label: "Tempestade", presets: ["foggy_storm", "foggy_storm_B"], weight: 2, rain: [0.6, 0.85], wind: [10, 18], lasts: [8, 15] },
     { id: "ventania", label: "Ventania", presets: ["foggy_storm_no_rain"], weight: 4, rain: [0, 0], wind: [9, 15] },
 ];
 
@@ -101,9 +105,10 @@ export class WorldCycle {
         return range[0] + (range[1] - range[0]) * this.random();
     }
 
-    /** A weighted draw. The weather that is on is not drawn again, so a change is a change. */
+    /** A weighted draw. The weather that is on is not drawn again, so a change is a change, and rain is never followed by rain. */
     pick(): WeatherKind {
-        const pool = WEATHER.filter((kind) => kind !== this.kind);
+        const raining = (kind: WeatherKind | null): boolean => kind !== null && kind.rain[1] > 0;
+        const pool = WEATHER.filter((kind) => kind !== this.kind && !(raining(this.kind) && raining(kind)));
         const total = pool.reduce((sum, kind) => sum + kind.weight, 0);
         let left = this.random() * total;
         for (const kind of pool) {
@@ -134,7 +139,8 @@ export class WorldCycle {
         };
         this.kind = kind;
         this.preset = preset;
-        this.until = this.now() + WEATHER_MIN_MS + this.random() * (WEATHER_MAX_MS - WEATHER_MIN_MS);
+        const [least, most] = kind.lasts !== undefined ? [kind.lasts[0] * 60_000, kind.lasts[1] * 60_000] : [WEATHER_MIN_MS, WEATHER_MAX_MS];
+        this.until = this.now() + least + this.random() * (most - least);
         this.pending = null;
         this.stepRamp();
         return true;

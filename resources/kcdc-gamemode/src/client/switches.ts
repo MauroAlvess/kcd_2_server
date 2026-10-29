@@ -1,5 +1,7 @@
 /** Switches local to this machine: what this player sees and hears, never the world. */
 
+import { chatShown, showChat } from "./chat-state.js";
+
 export interface Switch {
     readonly name: string;
     readonly label: string;
@@ -35,9 +37,9 @@ const switches: readonly Switch[] = [
     {
         name: "chat",
         label: "Chat overlay",
-        hint: "Hides the log without closing the input field.",
-        read: () => Chat.isUIVisible(),
-        write: (value) => Chat.setUIVisible(value),
+        hint: "Hides the chat card (or the game's own overlay, if the card is not up).",
+        read: () => chatShown(),
+        write: (value) => showChat(value),
     },
     {
         name: "voice",

@@ -20,7 +20,7 @@ function load({ saved = null, carts = [] } = {}) {
     const clock = { now: 10_000_000 };
 
     const respawn = { exports: {} };
-    vm.runInNewContext(dist("respawn.js"), { exports: respawn.exports, Navigation: { ready: false }, Events: { on() {} }, Chat: {}, Player: {}, Door: {} });
+    vm.runInNewContext(dist("respawn.js"), { exports: respawn.exports, require: () => ({ cure: () => true }), Navigation: { ready: false }, Events: { on() {} }, Chat: {}, Player: {}, Door: {} });
     const store = {
         ensureDir() {},
         read: (file) => (files.has(file) ? (files.get(file) === "corrupt" ? { status: "corrupt", reason: "bad" } : { status: "ok", value: JSON.parse(files.get(file)) }) : { status: "missing" }),

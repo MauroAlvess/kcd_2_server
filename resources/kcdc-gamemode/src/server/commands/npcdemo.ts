@@ -514,7 +514,15 @@ export function installNpcDemoHandlers(): void {
         hunters.clear();
     });
     Events.on("npcIntentDone", (npc, status) => {
-        if (!spawned.has(npc.id)) {
+        // A body taken out of the world between its order ending and this running answers nothing, not even its id (the
+        // log of 2026-10-18 had five "Entity handle ... is not valid" from here, of NPCs no demo had made).
+        let id: number;
+        try {
+            id = npc.id;
+        } catch {
+            return;
+        }
+        if (!spawned.has(id)) {
             return; // Another resource's NPC. Leaving it alone is the whole of sharing the API.
         }
         console.log(`npcIntentDone: ${npc.name || npc.id} (${npc.id}) finished '${npc.intent}' -- ${status} at (${npc.position.x.toFixed(2)}, ${npc.position.y.toFixed(2)}, ${npc.position.z.toFixed(2)})`);

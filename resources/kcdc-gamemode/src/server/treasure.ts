@@ -3,23 +3,36 @@
  * variadas ... comida, minérios, receitas, armaduras, armas ... de acordo com tabelas de recompensas aleatórias ... de maneira
  * coerente com a localização e a dificuldade de acesso").
  *
+ * Gear is poor and rare in them (2026-10-20, the user: "os itens que aparecem nos baús avulsos não podem ter armadura e espada muito
+ * boas, têm que ser mais raros: armaduras, espadas, coisas de cavalo; senão tira o sentido das profissões"): the smith makes the good
+ * weapons and armour and the tailor the good clothes, so a chest holds only plain pieces and, from the farthest and the locked ones,
+ * common ones, never a good or an excellent weapon or armour, none at all in the chests near people, and no horse tack ever; and a
+ * piece in a chest is worn, of the lowest qualities. Clothes may be good, and now and then, far away.
+ *
  * The level's own containers start empty here: the server never rolls the game's loot. So a script fills them. The chests that
  * take part are the level's own that nobody has a claim on: not a property of the catalog (`properties.ts`: a house's chests
  * are its owner's), not a bandit camp's (`bandits.ts` stocks those with the guilds' goods), not a donation box, a grave, a
- * beehive or a vegetable store, and nothing a quest names. Of those, a share (40%, the same chests every start) holds
+ * beehive or a vegetable store, and nothing a quest names. Of those, a share (20%, the same chests every start) holds
  * something, so that finding one is a find and not a rule.
+ *
+ * Fewer and poorer since 2026-10-25 (a player: "o sistema de lootear sacos pelo mapa é incoerente com RP: tudo que existe nas terras é
+ * posse do lorde ou de algum proprietário"; the user: "diminuir o rate de drop"): a fifth of the chests hold anything (was two fifths), a chest holds
+ * one or two kinds of thing (up to three or four far away), the coins are half, and an emptied chest waits three hours (was one).
  *
  * Where a chest stands says how good its contents are, in three tiers:
  *
  * - tier 1, within 150 m of a village, a church or a roadside camp: food, bandages, a few herbs, scrap iron, crude arrows,
- *   a little coin, plain gear;
+ *   a little coin, plain clothes (no weapons or armour);
  * - tier 2, up to 500 m from them, or a locked chest nearer: the iron and steel the smiths use, arrows for hunting, a
- *   potion, the cheaper recipe books, common gear, more coin;
+ *   potion, the cheaper recipe books, plain weapons and armour, plain or common clothes, more coin;
  * - tier 3, farther than that, or a locked chest beyond the first tier: Frankfurt and Toledo steel, copper, the dear recipe
- *   books, good and now and then excellent gear, the most coin.
+ *   books, weapons and armour that are plain or (a third of the time) common, clothes that may be good, the most coin.
  *
- * What is looted is put back, from the same tables, an hour after the chest was found empty and nobody is near. A restart
+ * What is looted is put back, from the same tables, three hours after the chest was found empty and nobody is near. A restart
  * rolls every chest again. `/tesouros` says how it stands, fills, and switches it.
+ *
+ * The level's food sacks (`sack_apples`, `sack_onions`, `sack_generic`) are not in these tables (2026-10-27, the user: "nos sacos de comida vamos colocar um pouco de comida como
+ * frutas, mas pouco"): a sack of apples that held a sword or a purse was no RP. Each holds a little food, by what it is (`rollSack`), in half of them, and is filled again like a chest.
  */
 
 import { BOOKS, bookGuid } from "./books.js";
@@ -34,9 +47,11 @@ const FILE = `${DIR}/treasure.json`;
 
 export const treasureSettings = {
     /** The share of the eligible chests that hold something. */
-    share: 0.4,
+    share: 0.2,
+    /** The share of the food sacks that hold something (a little: `rollSack`). */
+    sackShare: 0.5,
     /** A chest found empty is filled again this long after, with nobody near. */
-    refillMs: 60 * 60_000,
+    refillMs: 3 * 60 * 60_000,
     clearRadiusM: 45,
     tickMs: 5 * 60_000,
     /** The first filling comes this long after the server starts, once the level and the camps are up. */
@@ -47,6 +62,9 @@ export const treasureSettings = {
 };
 
 export type Tier = 1 | 2 | 3;
+
+/** The gear of a horse (saddle, bridle, chanfron, caparison, horseshoes): made and bought, never found in a chest. */
+export const HORSE_TACK = /caparison|saddle|bridle|chanfron|horseshoe|horse|barding|stirrup/i;
 
 /** The containers worth a loot table, and the ones that are not: the same words the camps' chests are found by. */
 const CONTAINER = /chest|stash|sack|crate|box|barrel/i;
@@ -89,18 +107,42 @@ function plain(id: string, weight: number, minTier: Tier, items: readonly string
     return { id, weight, minTier, roll: (_tier, random) => [{ item: pick(random, items), amount: between(random, min, max) }] };
 }
 
-/** One piece of gear of the quality the tier calls for, at quality 1 to the tier's best (the game refuses a tier a piece is not made in: the fill tries again without). */
-function gearEntry(group: "weapons" | "armor" | "clothes", weight: number, gear: Gear): Entry {
+export type GearGroup = "weapons" | "armor" | "clothes";
+
+/**
+ * The quality of piece a chest of this tier gives, for a draw from 0 to 1. Weapons and armour never pass "common", and that only from the
+ * third tier (the farthest and the locked chests), a third of the time; the second tier's are all plain. Clothes go up to "good", from the
+ * third tier, one in seven; nothing is ever "excellent".
+ */
+export function gearQuality(group: GearGroup, tier: Tier, draw: number): "basic" | "common" | "good" {
+    if (tier === 1) {
+        return "basic";
+    }
+    if (group === "clothes") {
+        return tier === 2 ? (draw < 0.5 ? "basic" : "common") : draw < 0.25 ? "basic" : draw < 0.85 ? "common" : "good";
+    }
+    return tier === 2 || draw < 0.65 ? "basic" : "common";
+}
+
+/**
+ * One piece of gear of the quality the tier calls for (`gearQuality`), worn: at quality 1, or 2 from the second tier (weapons and armour),
+ * the game refusing a quality a piece is not made in, and the fill trying again without. Weapons and armour are not found in the chests
+ * of the first tier at all.
+ */
+function gearEntry(group: GearGroup, weight: number, gear: Gear): Entry {
     return {
         id: group,
         weight,
-        minTier: 1,
+        minTier: group === "clothes" ? 1 : 2,
         roll: (tier, random) => {
             const table = gear[group] ?? {};
-            const draw = random();
-            const quality = tier === 1 ? "basic" : tier === 2 ? (draw < 0.4 ? "basic" : "common") : draw < 0.3 ? "common" : draw < 0.85 ? "good" : "excellent";
-            const list = table[quality] ?? [];
-            return list.length === 0 ? [] : [{ item: pick(random, list), amount: 1, metadata: { quality: between(random, 1, tier + 1) } }];
+            const quality = gearQuality(group, tier, random());
+            const list = (table[quality] ?? []).filter((item) => !HORSE_TACK.test(item));
+            if (list.length === 0) {
+                return [];
+            }
+            const worn = group === "clothes" ? between(random, 1, tier) : between(random, 1, tier === 1 ? 1 : 2);
+            return [{ item: pick(random, list), amount: 1, metadata: { quality: worn } }];
         },
     };
 }
@@ -126,7 +168,12 @@ export function entries(gear: Gear): readonly Entry[] {
         plain("comida", 14, 1, FOOD, 1, 4),
         plain("carne crua", 6, 1, RAW_MEAT, 1, 2),
         plain("ataduras", 8, 1, ["bandage_classic"], 1, 3),
-        plain("sabão", 3, 1, ["soap"], 1, 2),
+        // Soap and perfume, which the bath attendants' vendors sold and nobody makes (2026-10-27: "o sabão e o perfume coloque em baús espalhados"): soap in every kind of chest,
+        // the plain perfumes in those near people, the better ones the farther the chest stands.
+        plain("sabão", 7, 1, ["soap", "soap_kcd"], 1, 3),
+        plain("perfume", 4, 1, ["perfume_longWeak", "perfume_shortStrong"], 1, 1),
+        plain("perfume bom", 3, 2, ["perfume_longWeak_medium", "perfume_shortStrong_medium"], 1, 1),
+        plain("perfume raro", 2, 3, ["perfume_longWeak_high", "perfume_shortStrong_high"], 1, 1),
         plain("ervas", 10, 1, HERBS, 2, 6),
         plain("sucata", 10, 1, ["bsmt_ironBad"], 2, 6),
         plain("flechas", 8, 1, ["arrow_crude", "arrow_normal"], 5, 15),
@@ -134,24 +181,35 @@ export function entries(gear: Gear): readonly Entry[] {
             id: "moedas",
             weight: 9,
             minTier: 1,
-            // The game shows a tenth of the money item's amount: 100 to 600 reads as 10 to 60 coins.
-            roll: (tier, random) => [{ item: "money", amount: between(random, 100 * tier, 600 * tier * tier) }],
+            // The game shows a tenth of the money item's amount: 50 to 300 reads as 5 to 30 coins (halved 2026-10-25).
+            roll: (tier, random) => [{ item: "money", amount: between(random, 50 * tier, 300 * tier * tier) }],
         },
         plain("ferro", 8, 2, ["bsmt_ironGood"], 1, 4),
         plain("aço comum", 7, 2, ["bsmt_steelBad", "bsmt_hardware"], 1, 3),
         plain("flechas de caça", 5, 2, ["arrow_hunting"], 5, 10),
         plain("poções", 6, 2, POTIONS, 1, 2),
         plain("aço bom", 5, 3, ["bsmt_steelNormal", "bsmt_steelGood", "bsmt_copper"], 1, 2),
+        // The rest of what the guilds' recipes take (2026-10-18): cloth and hides, the kitchen's spices and wine, the alchemist's
+        // salts and rare roots, the forge's fine parts.
+        plain("panos e couros", 6, 1, ["loot_cloth", "skin_sheep", "special_cowSkin", "special_pigSkin", "special_deerSkin"], 1, 3),
+        plain("temperos", 5, 1, ["loot_salt", "driedPepperSpice", "garlic", "honey"], 1, 3),
+        plain("vinho", 4, 1, ["wine"], 1, 2),
+        plain("carvão", 4, 1, ["special_charcoal"], 1, 4),
+        plain("sais", 4, 2, ["special_sulfur", "special_saltpeter", "special_charcoalImproved"], 1, 3),
+        plain("ervas raras", 4, 2, ["herb_dried_poppy", "special_mushroomAmanita", "special_cobweb"], 1, 2),
+        plain("peças finas", 3, 2, ["bsmt_guardSpecial", "bsmt_woodExotic", "special_attire"], 1, 2),
+        plain("raridades", 2, 3, ["maliruvLek_mandrakeRoot", "maliruvLek_freshwaterPearl"], 1, 1),
         bookEntry(5, 2, true),
         bookEntry(3, 3, false),
-        gearEntry("weapons", 6, gear),
-        gearEntry("armor", 6, gear),
-        gearEntry("clothes", 6, gear),
+        // Rare (2026-10-20): a third of what they were for the weapons and the armour, two thirds for the clothes.
+        gearEntry("weapons", 2, gear),
+        gearEntry("armor", 2, gear),
+        gearEntry("clothes", 4, gear),
     ];
 }
 
 /** How many rows a chest of this tier holds. */
-const ROWS: Readonly<Record<Tier, readonly [number, number]>> = { 1: [1, 3], 2: [2, 4], 3: [3, 5] };
+const ROWS: Readonly<Record<Tier, readonly [number, number]>> = { 1: [1, 2], 2: [1, 3], 3: [2, 4] };
 
 /** What one chest of the tier holds: a few different kinds, none twice. */
 export function rollChest(tier: Tier, table: readonly Entry[], random: () => number = Math.random): Loot[] {
@@ -200,7 +258,65 @@ export function tierOf(distance: number, locked: boolean, settings = treasureSet
 }
 
 export function isTreasureName(name: string): boolean {
-    return CONTAINER.test(name) && !NOT_TREASURE.test(name);
+    return CONTAINER.test(name) && !NOT_TREASURE.test(name) && sackKindOf(name) === null;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The food sacks: a little food, by what the sack is.
+
+export type SackKind = "apples" | "onions" | "generic";
+
+/** The kind of food sack a container is by the name the level gives it (`Stash3[Stash/sack_apples9_<guid>]`), or null for anything else. A sack in a house's shelves counts too. */
+export function sackKindOf(name: string): SackKind | null {
+    const found = /sack_(apples|onions|generic)/i.exec(name);
+    return found === null ? null : (found[1]?.toLowerCase() as SackKind);
+}
+
+/** The game's own food, by item GUID (the same the gardens' harvests are). */
+const FRUIT = {
+    apple: "2264f217-590e-4c0f-a4c6-f50c6532b9f6",
+    pear: "2eeb7bf7-f0ac-4c46-9468-97c2f76cb254",
+    plum: "2ac0499c-a18f-425f-ab8c-bc81eaa0142a",
+};
+const ONION = "4a6fa310-067a-404d-9813-bd1761d1c70d";
+const CARROT = "b7ee311c-736b-4f7c-987b-8431ce3b5600";
+
+/**
+ * What a food sack holds: little. A sack of apples a few apples (one to three), now and then (one in four) a pear or a plum as well; a sack of onions one to three onions, and
+ * now and then (one in five) an apple; a plain sack one thing, mostly fruit, one or two of it.
+ */
+export function rollSack(kind: SackKind, random: () => number = Math.random): Loot[] {
+    if (kind === "apples") {
+        const rows: Loot[] = [{ item: FRUIT.apple, amount: between(random, 1, 3) }];
+        if (random() < 0.25) {
+            rows.push({ item: random() < 0.5 ? FRUIT.pear : FRUIT.plum, amount: between(random, 1, 2) });
+        }
+        return rows;
+    }
+    if (kind === "onions") {
+        const rows: Loot[] = [{ item: ONION, amount: between(random, 1, 3) }];
+        if (random() < 0.2) {
+            rows.push({ item: FRUIT.apple, amount: between(random, 1, 2) });
+        }
+        return rows;
+    }
+    const plainFood: ReadonlyArray<{ readonly item: string; readonly weight: number }> = [
+        { item: FRUIT.apple, weight: 4 },
+        { item: FRUIT.pear, weight: 3 },
+        { item: FRUIT.plum, weight: 3 },
+        { item: "walnuts", weight: 2 },
+        { item: CARROT, weight: 2 },
+    ];
+    let left = random() * plainFood.reduce((sum, food) => sum + food.weight, 0);
+    let chosen = plainFood[0] as (typeof plainFood)[number];
+    for (const food of plainFood) {
+        left -= food.weight;
+        if (left <= 0) {
+            chosen = food;
+            break;
+        }
+    }
+    return [{ item: chosen.item, amount: between(random, 1, 2) }];
 }
 
 const flat = (a: Place, b: Place): number => Math.hypot(a.x - b.x, a.y - b.y);
@@ -216,6 +332,8 @@ export interface Surroundings {
 interface Slot {
     readonly guid: string;
     readonly tier: Tier;
+    /** A food sack, which holds a little food by its kind and not the chests' tables. */
+    readonly sack?: SackKind;
     /** When it was first seen empty since it was last filled, or 0. */
     emptySince: number;
     filledAt: number;
@@ -279,6 +397,13 @@ export class Treasure {
         this.slots = new Map();
         const settlements = this.around.settlements();
         for (const stash of Stash.all()) {
+            const sack = stash.isVirtual || stash.levelGuid === "" ? null : sackKindOf(stash.name);
+            if (sack !== null) {
+                if (!this.around.claimed(stash.levelGuid) && shareOf(stash.levelGuid) < this.settings.sackShare) {
+                    this.slots.set(stash.levelGuid, { guid: stash.levelGuid, tier: 1, sack, emptySince: 0, filledAt: 0 });
+                }
+                continue;
+            }
             if (stash.isVirtual || stash.levelGuid === "" || !isTreasureName(stash.name) || this.around.claimed(stash.levelGuid) || shareOf(stash.levelGuid) >= this.share) {
                 continue;
             }
@@ -289,10 +414,10 @@ export class Treasure {
     }
 
     /** Puts a roll into a chest, one row at a time so a name the game does not know costs only itself. True when it holds something now. */
-    private fill(stash: Stash, tier: Tier): boolean {
+    private fill(stash: Stash, slot: Slot): boolean {
         stash.setInventory({ items: [] });
         let held = 0;
-        for (const row of rollChest(tier, entries(this.gear), this.random)) {
+        for (const row of slot.sack === undefined ? rollChest(slot.tier, entries(this.gear), this.random) : rollSack(slot.sack, this.random)) {
             if (this.refused.has(row.item)) {
                 continue;
             }
@@ -341,7 +466,7 @@ export class Treasure {
                     continue;
                 }
             }
-            if (this.fill(stash, slot.tier)) {
+            if (this.fill(stash, slot)) {
                 slot.filledAt = now;
                 slot.emptySince = 0;
                 count += 1;
@@ -351,16 +476,30 @@ export class Treasure {
         return count;
     }
 
-    status(): { enabled: boolean; share: number; chests: number; byTier: Record<Tier, number>; filled: number; refused: string[] } {
+    status(): { enabled: boolean; share: number; chests: number; sacks: number; byTier: Record<Tier, number>; filled: number; refused: string[] } {
         const byTier: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
+        let sacks = 0;
         for (const slot of this.slots.values()) {
-            byTier[slot.tier] += 1;
+            if (slot.sack === undefined) {
+                byTier[slot.tier] += 1;
+            } else {
+                sacks += 1;
+            }
         }
-        return { enabled: this.enabled, share: this.share, chests: this.slots.size, byTier, filled: this.filled, refused: [...this.refused] };
+        return { enabled: this.enabled, share: this.share, chests: this.slots.size - sacks, sacks, byTier, filled: this.filled, refused: [...this.refused] };
     }
 }
 
 // ---------------------------------------------------------------------------------------------
+
+/** The gear table without any horse tack in it, whatever the data file lists. */
+export function withoutTack(gear: Gear): Gear {
+    const out: Record<string, Record<string, readonly string[]>> = {};
+    for (const [group, byQuality] of Object.entries(gear)) {
+        out[group] = Object.fromEntries(Object.entries(byQuality).map(([quality, items]) => [quality, items.filter((item) => !HORSE_TACK.test(item))]));
+    }
+    return out;
+}
 
 function readGear(): Gear {
     const fs = require("node:fs") as { readFileSync(path: string, encoding: "utf8"): string };
@@ -372,7 +511,7 @@ function readGear(): Gear {
         try {
             const parsed = JSON.parse(fs.readFileSync(place, "utf8")) as unknown;
             if (typeof parsed === "object" && parsed !== null) {
-                return parsed as Gear;
+                return withoutTack(parsed as Gear);
             }
         } catch {
             // Not here; the next place.
@@ -382,15 +521,18 @@ function readGear(): Gear {
     return {};
 }
 
-/** The places people live or pass, from what this server already knows of the map. */
+/** The places people live or pass, from what this server already knows of the map: the churches, the villages and what belongs to them, the pedlars' camps. */
 export function knownSettlements(): Place[] {
     // Imported here, not at the top: vendors and respawn are big modules, and only a running server needs them.
     const respawn = require("./respawn.js") as { CHURCHES: readonly Place[] };
-    const properties = require("./properties.js") as { REGIONS: readonly { minX: number; maxX: number; minY: number; maxY: number }[] };
+    type Boxed = { minX: number; maxX: number; minY: number; maxY: number };
+    const properties = require("./properties.js") as { REGIONS: readonly (Boxed & { wild?: boolean; compounds?: readonly { box: Boxed; wild?: boolean }[] })[] };
+    const middle = (box: Boxed): Place => ({ x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 });
     const vendors = require("./vendors.js") as { CAMPS: ReadonlyArray<{ fire: Place }> };
     return [
         ...respawn.CHURCHES.map((church) => ({ x: church.x, y: church.y })),
-        ...properties.REGIONS.map((region) => ({ x: (region.minX + region.maxX) / 2, y: (region.minY + region.maxY) / 2 })),
+        // The villages, and the inns and farms that are a property of one (2026-10-26); a camp in the wild (`wild`: the Devil's Den, a place of Minas) is nobody's home.
+        ...properties.REGIONS.filter((region) => region.wild !== true).flatMap((region) => [middle(region), ...(region.compounds ?? []).filter((compound) => compound.wild !== true).map((compound) => middle(compound.box))]),
         ...vendors.CAMPS.map((camp) => ({ x: camp.fire.x, y: camp.fire.y })),
     ];
 }
@@ -401,7 +543,7 @@ export function installTreasure(claimedBy: (guid: string) => boolean): Treasure 
     const around: Surroundings = {
         settlements: knownSettlements,
         claimed: claimedBy,
-        playersNear: (place, radius) => Player.all().some((player) => player.ready && player.alive && player.virtualWorld === 0 && flat(player.position, place) <= radius),
+        playersNear: (place, radius) => Player.all().some((player) => player.ready && player.alive && (player.virtualWorld === 0 || player.virtualWorld === 0xffffffff) && flat(player.position, place) <= radius),
     };
     const made = new Treasure(readGear(), around);
     treasure = made;

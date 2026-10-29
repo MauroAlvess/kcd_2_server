@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const inventoryAdd = require("./inventory-add-module.cjs");
 
 // The barbers (src/server/barbers.ts): a look tried on the body, kept for a price or put back.
 
@@ -52,7 +53,7 @@ function load({ saved = LOOK, money: coinsHeld = 1000 } = {}) {
         },
     };
     const realm = (name, extra = {}) => {
-        const context = { ...base, ...extra, exports: {} };
+        const context = { ...base, require: (id) => (id === "./inventory-add.js" ? inventoryAdd(context) : assert.fail(`unexpected require ${id}`)), ...extra, exports: {} };
         vm.runInNewContext(dist(name), context);
         return context.exports;
     };

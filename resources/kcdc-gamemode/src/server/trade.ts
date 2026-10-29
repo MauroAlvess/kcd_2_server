@@ -1,12 +1,14 @@
 /**
- * Trading between two players, on the game's own screens.
+ * Trading between two players, on the trades' page (`ui/craft.html`, on the right of the screen: user, 2026-10-18, "no trade
+ * entre jogadores vamos usar a nossa HUD personalizada de ofício: clicou em negociar, aceitou, aparece na direita").
  *
  * KCD2 has no screen for two players to barter on, so each side gets an offer: a virtual container
- * (`Stash.createVirtual`) its owner fills from their own inventory on the game's transfer screen, and an amount of money
- * chosen in the dialogue list. Both offers are shown in the game's dialogue list, where each side can change theirs, look
- * at the other's, accept or cancel. Any change to either offer takes both acceptances back, so nobody accepts one deal and
- * gets another. When both have accepted, the money and the items cross over; anything the other side cannot carry goes
- * back to whoever offered it. A cancelled trade gives every item back.
+ * (`Stash.createVirtual`) its owner fills from their own inventory on the game's transfer screen. Money is one of the things that
+ * screen moves (the Groschen are an item of the inventory), so the page has no field for it (user, 2026-10-21: "não precisa estar
+ * na tela personalizada, a tela do vanilla já tem como passar dinheiro"). The page shows both offers, each item with the game's own
+ * icon, and has the buttons: change my items, accept, cancel (Esc too). It was the game's dialogue list until 2026-10-18. Any change
+ * to either offer takes both acceptances back, so nobody accepts one deal and gets another. When both have accepted, the items cross
+ * over; anything the other side cannot carry goes back to whoever offered it. A cancelled trade gives every item back.
  *
  * Items in an offer are out of their owner's inventory, so they are written down (`playerdata/escrow.json`) for as long
  * as they are there, and anything that could not be handed back (a full inventory, a player who left, a restart in the
@@ -14,17 +16,17 @@
  */
 
 import { labelFor } from "./acquaintances.js";
-import { itemLine } from "./item-names.js";
+import { emitLarge } from "./big-emit.js";
+import { craftTitle } from "./craft-titles.js";
+import { onRestartSettle, restartPending } from "./restart-notice.js";
+import { addUnits, addUnitsToStash } from "./inventory-add.js";
+import { iconOf } from "./item-icons.js";
+import { itemName } from "./item-names.js";
 import { ensureDir, read, write } from "./store.js";
 
 const RESOURCE = "kcdc-gamemode";
 const DIR = "playerdata";
 const FILE = `${DIR}/escrow.json`;
-
-const MONEY_ITEM = "money";
-const MONEY_GUID = "5ef63059-322e-4e1b-abe8-926e100c770e";
-/** The game shows a tenth of the money item's amount. */
-const MONEY_UNIT = 10;
 
 /** How far apart the two may stand while trading. */
 export const TRADE_REACH_M = 8;
@@ -32,48 +34,38 @@ export const TRADE_REACH_M = 8;
 export const TRADE_IDLE_MS = 10 * 60_000;
 const TICK_MS = 2_000;
 
-/** How many of the other side's items the dialogue list can show at once (eight rows, two of them taken). */
-const SHOWN_ITEMS = 6;
-
 export interface EscrowRow {
     item: string;
     amount: number;
     metadata: Record<string, unknown>;
 }
 
-type Page = "main" | "money" | "theirs";
-
-/**
- * The list comes back this long after the transfer screen has closed. Opened while the game was still closing that
- * screen, it came up empty, with the player held in the conversation until a second Esc ended the trade (reported
- * 2026-10-14).
- */
+/** The page comes back this long after the transfer screen has closed, once the game has put that screen away. */
 export const REOPEN_AFTER_SCREEN_MS = 700;
+/** The transfer screen opens this long after the page is put away: the game's screen and ours do not open in one frame. */
+export const SCREEN_AFTER_PAGE_MS = 250;
+/**
+ * The transfer screen moves an offer one row at a time, and each move raised the container's change event, which read both containers again, wrote the escrow
+ * file and sent both pages with the icon of every item: seven rows were seven rounds (574 ms in one, 2026-10-26, perf-watch). A burst of changes is now
+ * drawn once, this long after the last; the acceptances go at once, and an accept pressed while the page is behind is not taken (the other could be accepting
+ * what is no longer on the table).
+ */
+export const TRADE_REFRESH_MS = 250;
 
-/** The list is drawn once more this long after it comes back, in case the first drawing was lost all the same. */
-export const REDRAW_AFTER_MS = 400;
-
-/** An Esc this soon after the list came back is taken for an empty list being dismissed: it is shown again, once. */
-export const GRACE_AFTER_REOPEN_MS = 3_000;
+/** What sends a page's data: the trade's view, and the word to put it away or end it. Tests give their own. */
+export type Send = (player: Player, name: string, json: string) => void;
 
 interface Side {
     readonly player: Player;
     readonly steamId: string;
     readonly stash: Stash;
-    /** Offered money, in units of the money item. */
-    money: number;
     accepted: boolean;
-    /** The dialogue on this side's screen, or 0. */
-    session: number;
-    page: Page;
-    /** The side has its container open on the transfer screen. */
+    /** The side has its container open on the transfer screen (or it is about to open): the page is put away meanwhile. */
     editing: boolean;
-    /** The list is waiting to come back after the transfer screen; nothing opens it before its time. */
+    /** The page is waiting to come back after the transfer screen; nothing puts it up before its time. */
     waiting: boolean;
-    /** When the list last came back after the transfer screen, or 0. */
-    reopenedAt: number;
-    /** The one Esc forgiven after that has been used. */
-    graceUsed: boolean;
+    /** The title image went with a page of this trade already: the page keeps it. */
+    titled: boolean;
 }
 
 interface Trade {
@@ -83,13 +75,10 @@ interface Trade {
     done: boolean;
     /** Items are being moved out of the offers by this module: their containers' change events are its own. */
     settling: boolean;
+    /** The sides whose offers changed since the pages were last drawn, and whether the drawing is waiting for its time. */
+    readonly dirty: Set<Side>;
+    refreshing: boolean;
 }
-
-const coins = (units: number): string => {
-    const amount = units / MONEY_UNIT;
-    const shown = Number.isInteger(amount) ? String(amount) : amount.toFixed(1).replace(".", ",");
-    return `${shown} ${amount === 1 ? "moeda" : "moedas"}`;
-};
 
 /** A copy of what a container holds: the rows are read before anything is moved, never through a live list. */
 function rowsOf(stash: Stash): InventoryRow[] {
@@ -113,7 +102,6 @@ function tell(player: Player, text: string): void {
 export class Trades {
     private readonly byPlayer = new Map<number, Trade>();
     private readonly byStash = new Map<number, Side>();
-    private readonly bySession = new Map<number, Side>();
     /** Items owed back to players who could not take them when a trade ended, by Steam id. */
     private owed: Record<string, EscrowRow[]> = {};
     /** What each trading player has in their offer right now, by Steam id: what a crash would cost them. */
@@ -124,6 +112,13 @@ export class Trades {
         private readonly now: () => number = () => Date.now(),
         private readonly later: (fn: () => void, ms: number) => void = (fn, ms) => {
             setTimeout(fn, ms);
+        },
+        private readonly send: Send = (player, name, json) => {
+            if (name === "trade.view") {
+                emitLarge(player, name, json);
+            } else {
+                player.emit(`${RESOURCE}:${name}`, json);
+            }
         },
     ) {}
 
@@ -196,7 +191,7 @@ export class Trades {
         const left: EscrowRow[] = [];
         let given = 0;
         for (const row of rows) {
-            if (Inventory.add(player, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
+            if (addUnits(player, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
                 given += 1;
             } else {
                 left.push(row);
@@ -219,36 +214,6 @@ export class Trades {
     }
 
     // -----------------------------------------------------------------------------------------
-    // Money, read and moved in the player's own inventory.
-
-    moneyOf(player: Player): number {
-        const state = Inventory.get(player);
-        return (state?.items ?? []).filter((row) => row.item === MONEY_GUID || row.name === MONEY_ITEM).reduce((sum, row) => sum + row.amount, 0);
-    }
-
-    private takeMoney(player: Player, units: number): boolean {
-        if (units <= 0) {
-            return true;
-        }
-        const rows = (Inventory.get(player)?.items ?? []).filter((row) => row.item === MONEY_GUID || row.name === MONEY_ITEM);
-        const taken: InventoryUnit[] = [];
-        let left = units;
-        for (const row of rows) {
-            if (left <= 0) {
-                break;
-            }
-            const amount = Math.min(row.amount, left);
-            taken.push({ id: row.id, amount });
-            left -= amount;
-        }
-        return left <= 0 && Inventory.remove(player, { units: taken }).ok;
-    }
-
-    private giveMoney(player: Player, units: number): boolean {
-        return units <= 0 || Inventory.add(player, { item: MONEY_ITEM, amount: units }).ok;
-    }
-
-    // -----------------------------------------------------------------------------------------
     // Items, moved out of an offer.
 
     /** Moves every row of a side's offer to `to`. A row the target cannot take stays in the offer. */
@@ -259,9 +224,9 @@ export class Trades {
             if (!side.stash.removeItem({ units: [{ id: row.id, amount: row.amount }] }).ok) {
                 continue;
             }
-            if (Inventory.add(to, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
+            if (addUnits(to, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
                 moved += 1;
-            } else if (!side.stash.addItem({ item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
+            } else if (!addUnitsToStash(side.stash, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
                 // Neither the target nor the offer would take it back: it is owed to whoever offered it.
                 this.owe(side.steamId, escrowRows([row]));
             }
@@ -294,23 +259,19 @@ export class Trades {
 
     /** Opens a trade between two players who both agreed to it. False when it cannot start. */
     start(first: Player, second: Player): boolean {
-        if (first.id === second.id || this.isTrading(first) || this.isTrading(second) || first.steamId === "" || second.steamId === "") {
+        if (first.id === second.id || this.isTrading(first) || this.isTrading(second) || first.steamId === "" || second.steamId === "" || restartPending()) {
             return false;
         }
         const make = (player: Player): Side => ({
             player,
             steamId: player.steamId,
             stash: Stash.createVirtual(player.virtualWorld),
-            money: 0,
             accepted: false,
-            session: 0,
-            page: "main",
             editing: false,
             waiting: false,
-            reopenedAt: 0,
-            graceUsed: false,
+            titled: false,
         });
-        const trade: Trade = { id: this.nextId++, sides: [make(first), make(second)], lastActivity: this.now(), done: false, settling: false };
+        const trade: Trade = { id: this.nextId++, sides: [make(first), make(second)], lastActivity: this.now(), done: false, settling: false, dirty: new Set(), refreshing: false };
         for (const side of trade.sides) {
             this.byPlayer.set(side.player.id, trade);
             this.byStash.set(side.stash.id, side);
@@ -325,177 +286,121 @@ export class Trades {
         return trade.sides[0] === side ? trade.sides[1] : trade.sides[0];
     }
 
-    private describe(side: Side): string {
-        const units = rowsOf(side.stash).reduce((sum, row) => sum + row.amount, 0);
-        const parts = [units > 0 ? `${units} ${units === 1 ? "item" : "itens"}` : "", side.money > 0 ? coins(side.money) : ""].filter((part) => part !== "");
-        return parts.length === 0 ? "nada" : parts.join(" e ");
-    }
-
-    private page(trade: Trade, side: Side): DialoguePage {
-        const other = this.other(trade, side);
-        const name = labelFor(side.player, other.player);
-        if (side.page === "money") {
-            const has = this.moneyOf(side.player);
-            return {
-                line: undefined,
-                onRight: false,
-                options: [
-                    { id: "info", text: `Dinheiro na sua oferta: ${coins(side.money)} (você tem ${coins(has)})`, enabled: false },
-                    { id: "money:+10", text: "Mais 1 moeda", enabled: side.money + 10 <= has },
-                    { id: "money:+100", text: "Mais 10 moedas", enabled: side.money + 100 <= has },
-                    { id: "money:+500", text: "Mais 50 moedas", enabled: side.money + 500 <= has },
-                    { id: "money:-10", text: "Menos 1 moeda", enabled: side.money >= 10 },
-                    { id: "money:-100", text: "Menos 10 moedas", enabled: side.money >= 100 },
-                    { id: "money:0", text: "Nenhum dinheiro", enabled: side.money > 0 },
-                    { id: "back", text: "Voltar", enabled: true },
-                ],
-            };
-        }
-        if (side.page === "theirs") {
-            const rows = rowsOf(other.stash);
-            const lines: DialogueOption[] = [];
-            if (other.money > 0) {
-                lines.push({ id: "info:money", text: `Dinheiro: ${coins(other.money)}`, enabled: false });
-            }
-            const room = SHOWN_ITEMS - lines.length;
-            rows.slice(0, rows.length > room ? room - 1 : room).forEach((row, index) => lines.push({ id: `info:${index}`, text: itemLine(row), enabled: false }));
-            if (rows.length > room) {
-                lines.push({ id: "info:more", text: `... e mais ${rows.length - (room - 1)}`, enabled: false });
-            }
-            if (lines.length === 0) {
-                lines.push({ id: "info:none", text: `${name} ainda não ofereceu nada.`, enabled: false });
-            }
-            return { line: undefined, onRight: false, options: [...lines, { id: "back", text: "Voltar", enabled: true }] };
-        }
+    /** What the page shows of one offer: each item with its name, how many and the game's icon (the money too, an item like the rest); whether it was accepted. */
+    private offerOf(side: Side): Record<string, unknown> {
         return {
-            line: undefined,
-            onRight: false,
-            options: [
-                { id: "info:mine", text: `Você oferece: ${this.describe(side)}`, enabled: false },
-                { id: "info:theirs", text: `${name} oferece: ${this.describe(other)}${other.accepted ? " (aceitou)" : ""}`, enabled: false },
-                { id: "items", text: "Mudar os meus itens", enabled: true },
-                { id: "money", text: `Mudar o dinheiro (${coins(side.money)})`, enabled: true },
-                { id: "theirs", text: `Ver o que ${name} oferece`, enabled: true },
-                side.accepted ? { id: "info:waiting", text: `Você aceitou; esperando ${name}`, enabled: false } : { id: "accept", text: "Aceitar a troca", enabled: true },
-                { id: "cancel", text: "Cancelar a troca", enabled: true },
-            ],
+            items: rowsOf(side.stash).map((row) => ({ name: itemName(row), n: row.amount, icon: iconOf(row.item) })),
+            accepted: side.accepted,
         };
     }
 
-    /** Puts the side's page on their screen: the open conversation is updated, or a new one opened. */
+    /** What one side's page is sent: both offers and the other's name. */
+    viewFor(trade: Trade, side: Side): Record<string, unknown> {
+        const other = this.other(trade, side);
+        return { mode: "trade", id: trade.id, partner: labelFor(side.player, other.player), mine: this.offerOf(side), theirs: this.offerOf(other) };
+    }
+
+    /** Puts the side's page up, or draws it again with what is on the table now. Not while their transfer screen is up. */
     private show(trade: Trade, side: Side): void {
         if (trade.done || side.editing || side.waiting) {
             return;
         }
-        const page = this.page(trade, side);
-        if (side.session !== 0 && Dialogue.update(side.session, page)) {
-            return;
-        }
-        if (side.session !== 0) {
-            this.bySession.delete(side.session);
-        }
-        const session = Dialogue.open(side.player.id, page);
-        side.session = session;
-        if (session === 0) {
-            this.cancel(trade, "A negociação não pôde ser aberta.");
-            return;
-        }
-        this.bySession.set(session, side);
+        const view = this.viewFor(trade, side);
+        // The title image ("NEGOCIAÇÃO", `data/craft-titles.json`) with the first page of the trade only: 15 KB, and the page keeps it.
+        const img = side.titled ? "" : craftTitle("negociacao");
+        side.titled = true;
+        this.send(side.player, "trade.view", JSON.stringify(img === "" ? view : { ...view, img }));
     }
 
-    /** Brings the list back after `delay`, with what is on the table by then, and draws it once more a moment later. */
+    /** Brings the page back `delay` after the transfer screen, with what is on the table by then. */
     private reopen(trade: Trade, side: Side, delay: number): void {
         side.waiting = true;
         this.later(() => {
             side.waiting = false;
-            if (trade.done || side.editing || side.session !== 0) {
-                return;
+            if (!trade.done && !side.editing) {
+                this.show(trade, side);
             }
-            side.reopenedAt = this.now();
-            this.show(trade, side);
-            this.later(() => {
-                if (!trade.done && !side.editing && side.session !== 0) {
-                    Dialogue.update(side.session, this.page(trade, side));
-                }
-            }, REDRAW_AFTER_MS);
         }, delay);
     }
 
-    private closeDialogue(side: Side): void {
-        const session = side.session;
-        side.session = 0;
-        if (session !== 0) {
-            this.bySession.delete(session);
-            Dialogue.close(session);
-        }
-    }
-
-    /** Either offer changed: both acceptances go, and both pages say what is on the table now. */
+    /** Either offer changed: both acceptances go at once, and both pages say what is on the table a moment later, once for a burst of changes. */
     private changed(trade: Trade, side: Side): void {
         trade.lastActivity = this.now();
         const hadAccepted = trade.sides.some((each) => each.accepted);
         for (const each of trade.sides) {
             each.accepted = false;
         }
-        this.remember(side);
         if (hadAccepted) {
             for (const each of trade.sides) {
                 tell(each.player, "A oferta mudou: os dois precisam aceitar de novo.");
             }
+        }
+        trade.dirty.add(side);
+        if (trade.refreshing) {
+            return;
+        }
+        trade.refreshing = true;
+        this.later(() => this.refresh(trade), TRADE_REFRESH_MS);
+    }
+
+    /** The drawing a burst of changes waited for: the escrow of the offers that changed, and both pages as they are now. */
+    private refresh(trade: Trade): void {
+        trade.refreshing = false;
+        const sides = [...trade.dirty];
+        trade.dirty.clear();
+        if (trade.done || trade.settling) {
+            return;
+        }
+        for (const side of sides) {
+            this.remember(side);
         }
         for (const each of trade.sides) {
             this.show(trade, each);
         }
     }
 
-    choose(session: number, player: Player, option: string): void {
-        const side = this.bySession.get(session);
-        if (side === undefined || side.player.id !== player.id) {
-            return;
-        }
+    /**
+     * What a player did on their page: `items` (to the transfer screen), `accept` or `cancel` (the page's button, its X or Esc).
+     */
+    act(player: Player, action: string): void {
         const trade = this.byPlayer.get(player.id);
         if (trade === undefined || trade.done) {
             return;
         }
+        const side = trade.sides[0].player.id === player.id ? trade.sides[0] : trade.sides[1];
         trade.lastActivity = this.now();
 
-        if (option === "cancel") {
+        if (action === "cancel") {
             this.cancel(trade, `${labelFor(this.other(trade, side).player, player)} cancelou a troca.`, side);
             return;
         }
-        if (option === "items") {
-            side.editing = true;
-            this.closeDialogue(side);
-            if (!side.stash.open(player)) {
-                side.editing = false;
-                tell(player, "Não consegui abrir a sua oferta agora.");
-                this.show(trade, side);
-            }
-            return;
-        }
-        if (option === "money" || option === "theirs") {
-            side.page = option;
-            this.show(trade, side);
-            return;
-        }
-        if (option === "back") {
-            side.page = "main";
-            this.show(trade, side);
-            return;
-        }
-        if (option.startsWith("money:")) {
-            const has = this.moneyOf(player);
-            const step = option.slice("money:".length);
-            const next = step === "0" ? 0 : side.money + Number(step);
-            if (!Number.isFinite(next) || next < 0 || next > has || next === side.money) {
-                this.show(trade, side);
+        if (action === "items") {
+            if (side.editing) {
                 return;
             }
-            side.money = next;
-            this.changed(trade, side);
+            side.editing = true;
+            this.send(player, "trade.hide", "{}");
+            this.later(() => {
+                if (trade.done || !side.editing) {
+                    return;
+                }
+                if (!side.stash.open(player)) {
+                    side.editing = false;
+                    tell(player, "Não consegui abrir a sua oferta agora.");
+                    this.show(trade, side);
+                }
+            }, SCREEN_AFTER_PAGE_MS);
             return;
         }
-        if (option === "accept") {
+        if (action === "accept") {
+            if (side.accepted) {
+                return;
+            }
+            // The offer has just changed and the pages are not drawn yet: what is on the table is not what this page shows.
+            if (trade.refreshing) {
+                tell(player, "A oferta acabou de mudar: confira a tela e aceite de novo.");
+                return;
+            }
             side.accepted = true;
             if (trade.sides.every((each) => each.accepted)) {
                 this.complete(trade);
@@ -509,35 +414,11 @@ export class Trades {
         }
     }
 
-    /** Both accepted: the money first, all of it or none, then the items. */
+    /** Both accepted: what each put on the table crosses over. */
     private complete(trade: Trade): void {
         const [a, b] = trade.sides;
         trade.settling = true;
-        if (a.money > this.moneyOf(a.player) || b.money > this.moneyOf(b.player)) {
-            trade.settling = false;
-            for (const side of trade.sides) {
-                side.accepted = false;
-                side.money = Math.min(side.money, this.moneyOf(side.player));
-                tell(side.player, "O dinheiro oferecido mudou desde a oferta; confiram e aceitem de novo.");
-                this.show(trade, side);
-            }
-            return;
-        }
-        if (!this.takeMoney(a.player, a.money)) {
-            this.cancel(trade, "A troca não pôde ser feita: o dinheiro não saiu.");
-            return;
-        }
-        if (!this.takeMoney(b.player, b.money)) {
-            this.giveMoney(a.player, a.money);
-            this.cancel(trade, "A troca não pôde ser feita: o dinheiro não saiu.");
-            return;
-        }
-        if (!this.giveMoney(b.player, a.money)) {
-            this.owe(a.steamId, [{ item: MONEY_ITEM, amount: a.money, metadata: {} }]);
-        }
-        if (!this.giveMoney(a.player, b.money)) {
-            this.owe(b.steamId, [{ item: MONEY_ITEM, amount: b.money, metadata: {} }]);
-        }
+        const offered = trade.sides.map((side) => rowsOf(side.stash).length);
         this.moveAll(a, b.player);
         this.moveAll(b, a.player);
         const leftovers = trade.sides.some((side) => rowsOf(side.stash).length > 0);
@@ -548,11 +429,7 @@ export class Trades {
         for (const side of trade.sides) {
             tell(side.player, leftovers ? "Troca feita. O que não coube no inventário do outro voltou para quem ofereceu." : "Troca feita.");
         }
-        console.log(`trade: ${a.player.nickname} e ${b.player.nickname} trocaram (${this.describeDone(a)} por ${this.describeDone(b)})`);
-    }
-
-    private describeDone(side: Side): string {
-        return side.money > 0 ? coins(side.money) : "itens";
+        console.log(`trade: ${a.player.nickname} e ${b.player.nickname} trocaram (${offered[0]} item(ns) por ${offered[1]})`);
     }
 
     /** Calls a trade off: every item back to whoever offered it. `by` is the side that called it off, told nothing more. */
@@ -573,7 +450,7 @@ export class Trades {
     private finish(trade: Trade): void {
         trade.done = true;
         for (const side of trade.sides) {
-            this.closeDialogue(side);
+            this.send(side.player, "trade.end", "{}");
             this.byPlayer.delete(side.player.id);
             this.byStash.delete(side.stash.id);
             delete this.held[side.steamId];
@@ -589,27 +466,6 @@ export class Trades {
     // -----------------------------------------------------------------------------------------
     // Events.
 
-    dialogueClosed(session: number, player: Player, reason: number): void {
-        const side = this.bySession.get(session);
-        if (side === undefined) {
-            return;
-        }
-        this.bySession.delete(session);
-        side.session = 0;
-        const trade = this.byPlayer.get(player.id);
-        // Reason 0 is this module closing it; anything else -- Esc, another conversation, a disconnect -- ends the trade.
-        if (trade !== undefined && !trade.done && reason !== 0 && !side.editing) {
-            // Except an Esc just after the list came back from the transfer screen, once: the list may have come up empty.
-            if (reason === 1 && !side.graceUsed && side.reopenedAt > 0 && this.now() - side.reopenedAt < GRACE_AFTER_REOPEN_MS) {
-                side.graceUsed = true;
-                tell(player, "A negociação continua. Para sair dela, escolha Cancelar a troca ou aperte Esc de novo.");
-                this.reopen(trade, side, REDRAW_AFTER_MS);
-                return;
-            }
-            this.cancel(trade, `${labelFor(this.other(trade, side).player, player)} saiu da negociação.`, side);
-        }
-    }
-
     stashChanged(stash: Stash): void {
         const side = this.byStash.get(stash.id);
         const trade = side === undefined ? undefined : this.byPlayer.get(side.player.id);
@@ -619,15 +475,20 @@ export class Trades {
     }
 
     stashClosed(stash: Stash, player: Player): void {
-        const side = this.byStash.get(stash.id);
+        let id: number;
+        try {
+            id = stash.id;
+        } catch {
+            // A container taken away while open (a death drop emptied, 2026-10-18 23:48 log): none of a trade's.
+            return;
+        }
+        const side = this.byStash.get(id);
         if (side === undefined || side.player.id !== player.id) {
             return;
         }
         side.editing = false;
         const trade = this.byPlayer.get(player.id);
         if (trade !== undefined && !trade.done) {
-            side.page = "main";
-            side.graceUsed = false;
             this.reopen(trade, side, REOPEN_AFTER_SCREEN_MS);
         }
     }
@@ -669,9 +530,18 @@ export const trades = new Trades();
 
 export function installTrades(): void {
     trades.load();
+    // An announced restart undoes the open trades first: what was put up goes back to each side while the server still runs.
+    onRestartSettle(() => {
+        trades.cancelAll();
+        return "negociações abertas desfeitas antes do reinício";
+    });
 
-    Events.on("dialogueChoice", (session, player, option) => trades.choose(session, player, option));
-    Events.on("dialogueClosed", (session, player, reason) => trades.dialogueClosed(session, player, reason));
+    // The page's buttons (`src/client/craft-page.ts` passes them on).
+    for (const action of ["items", "accept", "cancel"]) {
+        Events.onClient(`${RESOURCE}:trade.${action}`, (sender) => {
+            trades.act(sender as Player, action);
+        });
+    }
     Events.on("stashInventoryChanged", (stash) => trades.stashChanged(stash));
     Events.on("stashClose", (stash, player) => trades.stashClosed(stash, player));
     Events.on("stashInteract", (player, stash) => (trades.mayOpen(player, stash) ? undefined : false));
@@ -688,5 +558,5 @@ export function installTrades(): void {
             trades.cancelAll();
         }
     });
-    console.log("trade: negociação entre jogadores pela tela de baú e pela lista de diálogo do jogo");
+    console.log("trade: negociação entre jogadores pela página de ofícios (à direita) e pela tela de baú do jogo");
 }

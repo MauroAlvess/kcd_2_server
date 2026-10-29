@@ -14,6 +14,7 @@
 import { BOOKS_BY_ID, bookGuid } from "./books.js";
 import { canKeep, hasKit, markKit } from "./character-state.js";
 import { getCharacter } from "./characters.js";
+import { craftItemGuid } from "./craft-items.js";
 
 /**
  * Counted in the game's money item. The game shows a tenth of the item's amount (1,000 of it reads "100", and the 100
@@ -71,6 +72,10 @@ interface KitItem {
     readonly amount: number;
     /** What the player is told, in the plural-free form; a book is named by its own title. */
     readonly label: string;
+    /** For one body only: a piece cut for the other is not handed over (and not marked, should the body change). */
+    readonly gender?: "male" | "female";
+    /** The row's properties: a worn tool's condition. */
+    readonly metadata?: Record<string, unknown>;
 }
 
 /** What each guild hands a member the first time they join it, keyed by the guild id in `status.ts`. */
@@ -107,6 +112,62 @@ export const GUILD_KITS: Readonly<Record<string, readonly KitItem[]>> = {
         { item: "Cap03_m01_E", amount: 2, label: "touca" },
         { item: "Hood04_m01_E", amount: 2, label: "capuz" },
         { item: "F_Veil05_m01_D", amount: 1, label: "véu" },
+    ],
+    // The Coletores (2026-10-21: "ao escolher essa guilda ganha uma roupa de lenhador parecida com minerador, uma picareta e um machado"): the
+    // game's lumberjack axe; its only pick, the knight's, used and worn (the smith forges new ones); and the miners' working clothes, or a
+    // woman's working dress, headscarf and shoes.
+    collectores: [
+        { item: "axeWork01", amount: 1, label: "machado de lenhador" },
+        { item: "axeBattle03", amount: 1, label: "picareta (usada)", metadata: { quality: 1, condition: 0.5 } },
+        { item: "TunicShort03_m01_D", amount: 1, label: "túnica de minerador", gender: "male" },
+        { item: "HoseSeparate05_m01_D", amount: 1, label: "calças de mineiro", gender: "male" },
+        { item: "Hood08_m01_D", amount: 1, label: "capuz de minerador", gender: "male" },
+        { item: "BootsAnkle01_m03_C", amount: 1, label: "botas de trabalho", gender: "male" },
+        { item: "F_SimpleDress06_m05_D", amount: 1, label: "vestido de trabalho", gender: "female" },
+        { item: "F_Veil06_m01_D", amount: 1, label: "lenço de cabeça de trabalho", gender: "female" },
+        { item: "F_Shoes02_m06_B", amount: 1, label: "sapatos de trabalho", gender: "female" },
+        { item: "HandWrap01_m01_E", amount: 1, label: "bandagem de mão" },
+    ],
+    // The Agricultores (user, 2026-10-22: "o agricultor recebe roupas do ofício e pá, mais uns recursos para plantar"): the gardener's clothes of
+    // the game (`kkut_gardener_1`: straw hat, leather apron, stitched hose, walking boots, hand wrap) or a woman's working dress with the straw
+    // hat the game's villagers wear; the game's shovel; and seeds of what a village's garden grows first, a few more than the beds they can
+    // keep at the start, so the first harvests need nothing more (harvests give seeds back, and the kitchen's and the apothecary's sellers
+    // have the rest).
+    // The Domadores (user, 2026-10-25): what a tamer starts with is what a horse is won over by, a few of the game's own treats (the carrot and
+    // the apple are the best of `TREATS` in `wild-horses.ts`), and plain riding clothes of the game's own tables, in a different cut and colour
+    // from the Agricultores' and the Coletores' so that three guilds do not look alike.
+    domitores: [
+        { item: "carrot", amount: 6, label: "cenouras" },
+        { item: "apple", amount: 4, label: "maçãs" },
+        { item: "TunicShort01_m01_D", amount: 1, label: "túnica de cavalariço", gender: "male" },
+        { item: "HoseLoose01_m01_C", amount: 1, label: "calças de montaria", gender: "male" },
+        { item: "BootsKnee05_m01_C", amount: 1, label: "botas altas", gender: "male" },
+        { item: "Cap03_m01_E", amount: 1, label: "gorro de lã", gender: "male" },
+        { item: "F_SimpleDress03_m01_C", amount: 1, label: "vestido de trabalho", gender: "female" },
+        { item: "F_Hood01_m01_C", amount: 1, label: "capuz de trabalho", gender: "female" },
+        { item: "F_Shoes02_m01_B", amount: 1, label: "sapatos de trabalho", gender: "female" },
+        { item: "HandWrap01_m03_E", amount: 1, label: "bandagem de mão" },
+    ],
+    agricolae: [
+        { item: "player_shovel", amount: 1, label: "pá" },
+        { item: "kcdc-craft:semente-cebola", amount: 6, label: "sementes de cebola" },
+        { item: "kcdc-craft:semente-repolho", amount: 4, label: "sementes de repolho" },
+        { item: "kcdc-craft:semente-nabo", amount: 4, label: "sementes de nabo" },
+        { item: "kcdc-craft:semente-cenoura", amount: 4, label: "sementes de cenoura" },
+        { item: "kcdc-craft:semente-urtiga", amount: 4, label: "sementes de urtiga" },
+        { item: "Cap15_m01_D", amount: 1, label: "chapéu de palha", gender: "male" },
+        { item: "TunicLong03_m07_D", amount: 1, label: "avental de couro", gender: "male" },
+        { item: "HoseJoined01_m11_C", amount: 1, label: "calça costurada", gender: "male" },
+        { item: "BootsAnkle03_m04_D", amount: 1, label: "botas de andarilho", gender: "male" },
+        { item: "F_SimpleDress01_m03_D", amount: 1, label: "vestido de trabalho", gender: "female" },
+        { item: "F_Cap02_m01_B", amount: 1, label: "chapéu de palha", gender: "female" },
+        { item: "F_Shoes02_m01_B", amount: 1, label: "sapatos de trabalho", gender: "female" },
+        { item: "HandWrap01_m02_E", amount: 1, label: "bandagem de mão" },
+        // Flax for the Artifices' linen and thread, and wheat for the Tabernarii's flour (2026-10-27, SINERGIA.md): the two crops the other trades wait on. At the END of
+        // the list, because the ledger below is kept by position (`guild:<id>:<index>`): the farmers who joined before are handed these two at their next entry, and
+        // nothing else a second time.
+        { item: "kcdc-craft:semente-linho", amount: 6, label: "sementes de linho" },
+        { item: "kcdc-craft:semente-trigo", amount: 4, label: "sementes de trigo" },
     ],
 };
 
@@ -292,6 +353,25 @@ export function ensureStarter(player: Player): void {
     }
 }
 
+/** The creator dressed the newcomer in the clothes they chose (`creator.ts`, the "Roupas" tab): the starter outfit is not put over them. */
+export function markStarterOutfit(player: Player): void {
+    markKit(player, "starter:outfit");
+}
+
+/**
+ * What a guild's kit is for, said right after "Kit da guilda entregue" (user, 2026-10-22: the message said the Coletores' work was done with
+ * the left click; it is the E at a tree or a rock). Empty for a guild whose kit needs no word.
+ */
+export const GUILD_KIT_HINTS: Readonly<Record<string, string>> = {
+    collectores: "Para cortar lenha ou minerar: com o machado ou a picareta na bolsa, olhe para uma árvore ou uma pedra e aperte E. Aperte E de novo, ou ande, para parar.",
+    domitores: "Para domar: ande devagar até um cavalo selvagem dos campos abertos, olhe para ele e aperte E; ofereça comida (cenoura, maçã, pera, beterraba, nabo ou pão) até ele confiar em você. O cavalo foge de quem corre.",
+    agricolae: "Para plantar: com a pá e as sementes na bolsa, olhe para o chão de um canteiro de horta, atrás das casas das aldeias, e aperte E; a página à direita diz o que cada planta pede e em quanto tempo dá. Quando ficar pronta, E de novo no canteiro colhe. /horta mostra o que você plantou.",
+};
+
+export function guildKitHint(guildId: string): string {
+    return GUILD_KIT_HINTS[guildId] ?? "";
+}
+
 /** The kit of a guild the player has just joined. Returns what was handed over now, for the message. */
 export function grantGuildKit(player: Player, guildId: string): string[] {
     const kit = GUILD_KITS[guildId];
@@ -304,18 +384,20 @@ export function grantGuildKit(player: Player, guildId: string): string[] {
     }
 
     const handed: string[] = [];
+    const body = genderOf(player);
     kit.forEach((entry, index) => {
         const ledger = `guild:${guildId}:${index}`;
-        if (hasKit(player, ledger)) {
+        if (hasKit(player, ledger) || (entry.gender !== undefined && entry.gender !== body)) {
             return;
         }
         const book = BOOKS_BY_ID.get(entry.item);
-        const item = book !== undefined ? bookGuid(entry.item) : entry.item;
+        // A recipe book, or one of our own items (the seeds), has a GUID of its own once registered; a game item goes by its name.
+        const item = book !== undefined ? bookGuid(entry.item) : (craftItemGuid(entry.item) ?? entry.item);
         if (item === null) {
             console.log(`kits: ${player.nickname}: o livro ${entry.item} não está registrado`);
             return;
         }
-        const result = Inventory.add(player, { item, amount: entry.amount });
+        const result = Inventory.add(player, entry.metadata === undefined ? { item, amount: entry.amount } : { item, amount: entry.amount, metadata: entry.metadata });
         if (!result.ok) {
             console.log(`kits: ${player.nickname}: ${entry.item} não foi entregue (${result.code})`);
             return;

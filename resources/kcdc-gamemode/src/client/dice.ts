@@ -1,4 +1,5 @@
 import { getPersonInView, isInteractionTargetVisible } from "./interaction.js";
+import { EDGE_M, reachTo } from "./reach.js";
 
 const STATE_EVENT = "kcdc-gamemode:dice.state";
 const INTERACT_EVENT = "kcdc-gamemode:dice.interact";
@@ -19,7 +20,7 @@ export function installDice(): void {
         hint = 0;
     };
     const lookingAtTable = (table: TableOffer["tables"][number]): boolean => {
-        if (!isInteractionTargetVisible(table.position, { maxDistance: 3, aimRadius: 1.25, height: 0.75 })) return false;
+        if (!isInteractionTargetVisible(table.position, { maxDistance: reachTo(EDGE_M.table), aimRadius: 1.25, height: 0.75 })) return false;
         const q = table.position;
         // Some catalog placements belong to inactive quest layers.
         return World.entitiesInRadius(new Vector3(q.x, q.y, q.z), 3, { class: "SmartObjectHolder", max: 64 }).some((entity) => entity.guid === table.id);

@@ -46,18 +46,21 @@ function load({ admins = [], refuseOpen = false, inventoryFull = false, seed = n
     const fakeStash = (world) => {
         let rows = [];
         let rowCounter = 0;
+        let gone = false;
         const stash = {
             id: nextStash++,
             isVirtual: true,
             world,
             opened: [],
             destroyed: false,
+            // The game took the container (the player left, lost the access, timed out): it reads null from then on.
+            vanish() { gone = true; },
             setInventory({ items }) {
                 if (items.some((row) => row.item === "not-an-item")) return { ok: false, code: "unknownItem" };
                 rows = items.map((row) => ({ id: row.id ?? `r${++rowCounter}`, item: row.item, amount: row.amount, metadata: row.metadata ?? {} }));
                 return { ok: true, code: "" };
             },
-            getInventory: () => ({ revision: 1, items: rows.map((row) => ({ ...row })) }),
+            getInventory: () => (gone ? null : { revision: 1, items: rows.map((row) => ({ ...row })) }),
             open(player) { if (refuseOpen) return false; stash.opened.push(player.id); return true; },
             destroy() { stash.destroyed = true; stashes.delete(stash.id); fire("stashDestroy", stash); },
             // What the transfer screen does when the player moves things.
@@ -171,10 +174,14 @@ test("closing the screen writes it once more and throws the stash away; the next
     sut.bags.openBags(mauro, null);
     const first = [...sut.stashes.values()][0];
     first.put("bread", 2);
+    const closedBy = [];
+    sut.bags.bagsClosed.push((player, key) => closedBy.push([player.id, key]));
     sut.fire("stashClose", first, mauro, "closed");
     sut.flush();
     assert.equal(first.destroyed, true);
     assert.equal(sut.stashes.size, 0);
+    assert.equal(closedBy.length, 1, "the horse's menu is told the player closed it themselves");
+    assert.equal(closedBy[0][0], mauro.id);
 
     sut.bags.openBags(mauro, null);
     const second = [...sut.stashes.values()][0];
@@ -312,4 +319,94 @@ test("a horse that is not kept has no alforjes to save", () => {
     assert.equal(sut.horses.saveBags("nao-existe", [{ item: "bread", amount: 1 }]), false);
     assert.deepEqual(plain(sut.horses.bagsOf("nao-existe")), []);
     assert.equal(sut.horses.recordOf("nao-existe"), null);
+});
+
+test("while the alforjes are open, and a moment after they close, the player's E is the screen's and not the horse's menu", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    sut.owned(mauro);
+    assert.equal(sut.bags.bagsBusy(mauro.id), false);
+    sut.bags.openBags(mauro, null);
+    assert.equal(sut.bags.bagsBusy(mauro.id), true);
+    sut.fire("stashClose", [...sut.stashes.values()][0], mauro, "closed");
+    sut.flush();
+    assert.equal(sut.bags.bagsBusy(mauro.id), true, "the last E of the screen may still be on its way");
+    assert.equal(sut.bags.bagsBusy(mauro.id, Date.now() + 2_000), false);
+});
+
+// ---------------------------------------------------------------------------------------------
+// 2026-10-29: "o Alustin colocou itens no cavalo e ao voltar perdeu". `getInventory` answers null once the container is gone, and the last write took that for an empty horse.
+
+test("a screen that closes after the game already took the container leaves the horse with what it carried, whichever way it ends", () => {
+    for (const ending of ["closed", "disconnected", "destroyed", "lostAccess", "timeout"]) {
+        const sut = load();
+        const mauro = sut.player(MAURO, "Mauro", 1);
+        sut.owned(mauro);
+        sut.bags.openBags(mauro, null);
+        const stash = [...sut.stashes.values()][0];
+        stash.put("bread", 4);
+        stash.put("apple", 2);
+        const key = sut.horses.horsesOf(MAURO)[0].record.key;
+        stash.vanish();
+        sut.fire("stashClose", stash, mauro, ending);
+        sut.flush();
+        assert.deepEqual(plain(sut.horses.bagsOf(key)).map((row) => [row.item, row.amount]), [["bread", 4], ["apple", 2]], ending);
+        assert.ok(sut.logs.some((line) => /já tinham sumido do jogo/.test(line)), `${ending}: the log says the container was gone`);
+    }
+});
+
+test("a player who leaves, or a server that stops, after the container is gone does not empty the horse either", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    sut.owned(mauro);
+    sut.bags.openBags(mauro, null);
+    const stash = [...sut.stashes.values()][0];
+    stash.put("bread", 4);
+    const key = sut.horses.horsesOf(MAURO)[0].record.key;
+    stash.vanish();
+    sut.fire("stashInventoryChanged", stash, null, { reason: "deposit" });
+    sut.fire("resourceStop", "kcdc-gamemode");
+    sut.fire("playerDisconnect", mauro);
+    sut.flush();
+    assert.deepEqual(plain(sut.horses.bagsOf(key)).map((row) => [row.item, row.amount]), [["bread", 4]]);
+});
+
+test("a container that throws when read is not an empty horse", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    sut.owned(mauro);
+    sut.bags.openBags(mauro, null);
+    const stash = [...sut.stashes.values()][0];
+    stash.put("bread", 4);
+    const key = sut.horses.horsesOf(MAURO)[0].record.key;
+    stash.getInventory = () => { throw new Error("stash 900 is gone"); };
+    sut.fire("playerDisconnect", mauro);
+    sut.flush();
+    assert.deepEqual(plain(sut.horses.bagsOf(key)).map((row) => [row.item, row.amount]), [["bread", 4]]);
+});
+
+test("a screen emptied by the player does empty the horse, and the container's whole 128 rows are kept", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    sut.owned(mauro);
+    sut.bags.openBags(mauro, null);
+    const stash = [...sut.stashes.values()][0];
+    const key = sut.horses.horsesOf(MAURO)[0].record.key;
+    assert.equal(sut.horses.MAX_BAG_ROWS, 128, "the game's container takes 128 rows");
+    for (let n = 0; n < 128; n += 1) stash.put(`i${n}`, 1);
+    assert.equal(sut.horses.bagsOf(key).length, 128, "a full container is kept whole");
+    for (let n = 0; n < 128; n += 1) stash.take(`i${n}`);
+    sut.fire("stashClose", stash, mauro, "closed");
+    sut.flush();
+    assert.equal(sut.horses.bagsOf(key).length, 0, "taking everything out is an empty horse");
+});
+
+test("rows that cannot be kept are said in the log, not dropped in silence", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    sut.owned(mauro);
+    const key = sut.horses.horsesOf(MAURO)[0].record.key;
+    sut.horses.saveBags(key, [{ item: "bread", amount: 2 }, { item: "pear", amount: 1.5 }, { item: "", amount: 1 }]);
+    assert.ok(sut.logs.some((line) => /2 linha\(s\) de 3 não puderam ser guardadas/.test(line)), sut.logs.join(" | "));
+    assert.deepEqual(plain(sut.horses.bagsOf(key)).map((row) => row.item), ["bread"]);
 });

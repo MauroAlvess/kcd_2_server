@@ -39,7 +39,8 @@ function keysOf(value, found = new Set()) {
  * The real nominations over the real catalog and the real titles store, on a fake disk; the status module, the family
  * book, the properties and the acquaintances are fakes that remember what they were asked.
  */
-function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {}, surnames = {} } = {}) {
+function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {}, surnames = {}, towns = {}, consorts = {}, trades = [], memberNames = {} } = {}) {
+    const baseHeirs = {};
     const files = new Map();
     const logs = [];
     const handlers = new Map();
@@ -64,7 +65,7 @@ function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {},
     const titlesBox = { exports: {} };
     vm.runInNewContext(dist("titles.js"), {
         exports: titlesBox.exports,
-        require: (id) => (id === "./nobility.js" ? nobility.exports : id === "./characters.js" ? characters : id === "./store.js" ? fakeStore : assert.fail(`titles: unexpected ${id}`)),
+        require: (id) => (id === "./nobility.js" ? nobility.exports : id === "./characters.js" ? characters : id === "./store.js" ? fakeStore : id === "./thieves.js" ? { onThiefChange() {}, thiefMark: () => null } : assert.fail(`titles: unexpected ${id}`)),
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
     });
 
@@ -85,6 +86,7 @@ function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {},
         notice: (player, text) => notices.push({ to: player.steamId, text }),
         sendSocial: (player) => socialSent.push(player.steamId),
         sendRoster: (player) => rosterSent.push(player.steamId),
+        familyLinked: [],
     };
 
     const context = {
@@ -100,6 +102,7 @@ function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {},
                 case "./family.js":
                     return {
                         familyHeirs: (steamId) => (heirs[steamId] ?? []).map((heir) => ({ steamId: heir, name: "" })),
+                        familyBaseHeirs: (steamId) => (baseHeirs[steamId] ?? []).map((heir) => ({ steamId: heir, name: "" })),
                         getSurname: (steamId) => surnames[steamId] ?? null,
                         maritalStatus: (steamId, gender) => (steamId === LORD ? { label: "Coniugatus", gloss: "casado" } : { label: "Caelebs", gloss: gender === "female" ? "solteira" : "solteiro" }),
                     };
@@ -111,6 +114,16 @@ function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {},
                     return status;
                 case "./titles.js":
                     return titlesBox.exports;
+                case "./big-emit.js":
+                    return { emitLarge: (player, name, json) => { player.emit(`kcdc-gamemode:${name}`, json); return 1; } };
+                case "./citizenship.js":
+                    return { townOf: (steamId) => (towns[steamId] ? { id: towns[steamId].toLowerCase(), name: towns[steamId] } : null) };
+                case "./consort.js":
+                    return { consortsOf: (steamId) => consorts[steamId] ?? [] };
+                case "./scribe.js":
+                    return { tradesmen: () => trades };
+                case "./guild-members.js":
+                    return { nameOfMember: (steamId) => memberNames[steamId] ?? "um jogador" };
                 default:
                     return assert.fail(`nominations: unexpected require ${id}`);
             }
@@ -144,20 +157,24 @@ function load({ social = {}, knowing = {}, heirs = {}, lands = {}, genders = {},
     };
     const titles = titlesBox.exports;
     const give = (steamId, name, ...ids) => ids.forEach((id) => titles.addTitle(steamId, name, id, { steamId: "admin", name: "a Coroa" }));
-    return { api: context.exports, nobility: nobility.exports, titles, social, notices, socialSent, rosterSent, setStatus, setSocial: status.setSocialStatus, players, handlers, clientHandlers, payloadContributors, nomineeSources, logs, makePlayer, give, files };
+    return { api: context.exports, baseHeirs, statusApi: status, nobility: nobility.exports, titles, social, notices, socialSent, rosterSent, setStatus, setSocial: status.setSocialStatus, players, handlers, clientHandlers, payloadContributors, nomineeSources, logs, makePlayer, give, files };
 }
 
 const fire = (sut, name, player, payload) => sut.clientHandlers.get(`kcdc-gamemode:${name}`)(player, payload);
 
 /** A table: a lord (with the right to name), a knight, a peasant, and a stranger the lord has not met. */
-function realm() {
+function realm(more = {}) {
     const sut = load({
-        social: { [LORD]: "nobilis", [KNIGHT]: "nobilis", [WIFE]: "plebeius", [SON]: "plebeius" },
+        social: { [LORD]: "nobilis", [KNIGHT]: "nobilis", [WIFE]: "plebeius", [SON]: "plebeius", ...(more.social ?? {}) },
         knowing: { [LORD]: [KNIGHT, PEASANT, WIFE], [KNIGHT]: [LORD] },
-        heirs: { [PEASANT]: [WIFE, SON] },
+        heirs: { [PEASANT]: [WIFE, SON], ...(more.heirs ?? {}) },
         genders: { [WIFE]: "female" },
         lands: { [LORD]: [{ region: "Suchdol", houses: 3, chests: 5, whole: false }, { region: "Wysoka", houses: 0, chests: 0, whole: true }] },
         surnames: { [LORD]: "Capon" },
+        consorts: more.consorts ?? {},
+        towns: more.towns ?? {},
+        trades: more.trades ?? [],
+        memberNames: more.memberNames ?? {},
     });
     const admin = sut.makePlayer(ADMIN, "Mauro");
     const lord = sut.makePlayer(LORD, "Radovan");
@@ -202,28 +219,60 @@ test("a noble sees what they may name and whom they know; an administrator sees 
     assert.deepEqual(plain(squire.options), []);
 
     const crown = sut.api.nobilityFor(admin);
-    assert.equal(crown.power, true);
-    assert.equal(crown.options.length, CATALOG.length, "the whole catalog");
-    assert.ok(crown.options.some((option) => option.id === "rei"));
+    assert.equal(crown.power, false, "in the Nomeação section an administrator names as their character, who holds no title");
+    assert.deepEqual(plain(crown.options), []);
+    assert.equal(crown.crownOptions.length, CATALOG.length, "the whole catalog, for the Jogadores page");
+    assert.ok(crown.crownOptions.some((option) => option.id === "rei"));
+    assert.equal(own.crownOptions, undefined, "and for nobody else");
     assert.equal(sut.api.candidatesFor(admin).length, 6, "everybody else, by their nickname");
 });
 
-test("a lord names a commoner a knight: the commoner and their family become noble, everybody is told, the page is redrawn", () => {
+test("a lord names a commoner a knight: the knight and their family become lesser nobles (2026-10-19), everybody is told, the page is redrawn", () => {
     const { sut, lord, peasant, wife, son } = realm();
     fire(sut, "status.nominate", lord, { targetId: peasant.id, title: "cavaleiro" });
 
     assert.deepEqual(Array.from(sut.titles.titlesOf(PEASANT)), ["cavaleiro"]);
     assert.equal(sut.titles.grantsOf(PEASANT)[0].by, LORD);
     assert.equal(sut.titles.grantsOf(PEASANT)[0].byName, "Radovan Capon");
-    assert.equal(sut.social[PEASANT], "nobilis");
-    assert.equal(sut.social[WIFE], "nobilis", "the spouse rises with them");
-    assert.equal(sut.social[SON], "nobilis", "and the legitimate line");
-    assert.match(sut.notices.find((entry) => entry.to === LORD).text, /Kath agora é Cavaleiro\. Foi elevado a nobre, com Dorota, Jan\./);
-    assert.match(sut.notices.find((entry) => entry.to === PEASANT).text, /Radovan Capon nomeou você Cavaleiro\. Você agora é nobre: veja a seção Nomeação do painel \(F2\)\./);
-    assert.match(sut.notices.find((entry) => entry.to === WIFE).text, /Kath foi nomeado Cavaleiro, e você subiu a nobre com ele/);
+    assert.equal(sut.social[PEASANT], "minor", "a knight is of the lesser nobility");
+    assert.equal(sut.social[WIFE], "minor", "the spouse rises with them");
+    assert.equal(sut.social[SON], "minor", "and the legitimate line");
+    assert.match(sut.notices.find((entry) => entry.to === LORD).text, /Kath agora é Cavaleiro\. Agora é da nobreza menor, e a família com ele: Dorota, Jan\./);
+    assert.match(sut.notices.find((entry) => entry.to === PEASANT).text, /Radovan Capon nomeou você Cavaleiro\. Você agora é da nobreza menor: veja a seção Nomeação do painel \(F2\)\./);
+    assert.match(sut.notices.find((entry) => entry.to === WIFE).text, /Kath foi nomeado Cavaleiro, e você agora é da nobreza menor/);
     assert.ok(sut.socialSent.includes(PEASANT) && sut.socialSent.includes(WIFE) && sut.socialSent.includes(SON) && sut.socialSent.includes(LORD));
-    assert.ok(sut.logs.some((line) => /Radovan nomeou Kath Cavaleiro; subiram a nobre: Kath, Dorota, Jan/.test(line)));
+    assert.ok(sut.logs.some((line) => /Radovan nomeou Kath Cavaleiro; subiram: Kath \(minor\), Dorota \(minor\), Jan \(minor\)/.test(line)));
     assert.ok(!sut.setStatus.some(([steamId]) => steamId === STRANGER));
+});
+
+test("the great titles make a noble (the Crown names a lord), and a lesser noble named higher rises; nobody is ever lowered", () => {
+    const { sut, admin, peasant, wife } = realm();
+    fire(sut, "status.nominate", admin, { targetId: peasant.id, title: "cavaleiro", via: "coroa" });
+    assert.equal(sut.social[PEASANT], "minor");
+    fire(sut, "status.nominate", admin, { targetId: peasant.id, title: "lorde", via: "coroa" });
+    assert.equal(sut.social[PEASANT], "nobilis", "a lord is a noble");
+    assert.equal(sut.social[WIFE], "nobilis", "and so is the spouse");
+    fire(sut, "status.nominate", admin, { targetId: wife.id, title: "escudeiro", via: "coroa" });
+    assert.equal(sut.social[WIFE], "nobilis", "a squire's title lowers nobody");
+});
+
+test("a noble's adopted children and bastards are of the lesser nobility, the legitimate line takes the noble's own standing", () => {
+    const { sut } = realm({ social: { [LORD]: "nobilis" }, heirs: { [LORD]: [SON] } });
+    sut.baseHeirs[LORD] = [WIFE];
+    const risen = Array.from(sut.api.spreadStanding(LORD));
+    assert.deepEqual(risen.sort(), [SON, WIFE].sort());
+    assert.equal(sut.social[SON], "nobilis");
+    assert.equal(sut.social[WIFE], "minor", "the bastard (here, whoever is in the base line) is a lesser noble");
+    assert.deepEqual(Array.from(sut.api.spreadStanding(PEASANT)), [], "a commoner gives nobody anything");
+});
+
+test("joining a noble's family raises the newcomer: the link accepted is heard from the family section", () => {
+    const { sut } = realm({ social: { [LORD]: "nobilis" }, heirs: { [LORD]: [PEASANT] } });
+    assert.equal(sut.statusApi.familyLinked.length, 1);
+    sut.statusApi.familyLinked[0](LORD, PEASANT);
+    assert.equal(sut.social[PEASANT], "nobilis");
+    assert.ok(sut.notices.some((entry) => entry.to === PEASANT && /entrou numa família nobre e agora é nobre/.test(entry.text)));
+    assert.ok(sut.logs.some((line) => /entrou numa família nobre e agora é nobre/.test(line)));
 });
 
 test("an office names nobody to nobility: a burgrave is a post, and a commoner holding one stays a commoner", () => {
@@ -261,26 +310,26 @@ test("what a noble may not do is refused in words: no power, a title above their
 
 test("the administrator names anyone to anything as the Crown, and the Rei is only ever one", () => {
     const { sut, admin, lord, knight } = realm();
-    fire(sut, "status.nominate", admin, { targetId: lord.id, title: "rei" });
+    fire(sut, "status.nominate", admin, { targetId: lord.id, title: "rei", via: "coroa" });
     assert.deepEqual(Array.from(sut.titles.titlesOf(LORD)), ["rei"], "the lord's own rank is replaced");
     assert.equal(sut.titles.grantsOf(LORD)[0].by, "admin");
     assert.equal(sut.titles.grantsOf(LORD)[0].byName, "a Coroa");
     assert.deepEqual(sut.rosterSent, [ADMIN], "the administrator's players page is drawn again");
 
-    fire(sut, "status.nominate", admin, { targetId: knight.id, title: "rei" });
+    fire(sut, "status.nominate", admin, { targetId: knight.id, title: "rei", via: "coroa" });
     assert.deepEqual(Array.from(sut.titles.titlesOf(LORD)), [], "the crown passed on");
     assert.deepEqual(Array.from(sut.titles.titlesOf(KNIGHT)), ["rei"]);
     assert.match(sut.notices.filter((entry) => entry.to === LORD).at(-1).text, /Você deixou de ser Rei: o título passou a Ivan/);
     assert.match(sut.notices.filter((entry) => entry.to === ADMIN).at(-1).text, /Ivan agora é Rei\..*Radovan( Capon)? deixou de ser Rei/);
 
-    fire(sut, "status.nominate", admin, { targetId: admin.id, title: "arcebispo" });
+    fire(sut, "status.nominate", admin, { targetId: admin.id, title: "arcebispo", via: "coroa" });
     assert.deepEqual(Array.from(sut.titles.titlesOf(ADMIN)), ["arcebispo"], "even themselves");
     assert.equal(sut.social[ADMIN], "nobilis", "the high Church is noble by its office");
 });
 
 test("a title is written in the form of the one who holds it", () => {
     const { sut, admin, wife } = realm();
-    fire(sut, "status.nominate", admin, { targetId: wife.id, title: "cavaleiro" });
+    fire(sut, "status.nominate", admin, { targetId: wife.id, title: "cavaleiro", via: "coroa" });
     assert.match(sut.notices.find((entry) => entry.to === WIFE).text, /nomeou você Cavaleira/);
     assert.match(sut.notices.find((entry) => entry.to === ADMIN).text, /Dorota agora é Cavaleira/);
 });
@@ -382,7 +431,8 @@ test("the hierarchy lists every title of the five branches with its holders, and
 
     const holder = answer.holders.find((entry) => entry.name === "Radovan Capon");
     assert.ok(holder);
-    assert.deepEqual(plain(Object.keys(holder).sort()), ["factionId", "guildId", "key", "lands", "marital", "name", "self", "status", "statusId", "surname", "titles"]);
+    // The town is what a character is known by too (2026-10-18: the citizenship shown when a noble is picked).
+    assert.deepEqual(plain(Object.keys(holder).sort()), ["consorts", "factionId", "guildId", "key", "lands", "marital", "name", "self", "status", "statusId", "surname", "titles", "town", "townId"]);
     assert.deepEqual(plain(holder.lands), [{ region: "Suchdol", houses: 3, chests: 5, whole: false }, { region: "Wysoka", houses: 0, chests: 0, whole: true }]);
     assert.equal(holder.statusId, "nobilis");
     assert.equal(holder.marital.gloss, "casado");
@@ -401,6 +451,21 @@ test("the hierarchy lists every title of the five branches with its holders, and
         assert.ok(!text.includes(steamId), "no Steam id anywhere");
     }
     assert.ok(lord);
+});
+
+test("the hierarchy is built once for the panels that ask within five seconds, and a nomination made here starts it over (2026-10-25)", () => {
+    const { sut, knight, lord } = realm();
+    const holdersSeen = () => knight.emitted.at(-1).payload.holders.map((entry) => entry.name);
+    fire(sut, "status.hierarchy", knight);
+    const first = holdersSeen();
+    // A title given behind the module's back is not in the next answer yet: it is the same tree, a moment old.
+    sut.titles.addTitle("76561198000000200", "Viajante", "burgomestre", { steamId: LORD, name: "Radovan Capon" });
+    fire(sut, "status.hierarchy", knight);
+    assert.deepEqual(holdersSeen(), first, "answered from what was built a moment ago");
+    // A nomination through the section starts it over.
+    fire(sut, "status.nominate", lord, { targetId: 99999, title: "cavaleiro" });
+    fire(sut, "status.hierarchy", knight);
+    assert.ok(holdersSeen().includes("Viajante"), "and the next answer is built again");
 });
 
 test("a holder is listed by name and family surname even while away, and who named them is told", () => {
@@ -495,12 +560,18 @@ test("the realm's ladder is the same in every branch: a captain of the guard sta
     assert.equal(level("rei"), 1);
     assert.deepEqual(["principe", "marques", "arcebispo"].map(level), [2, 2, 2]);
     assert.deepEqual(["lorde", "bispo", "burgomestre"].map(level), [3, 3, 3]);
-    assert.deepEqual(["cavaleiro", "escudeiro", "burgrave", "padre", "escrivao"].map(level), [4, 4, 4, 4, 4]);
-    assert.equal(level("capitao-guarda"), 5);
+    assert.deepEqual(["cavaleiro", "escudeiro", "burgrave", "padre", "conselheiro"].map(level), [4, 4, 4, 4, 4]);
+    assert.deepEqual(["capitao-guarda", "capitao-milicia", "escrivao"].map(level), [5, 5, 5]);
     assert.ok(level("capitao-guarda") > level("lorde"), "the user's example: Luance is not in a lord's row");
+    assert.equal(level("guarda-portoes"), 6, "2026-10-19: a guard is below the captains");
+    assert.ok(level("guarda-portoes") > level("capitao-milicia") && level("guarda-portoes") > level("capitao-guarda"));
     for (const title of sut.nobility.TITLES) {
         const own = sut.nobility.levelOf(title);
-        assert.ok(Number.isInteger(own) && own >= 1 && own <= 5, `${title.id} is on the ladder`);
+        assert.ok(Number.isInteger(own) && own >= 1 && own <= 6, `${title.id} is on the ladder`);
+        for (const chief of title.reportsTo ?? []) {
+            assert.ok(sut.nobility.titleById(chief), `${title.id} serves under a title that exists`);
+            assert.ok(sut.nobility.levelOf(sut.nobility.titleById(chief)) < own, `${title.id} serves under somebody above it`);
+        }
     }
 });
 
@@ -509,5 +580,110 @@ test("the hierarchy tells each title's level, so the page can draw the rows", ()
     const tree = sut.api.hierarchyFor();
     const holder = tree.holders.find((one) => one.titles.some((title) => title.id === "lorde"));
     assert.equal(holder.titles.find((title) => title.id === "lorde").level, 3);
+    assert.deepEqual(Array.from(holder.titles.find((title) => title.id === "lorde").reportsTo), [], "and whom it serves under, for the tree");
     assert.ok(lord);
+});
+
+test("from the Nomeação section an administrator names as their character, by its titles; from the Jogadores page, as the Crown", () => {
+    const { sut, admin, peasant } = realm();
+    sut.give(ADMIN, "Mauro", "lorde");
+    sut.setSocial(ADMIN, "nobilis");
+    fire(sut, "status.nominate", admin, { targetId: peasant.id, title: "cavaleiro" });
+    const grant = sut.titles.grantsOf(PEASANT)[0];
+    assert.equal(grant.id, "cavaleiro");
+    assert.equal(grant.by, ADMIN, "in their character's name, so the tree hangs the knight under them");
+    assert.notEqual(grant.byName, "a Coroa");
+
+    fire(sut, "status.nominate", admin, { targetId: peasant.id, title: "rei" });
+    assert.deepEqual(Array.from(sut.titles.titlesOf(PEASANT)), ["cavaleiro"], "a lord makes no king");
+    assert.match(sut.notices.filter((entry) => entry.to === ADMIN).at(-1).text, /seção Jogadores/);
+
+    fire(sut, "status.nominate", admin, { targetId: peasant.id, title: "rei", via: "coroa" });
+    assert.equal(sut.titles.grantsOf(PEASANT).find((one) => one.id === "rei").by, "admin", "the Crown names anybody to anything");
+});
+
+test("a holder's spouse stands in the holder's own record, as the realm calls them: a lord's wife is a Lady (2026-10-25)", () => {
+    const lady = { label: "Lady", name: "Elisabeth of England", courtesy: true, text: "Lady Elisabeth of England" };
+    const wife = { label: "Esposa", name: "Kath", courtesy: false, text: "Kath (esposa)" };
+    const { sut, knight } = realm({ consorts: { [LORD]: [lady], [KNIGHT]: [wife, wife, wife] } });
+    fire(sut, "status.hierarchy", knight);
+    const answer = knight.emitted.at(-1).payload;
+    const of = (name) => answer.holders.find((entry) => entry.name === name);
+    assert.deepEqual(plain(of("Radovan Capon").consorts), [lady], "the lord's lady");
+    assert.equal(of("Ivan").consorts.length, 2, "no more than two are drawn beside one holder");
+    const text = JSON.stringify(answer);
+    for (const steamId of [ADMIN, LORD, KNIGHT, PEASANT, WIFE, SON, STRANGER]) assert.ok(!text.includes(steamId), "the spouse's name is told, never a Steam id");
+});
+
+test("a commoner who holds a title reads the hierarchy, a soldier or a clerk; naming and revoking stay with the nobles", () => {
+    const { sut, peasant, knight } = realm();
+    assert.equal(sut.api.canView(peasant), false, "no title, no tree");
+    sut.give(PEASANT, "Kath", "soldado");
+    assert.equal(sut.api.canUse(peasant), false);
+    assert.equal(sut.api.canView(peasant), true);
+    assert.equal(sut.api.canView(knight), true);
+    const block = plain(sut.api.nobilityFor(peasant));
+    assert.equal(block.visible, true);
+    assert.equal(block.power, false, "a soldier names nobody");
+    assert.deepEqual(block.options, []);
+    fire(sut, "status.hierarchy", peasant);
+    assert.equal(peasant.emitted.at(-1).event, "kcdc-gamemode:status.hierarchy");
+
+    const before = Array.from(sut.titles.titlesOf(KNIGHT));
+    fire(sut, "status.nominate", peasant, { targetId: knight.id, title: "escudeiro" });
+    fire(sut, "status.revokeTitle", peasant, { key: "h1", title: "escudeiro" });
+    assert.deepEqual(Array.from(sut.titles.titlesOf(KNIGHT)), before, "a soldier may look at the tree, not change it");
+});
+
+test("the hierarchy tells the land of each holder by its id as well as by its name, so the tree can be read region by region", () => {
+    const { sut, knight } = realm({ towns: { [LORD]: "Suchdol", [KNIGHT]: "Wysoka" } });
+    fire(sut, "status.hierarchy", knight);
+    const answer = knight.emitted.at(-1).payload;
+    const lord = answer.holders.find((one) => one.name === "Radovan Capon");
+    assert.equal(lord.town, "Suchdol");
+    assert.equal(lord.townId, "suchdol");
+    assert.equal(answer.holders.find((one) => one.name === "Ivan").townId, "wysoka");
+    const homeless = realm().sut.api.hierarchyFor().holders.find((one) => one.name === "Ivan");
+    assert.equal(homeless.town, null);
+    assert.equal(homeless.townId, null, "no citizenship, no land");
+});
+
+test("the tradesmen hang in the tree: everybody with a guild who holds no title, under the one who handed it, set in their land; a holder is not drawn twice", () => {
+    const hunter = "76561198000000200";
+    const cook = "76561198000000201";
+    const named = [
+        { steamId: hunter, guild: "venatores", town: "wysoka", by: KNIGHT },
+        { steamId: cook, guild: "tabernarii", town: null, by: "" },
+        { steamId: LORD, guild: "fabri-ferrarii", town: "suchdol", by: "" },
+    ];
+    const { sut, knight } = realm({ trades: named, towns: { [hunter]: "Wysoka" }, memberNames: { [hunter]: "Hans Lovec", [cook]: "Anežka" } });
+    fire(sut, "status.hierarchy", knight);
+    const answer = knight.emitted.at(-1).payload;
+    assert.equal(answer.trades.length, 2, "the lord holds a title already: he stands in the tree as a holder, with his guild on his card");
+    const byName = (name) => answer.trades.find((one) => one.name === name);
+    const lovec = byName("Hans Lovec");
+    assert.equal(lovec.guildId, "venatores");
+    assert.equal(lovec.townId, "wysoka");
+    assert.equal(lovec.town, "Wysoka");
+    const knightRow = answer.holders.find((one) => one.name === "Ivan");
+    assert.equal(lovec.byKey, knightRow.key, "hung from the one who handed it");
+    assert.equal(lovec.self, false);
+    const anezka = byName("Anežka");
+    assert.equal(anezka.byKey, "", "a guild from an administrator or from before hangs from nobody");
+    assert.equal(anezka.townId, null);
+    assert.equal(anezka.town, null);
+    const text = JSON.stringify(answer);
+    for (const steamId of [hunter, cook, ADMIN, LORD, KNIGHT, PEASANT]) assert.ok(!text.includes(steamId), "no Steam id goes in the tree");
+    assert.deepEqual(Array.from(new Set(Object.keys(lovec))).sort(), ["byKey", "guildId", "key", "name", "self", "town", "townId"]);
+});
+
+test("the own card of a tradesman who reads the tree is marked, and nobody else's", () => {
+    const hunter = "76561198000000200";
+    const { sut } = realm({ social: { [hunter]: "nobilis" }, trades: [{ steamId: hunter, guild: "venatores", town: null, by: "" }], memberNames: { [hunter]: "Hans Lovec" } });
+    const me = sut.makePlayer(hunter, "Hans");
+    fire(sut, "status.hierarchy", me);
+    const answer = me.emitted.at(-1).payload;
+    assert.equal(answer.trades.length, 1, "a noble with no title, but with a guild, is a tradesman card of the tree");
+    assert.equal(answer.trades[0].self, true);
+    assert.equal(sut.api.hierarchyFor().trades[0].self, false, "the tree kept for the others carries no mark");
 });

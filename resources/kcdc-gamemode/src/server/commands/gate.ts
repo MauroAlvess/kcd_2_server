@@ -1,6 +1,7 @@
 import { readLevelGuid } from "../args.js";
 import type { Command, CommandContext, Reply } from "../command.js";
 import { formatPosition } from "../place.js";
+import { rememberGate } from "../properties.js";
 
 /** How far a bare `/gate` looks. Castle gates are visible from much further than a door. */
 const REACH = 60;
@@ -68,6 +69,8 @@ export const gateCommand: Command = {
             reply.line(`${gate.kind} ${gate.guid} ${result.reason}.`);
             return;
         }
+        // Kept: a castle's gate is put back this way after a restart (`properties.ts`, keepGates).
+        rememberGate(gate.guid, result.opening);
         reply.line(`${gate.kind} ${gate.guid} is ${result.opening ? "opening" : "closing"} (${result.seconds.toFixed(1)}s).`);
     },
 };

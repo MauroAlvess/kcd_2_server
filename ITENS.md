@@ -54,7 +54,6 @@ O jogo não dá um nome de qualidade às peças, então aqui vale o **preço bas
 | Jaquetão usado | Tronco | `GambesonShort02_m01_E1` | 99,3 | 4 | 9,4 | 32 / 12 / 34 |
 | Jaquetão do andarilho | Tronco | `GambesonShort02_m12_E1` | 114 | 4 | 8,1 | 31 / 12 / 33 |
 | Jaquetão de torneio | Tronco | `GambesonLong01_m01_C3_KHtournament_Henry` | 179 | 4 | 12,5 | 38 / 13 / 35 |
-| Cotoveleiras em forma de folha | Braços e mãos | `LegsPlate07_m01_E1`, `LegsPlate07_m02_E1`, `LegsPlate07_m03_E1` | 33,1–33,2 | 4 | 0,9 | 23 / 17 / 9 |
 | Cotoveleiras | Braços e mãos | `ArmPlate03_m01_D1`, `ArmPlate03_m02_D1`, `ArmPlate03_m03_D1`, `ArmPlate03_m04_D1` | 46 | 4 | 1 | 27 / 20 / 12 |
 | Cotoveleiras com rondelas | Braços e mãos | `ArmPlate01_m01_C2`, `ArmPlate01_m02_C2`, `ArmPlate01_m03_C2`, `ArmPlate01_m04_C2` | 74,1–74,5 | 4 | 1 | 37 / 28 / 18 |
 | Luvas de carniceiro | Braços e mãos | `rasuvUcen_knackersGloves` | 76,9 | 4 | 0,9 | 7 / 3 / 9 |
@@ -64,6 +63,7 @@ O jogo não dá um nome de qualidade às peças, então aqui vale o **preço bas
 | Luvas de equitação | Braços e mãos | `Gloves05_m01_B2`, `Gloves05_m02_B2`, `Gloves05_m03_B2`, `Gloves05_m05_B2`, `Gloves05_m07_B2` | 181–214 | 4 | 1 | 15 / 6 / 16 |
 | Luvas de ferreiro do Henry | Braços e mãos | `Gloves05_mPros` | 181 | 4 | 1 | 15 / 6 / 16 |
 | Luvas de nobre | Braços e mãos | `Gloves06_mRings02_A`, `Gloves06_mRings_A` | 214 | 4 | 0,9 | 0 / 1 / 2 |
+| Joelheiras em forma de folha | Pernas | `LegsPlate07_m01_E1`, `LegsPlate07_m02_E1`, `LegsPlate07_m03_E1` | 33,1–33,2 | 4 | 0,9 | 23 / 17 / 9 |
 | Joelheiras | Pernas | `LegsPlate06_m01_D1`, `LegsPlate06_m02_D1`, `LegsPlate06_m03_D1` | 48,1–48,3 | 4 | 1 | 27 / 20 / 12 |
 | Calças acolchoadas do andarilho | Pernas | `LegsPadded02_m08_E1` | 99,3 | 4 | 4,6 | 31 / 20 / 33 |
 | Calças acolchoadas velhas | Pernas | `LegsPadded02_m01_E1`, `LegsPadded02_m02_E1`, `LegsPadded02_m03_E1`, `LegsPadded02_m04_E1`, `LegsPadded02_m05_E1`, `LegsPadded02_m06_E1`, `LegsPadded02_m07_E1`, `LegsPadded02_m09_E1`, `LegsPadded02_m10_E1`, `LegsPadded02_m11_E1`, `LegsPadded02_m12_E1`, `LegsPadded02_m13_E1`, `LegsPadded02_m14_E1` | 120–123 | 4 | 5,3 | 35 / 24 / 34 |
@@ -1163,3 +1163,9 @@ Escudos, pavieses, sobretudos e caparazões que levam o brasão de um lugar ou d
 ---
 
 2746 códigos de peças em 669 nomes.
+
+
+Espada de madeira	shortswordTraining	Espada de treinamento
+Espada longa de madeira	longswordTraining	Montante de treinamento
+Porrete	maceClub	Porrete
+Clava de madeira	maceClubTraining	Clava de treino

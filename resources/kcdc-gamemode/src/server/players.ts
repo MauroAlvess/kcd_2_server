@@ -4,10 +4,15 @@
 export type Lookup = { player: Player } | { error: string };
 
 /**
- * The player a query names: exact name, then unique prefix, then connection
- * slot -- so a player named for a number still wins over the one in that slot.
+ * The player a query names: exact name, then unique prefix, then the player's number (the "Nº" the Jogadores page shows: the
+ * network id, such as 4438), then connection slot -- so a player named for a number still wins over the one with that number.
+ * A number is the sure way to name somebody whose name has spaces or is shared by another (user, 2026-10-20: "o comando de
+ * carroça registrar deve usar o número do jogador, exemplo 4438").
  */
 export function findPlayer(query: string): Lookup {
+    if (query.trim() === "") {
+        return { error: "Say which player: a name, or the player's number from the Jogadores page." };
+    }
     const players = Player.all();
     const folded = query.toLowerCase();
 
@@ -25,12 +30,16 @@ export function findPlayer(query: string): Lookup {
     }
 
     const slot = Number(query);
+    const byId = Number.isInteger(slot) && query.trim() !== "" ? players.find((player) => player.id === slot) : undefined;
+    if (byId) {
+        return { player: byId };
+    }
     const bySlot = Number.isInteger(slot) ? players.find((player) => player.playerIndex === slot) : undefined;
     if (bySlot) {
         return { player: bySlot };
     }
 
-    return { error: `No player called '${query}'.` };
+    return { error: `No player called '${query}'. A name, or the player's number from the Jogadores page, will do.` };
 }
 
 /**

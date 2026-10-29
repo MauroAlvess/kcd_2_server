@@ -24,8 +24,21 @@ const CHECKPOINTS_S = [6, 12, 20, 30] as const;
 /** The same look is not sent more often than this. */
 const MIN_GAP_MS = 4000;
 
-/** How long a join is watched. */
-const WATCH_MS = 36_000;
+/**
+ * How long a join is watched, counted from the moment the body is ready (or from the spawn, when that was quick). It was 36 s; a slow client
+ * that finishes loading after that dressed Henry over a look nobody was watching any more (2026-10-25), so the client's own report is looked at
+ * for two minutes, and the look is sent again whenever it says it is not the saved one.
+ */
+const WATCH_MS = 120_000;
+
+/**
+ * How long a body that is not ready yet is waited for. The watch used to end 36 s after the spawn, ready or not, and a body that took
+ * longer to load (a slow machine, a server whose ticks run late: 2026-10-25, "perdem a aparência e ficam como Henry") was never given
+ * its look: 16 joins in nine days ended with "saved look sent 0 time(s)". The moments of `CHECKPOINTS_S` are counted from `READY_LEAD_S`
+ * seconds before the body was ready when that was later than the spawn's own.
+ */
+const READY_WAIT_MS = 5 * 60_000;
+const READY_LEAD_S = 5;
 
 /** Refusals before the saved look is written off. */
 const MAX_REFUSALS = 3;
@@ -39,6 +52,9 @@ function holds(published: Appearance, wanted: Appearance): boolean {
 
 function watchLook(id: number): void {
     const startedAt = Date.now();
+    /** Where the watch's own clock starts: the spawn, or a little before the body was ready when it took long to be. */
+    let clockFrom = startedAt;
+    let readySeen = false;
     let lastSentAt = -MIN_GAP_MS;
     let sends = 0;
     let refusals = 0;
@@ -46,21 +62,26 @@ function watchLook(id: number): void {
 
     const timer = setInterval(() => {
         const player = Player.getById(id);
-        const elapsed = Date.now() - startedAt;
         if (!player) {
             clearInterval(timer);
             return;
         }
+        if (player.ready && !readySeen) {
+            readySeen = true;
+            clockFrom = Math.max(startedAt, Date.now() - READY_LEAD_S * 1000);
+        }
+        const elapsed = Date.now() - clockFrom;
 
         const saved = getCharacter(player.steamId);
-        if (elapsed > WATCH_MS || !saved) {
+        const waitedTooLong = !readySeen && Date.now() - startedAt > READY_WAIT_MS;
+        if ((readySeen && elapsed > WATCH_MS) || waitedTooLong || !saved) {
             clearInterval(timer);
             if (saved) {
                 console.log(`${player.nickname}: saved look sent ${sends} time(s); the client reports ${holds(player.appearance, saved.appearance) ? "it" : `${JSON.stringify(player.appearance)}, not it`}`);
             }
             return;
         }
-        if (!player.ready) {
+        if (!readySeen) {
             return;
         }
 
@@ -87,7 +108,15 @@ function watchLook(id: number): void {
 
 export function installFirstJoin(): void {
     Events.on("playerSpawned", (player) => {
-        if (getCharacter(player.steamId)) {
+        const saved = getCharacter(player.steamId);
+        if (saved?.redo === true) {
+            // Made again by an administrator's decision: the creator, which cannot be left until the new look is accepted.
+            Chat.sendToPlayer(player, "A administração pediu que você refaça o seu personagem: escolha o visual de novo (o nome pode ficar ou mudar).");
+            console.log(`first-join: ${player.nickname} vai refazer o personagem`);
+            openCreatorFor(player, "both");
+            return;
+        }
+        if (saved) {
             watchLook(player.id);
             return;
         }

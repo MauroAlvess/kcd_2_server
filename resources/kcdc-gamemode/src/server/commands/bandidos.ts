@@ -9,6 +9,7 @@ export const bandidosCommand: Command = {
         "/bandidos  -- cada acampamento, quantos bandidos estão vivos e quantos baús ele tem",
         "/bandidos ir <n>  -- leva você até o acampamento n (cuidado: eles atacam)",
         "/bandidos repor  -- traz de volta os bandidos mortos e enche os baús agora",
+        "/bandidos estado  -- o que cada bandido dos acampamentos a até 250 m de você está fazendo, e quem o roda (para achar os que ficam parados)",
         "/bandidos agressividade [baixa|media|alta]  -- o quanto os bandidos veem de longe, batem forte e perseguem (sem argumento mostra a atual)",
     ],
 
@@ -46,6 +47,12 @@ export const bandidosCommand: Command = {
                 `Agressividade ${now.label}: ${now.about}.`,
                 `(veem a ${now.aggroRadius} m, golpe vezes ${now.damageMultiplier}, o acampamento persegue por ${now.alarmMs / 1000} s.) ${word === undefined ? "Troque com /bandidos agressividade baixa|media|alta." : "Vale já, e fica gravada para o próximo início."}`,
             ]);
+            return;
+        }
+
+        if (sub === "estado") {
+            const lines = banditCamps.inspect(player.position);
+            reply.lines(lines.length === 0 ? ["Nenhum acampamento de bandidos a até 250 m de você."] : lines);
             return;
         }
 

@@ -21,14 +21,17 @@
  */
 
 import { isAdmin } from "./auth.js";
+import { emitLarge } from "./big-emit.js";
 import { cleanName, epithetById, EPITHETS, EPITHET_GROUPS, fullName, nameKey, NAME_MAX, NAME_MIN } from "./character-name.js";
 import type { CharacterIdentity } from "./characters.js";
-import { allCharacters, getCharacter, getIdentity, saveCharacter } from "./characters.js";
+import { allCharacters, clothesGivenTo, getCharacter, getIdentity, noteClothesGiven, saveCharacter } from "./characters.js";
 import { buildCatalog, pageCatalog, pickedFrom, resolveLook } from "./creator-catalog.js";
 import type { Catalog, Gender } from "./creator-catalog.js";
+import { CLOTHES_PARTS, hasClothes, pageClothes, piecesFor } from "./creator-clothes.js";
+import type { ClothesPart } from "./creator-clothes.js";
 import { backFree, MIN_DISTANCE_M, planBooth } from "./creator-space.js";
 import type { Spot } from "./creator-space.js";
-import { ensureStarter } from "./kits.js";
+import { ensureStarter, markStarterOutfit } from "./kits.js";
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -46,6 +49,64 @@ export const CHECK_EVENT = `${RESOURCE}:creator.check`;
 export const ACCEPT_EVENT = `${RESOURCE}:creator.accept`;
 export const CANCEL_EVENT = `${RESOURCE}:creator.cancel`;
 export const FAILED_EVENT = `${RESOURCE}:creator.failed`;
+/** The clothes picked in the "Roupas" tab, which a newcomer is dressed in at once (`creator-clothes.ts`). */
+export const DRESS_EVENT = `${RESOURCE}:creator.dress`;
+/** The clothes to choose from, with their icons: sent in pieces (`big-emit.ts`) after `creator.begin`. */
+export const CLOTHES_NAME = "creator.clothes";
+
+/**
+ * What the "Roupas" tab is for. A newcomer has nothing yet and is dressed in the pieces as they are picked (`dress`). A character
+ * that exists keeps what it has; the pieces it picks go to its inventory when the look is saved, each piece once per character
+ * (`give`: user, 2026-10-19, "apertei creator e no menu de criação não teve a aba nova de roupas"). Since 2026-10-25 (user: "na
+ * seção roupa, ao ir alterando as roupas, deve refletir no boneco também") it tries them on all the same: what it wears comes off
+ * while the creator is up, the pieces go on, and all of it is put back as it was when the creator ends (`tryOn`, `takeOff`).
+ */
+export type ClothesMode = "dress" | "give";
+
+/** What a character that exists had before it tried pieces on: put back as it was when the creator ends. */
+interface Kept {
+    readonly items: { id: string; item: string; amount: number; metadata: Record<string, unknown>; equipped: number }[];
+    readonly quickslots: InventoryQuickslots | null;
+}
+
+/** The classes of what is worn on the body (`Inventory.classes`): what may come off while pieces are tried on. */
+const WORN_CATEGORIES = new Set(["Armor", "Helmet", "Hood"]);
+
+/**
+ * The part of the body a worn piece covers, by its table name, the way `tools/make-items-doc.py` sorts them (ITENS.md): the torso's
+ * layers, the legs, the feet, the head. A piece tried on in a part takes off what the character wore there (the armour over a tunic
+ * hides it); the head comes off whatever is tried, so the face shows. Anything else it wears (gloves, a collar, rings) stays on.
+ */
+const PARTS_WORN: readonly [ClothesPart | "head", RegExp][] = [
+    ["head", /^(Bascinet|KettleHat|SkullCap|Helmet|Coif|Hood|Cap(?!arison)|Wreath|Bonnet|Veil|HairDecor)/i],
+    ["top", /^(Tunic|Shirt|Coat|Caftan|Habit|Waffenrock|Cotehardie|Surcote|SimpleDress|Dress|Cuirass|Brigandine|Gambeson|Mail|Jacket|Doublet|Aketon)/i],
+    ["legs", /^(Hose|Legs|Pants|Trousers|Chausses)/i],
+    ["feet", /^(Boots|Shoes|Sabatons)/i],
+];
+
+export function partWorn(name: string): ClothesPart | "head" | null {
+    const stem = name.replace(/^F_/i, "");
+    return PARTS_WORN.find(([, pattern]) => pattern.test(stem))?.[0] ?? null;
+}
+
+let classIndex: Map<string, { readonly id: string; readonly category: string }> | null = null;
+
+/** An item class by its table name or its GUID, with its category; undefined for one the game does not have. */
+function classOf(nameOrId: string): { readonly id: string; readonly category: string } | undefined {
+    if (classIndex === null) {
+        classIndex = new Map();
+        try {
+            for (const entry of Inventory.classes()) {
+                const value = { id: entry.id, category: entry.category };
+                classIndex.set(entry.name.toLowerCase(), value);
+                classIndex.set(entry.id.toLowerCase(), value);
+            }
+        } catch (error: unknown) {
+            console.log(`creator: a lista de itens do jogo não pôde ser lida: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    return classIndex.get(nameOrId.toLowerCase());
+}
 
 /** A look is put on the body no more often than this, whatever the page sends. */
 export const APPLY_GAP_MS = 120;
@@ -91,6 +152,14 @@ interface Session {
     placed: boolean;
     /** Where they stood before they were taken to a booth, or null when they were not moved. */
     origin: Spot | null;
+    /** The gender of the clothes the newcomer was last dressed in from the "Roupas" tab, or null when none were put on. */
+    dressed: Gender | null;
+    /** What the "Roupas" tab does for this player, or null when there is none. */
+    readonly clothes: ClothesMode | null;
+    /** What a character that exists had before it tried pieces on, or null when it has tried none. */
+    kept: Kept | null;
+    /** A remake of the look and the name ("Refazer aparência"): what is done once it is saved, or null. */
+    readonly remake: ((player: Player) => void) | null;
 }
 
 const sessions = new Map<number, Session>();
@@ -262,16 +331,70 @@ function startTicking(): void {
     }
 }
 
-/** The session over; a look that was tried on and not accepted is put back. */
+/** The session over; a look that was tried on and not accepted is put back, and so are the clothes it had on. */
 function finish(player: Player, session: Session): void {
     sessions.delete(player.id);
     if (session.timer !== null) {
         clearTimeout(session.timer);
     }
+    takeOff(player, session);
     if (session.tried && session.base !== null) {
         player.setAppearance(session.base);
     }
     leaveBooth(player, session.origin);
+}
+
+/**
+ * A character that exists tries pieces on: what it wears in the parts tried comes off, and the hood or the helmet so the face shows
+ * (`partWorn`), the pieces go on, and everything it has stays in its inventory, rows and quick slots as they were. The first try keeps
+ * what it had, which `takeOff` puts back.
+ */
+function tryOn(player: Player, session: Session, pieces: readonly string[], parts: ReadonlySet<ClothesPart>): boolean {
+    if (session.kept === null) {
+        const state = Inventory.get(player);
+        if (state === null || !state.ready) {
+            return false;
+        }
+        session.kept = {
+            items: state.items.map((row) => ({ id: row.id, item: row.item, amount: row.amount, metadata: { ...row.metadata }, equipped: row.equipped })),
+            quickslots: state.quickslots,
+        };
+        names.clear();
+        for (const row of state.items) {
+            names.set(row.id, row.name);
+        }
+    }
+    const kept = session.kept;
+    const off = (row: { readonly id: string; readonly item: string }): boolean => {
+        if (!WORN_CATEGORIES.has(classOf(row.item)?.category ?? "")) {
+            return false;
+        }
+        const part = partWorn(names.get(row.id) ?? "");
+        return part === "head" || (part !== null && parts.has(part));
+    };
+    const items = [...kept.items.map((row) => ({ ...row, equipped: row.equipped > 0 && off(row) ? 0 : row.equipped })), ...pieces.map((item) => ({ item, amount: 1, equipped: 1 }))];
+    return Inventory.set(player, { items, quickslots: kept.quickslots }).ok;
+}
+
+/** The table names of the rows a character had when it began to try pieces on, by row id (`tryOn`). */
+const names = new Map<string, string>();
+
+/** What a character that exists had on before it tried pieces on, put back as it was. */
+function takeOff(player: Player, session: Session): void {
+    const kept = session.kept;
+    if (kept === null) {
+        return;
+    }
+    session.kept = null;
+    let ok = false;
+    try {
+        ok = Inventory.set(player, { items: kept.items, quickslots: kept.quickslots }).ok;
+    } catch {
+        ok = false;
+    }
+    if (!ok) {
+        console.log(`creator: ${player.nickname}: não consegui devolver o que vestia antes de provar as roupas`);
+    }
 }
 
 /** For a character made before the name was asked for: the first word of the nickname, when it can be a name. */
@@ -284,7 +407,7 @@ function suggestionFor(player: Player): string {
  * Opens the creator for this player: their client puts the camera on the body and the page over the screen. `genders` is
  * what they may choose between. Asking again while one is open starts it over.
  */
-export function openCreatorFor(player: Player, genders: Gender | "both" = "both"): void {
+export function openCreatorFor(player: Player, genders: Gender | "both" = "both", options: { readonly remake?: (player: Player) => void } = {}): void {
     let wide: Catalog;
     try {
         wide = theCatalog();
@@ -292,7 +415,8 @@ export function openCreatorFor(player: Player, genders: Gender | "both" = "both"
         // A catalog the game will not give: the game's own stage, which a newcomer cannot back out of either.
         const reason = thrown instanceof Error ? thrown.message : String(thrown);
         console.log(`creator: ${player.nickname}: sem o catálogo de aparências (${reason}); vai o criador do jogo`);
-        fallbackStage?.(player, "sem catálogo de aparências", getCharacter(player.steamId) === null);
+        const before = getCharacter(player.steamId);
+        fallbackStage?.(player, "sem catálogo de aparências", before === null || before.redo === true);
         return;
     }
     settling.delete(player.id);
@@ -304,22 +428,96 @@ export function openCreatorFor(player: Player, genders: Gender | "both" = "both"
     const saved = getCharacter(player.steamId);
     const base = previous?.base ?? saved?.appearance ?? player.appearance;
     const identity = getIdentity(player.steamId);
-    const fixed = identity !== null && !isAdmin(player) ? identity : null;
+    // A character made again (`/creator refazer`) may take a new name too, and cannot be left until it is done.
+    const redo = saved?.redo === true;
+    // A remake of the look ("Refazer aparência", `look-remake.ts`) may take a new name too.
+    const remake = options.remake ?? null;
+    const fixed = identity !== null && !isAdmin(player) && !redo && remake === null ? identity : null;
     const picked = pickedFrom(wide, saved?.appearance ?? null, genders, Math.random);
-    const mandatory = saved === null;
+    const mandatory = saved === null || redo;
     const opening = {
         genders,
         catalog: pageCatalog(wide),
         look: picked,
-        identity: identity === null ? { name: "", epithet: "", locked: false, suggestion: suggestionFor(player) } : { name: identity.name, epithet: identity.epithet, locked: fixed !== null, suggestion: "" },
+        identity: identity === null ? { name: "", epithet: "", locked: false, suggestion: redo ? "" : suggestionFor(player) } : { name: identity.name, epithet: identity.epithet, locked: fixed !== null, suggestion: "" },
         epithets: { groups: EPITHET_GROUPS, list: EPITHETS.map((epithet) => ({ id: epithet.id, label: epithet.label, gloss: epithet.gloss, group: epithet.group })) },
         rules: { min: NAME_MIN, max: NAME_MAX },
         mandatory,
     };
-    const session: Session = { genders, base, fixed, mandatory, opening, failures: 0, tried: previous?.tried ?? false, wanted: null, appliedAt: 0, touchedAt: Date.now(), timer: null, placed: previous?.placed ?? false, origin: previous?.origin ?? null };
+    const clothes: ClothesMode | null = !hasClothes() ? null : saved === null ? "dress" : "give";
+    const session: Session = { genders, base, fixed, mandatory, opening, failures: 0, tried: previous?.tried ?? false, wanted: null, appliedAt: 0, touchedAt: Date.now(), timer: null, placed: previous?.placed ?? false, origin: previous?.origin ?? null, dressed: previous?.dressed ?? null, clothes, kept: previous?.kept ?? null, remake: remake ?? previous?.remake ?? null };
     sessions.set(player.id, session);
     startTicking();
     send(player, BEGIN_EVENT, opening);
+    if (clothes !== null) {
+        emitLarge(player, CLOTHES_NAME, JSON.stringify({ ...pageClothes(new Set(clothesGivenTo(player.steamId))), mode: clothes }));
+    }
+}
+
+/**
+ * A character that exists saved its look with pieces picked in the "Roupas" tab: those it was never given go to its inventory,
+ * to wear when it likes. What it already wears is not touched. The item classes given.
+ */
+export function giveClothes(player: Player, gender: Gender, raw: unknown): string[] {
+    const picks = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+    if (picks["gender"] !== gender) {
+        return [];
+    }
+    const had = new Set(clothesGivenTo(player.steamId));
+    const given: string[] = [];
+    for (const item of piecesFor(gender, { top: picks["top"], legs: picks["legs"], feet: picks["feet"] })) {
+        if (had.has(item)) {
+            continue;
+        }
+        try {
+            if (Inventory.add(player, { item, amount: 1 }).ok) {
+                given.push(item);
+            }
+        } catch {
+            // The game would not take it: nothing given, nothing noted.
+        }
+    }
+    noteClothesGiven(player.steamId, given);
+    return given;
+}
+
+/**
+ * Dresses the body in the clothes picked in the "Roupas" tab, so the camera shows them. A newcomer has nothing yet (the starter
+ * kit comes when the character is accepted), so what they wear is all they have: the inventory is set to the pieces picked. A
+ * character that exists tries them on over what it has (`tryOn`), and gets it all back when the creator ends.
+ *
+ * `Inventory.set` takes an item by its GUID only: the catalog's table names were refused, and no newcomer was ever dressed by the tab
+ * until 2026-10-25 (the log: "o jogo não vestiu TunicLong04_m02_D, ..." at every pick).
+ */
+function onDress(player: Player, payload: unknown): void {
+    const session = sessions.get(player.id);
+    if (session === undefined || session.clothes === null) {
+        return;
+    }
+    session.touchedAt = Date.now();
+    const fields = fieldsOf(payload);
+    const gender = fields["gender"];
+    if ((gender !== "male" && gender !== "female") || (session.genders !== "both" && session.genders !== gender)) {
+        return;
+    }
+    const names = piecesFor(gender, { top: fields["top"], legs: fields["legs"], feet: fields["feet"] });
+    const items = names.map((name) => classOf(name)?.id).filter((id): id is string => id !== undefined);
+    if (items.length < names.length) {
+        console.log(`creator: ${player.nickname}: o jogo não tem ${names.filter((name) => classOf(name) === undefined).join(", ")}`);
+    }
+    const parts = new Set(CLOTHES_PARTS.filter((part) => typeof fields[part] === "number" && (fields[part] as number) >= 0));
+    let ok = false;
+    try {
+        ok = session.clothes === "dress" && getCharacter(player.steamId) === null ? Inventory.set(player, { items: items.map((item) => ({ item, amount: 1, equipped: 1 })) }).ok : tryOn(player, session, items, parts);
+    } catch {
+        ok = false;
+    }
+    if (session.clothes === "dress") {
+        session.dressed = ok && items.length > 0 ? gender : null;
+    }
+    if (!ok) {
+        console.log(`creator: ${player.nickname}: o jogo não vestiu ${names.join(", ")}`);
+    }
 }
 
 function fieldsOf(payload: unknown): Record<string, unknown> {
@@ -396,14 +594,33 @@ function onAccept(player: Player, payload: unknown): void {
         session.timer = null;
     }
     sessions.delete(player.id);
+    // What was tried on comes off and what it had goes back on; the pieces picked are given below, each once.
+    takeOff(player, session);
     player.setAppearance(look);
     leaveBooth(player, session.origin);
     settling.set(player.id, { look, until: Date.now() + SETTLE_AFTER_MS, appliedAt: Date.now() });
     startTicking();
     saveCharacter(player.steamId, look, player.nickname, { name: state.name, epithet: state.epithet });
+    // Dressed from the "Roupas" tab for this very body: those are the clothes, and the starter outfit is not put over them.
+    if (session.dressed !== null && session.dressed === look.gender) {
+        markStarterOutfit(player);
+    }
     ensureStarter(player);
-    console.log(`creator: ${player.nickname} criou ${state.full} (${look.gender === "female" ? "mulher" : "homem"})`);
-    Chat.sendToPlayer(player, `Bem-vindo a Kuttenberg, ${state.full}. Digite /creator para mudar o visual quando quiser.`);
+    if (session.remake !== null) {
+        session.remake(player);
+        console.log(`creator: ${player.nickname} refez a aparência de ${state.full} (${look.gender === "female" ? "mulher" : "homem"})`);
+        Chat.sendToPlayer(player, `Aparência refeita: agora você é ${state.full}. Tudo o que o personagem tinha continua seu.`);
+    } else {
+        console.log(`creator: ${player.nickname} criou ${state.full} (${look.gender === "female" ? "mulher" : "homem"})`);
+        Chat.sendToPlayer(player, `Bem-vindo a Kuttenberg, ${state.full}. Digite /creator para mudar o visual quando quiser.`);
+    }
+    if (session.clothes === "give") {
+        const given = giveClothes(player, look.gender, fields["clothes"]);
+        if (given.length > 0) {
+            console.log(`creator: ${player.nickname} recebeu ${given.length} peça(s) de roupa do criador`);
+            Chat.sendToPlayer(player, `${given.length === 1 ? "A peça de roupa escolhida foi" : `As ${given.length} peças de roupa escolhidas foram`} para o seu inventário: vista quando quiser.`);
+        }
+    }
     send(player, DONE_EVENT, { full: state.full });
 }
 
@@ -457,6 +674,7 @@ export function installCreator(onFailed: (player: Player, reason: string, mandat
     Events.onClient(CHECK_EVENT, (sender, payload) => onCheck(sender as Player, payload));
     Events.onClient(ACCEPT_EVENT, (sender, payload) => onAccept(sender as Player, payload));
     Events.onClient(CANCEL_EVENT, (sender, payload) => onCancel(sender as Player, payload));
+    Events.onClient(DRESS_EVENT, (sender, payload) => onDress(sender as Player, payload));
     Events.onClient(FAILED_EVENT, (sender, payload) => {
         const player = sender as Player;
         const session = sessions.get(player.id);
@@ -477,6 +695,7 @@ export function installCreator(onFailed: (player: Player, reason: string, mandat
             return;
         }
         sessions.delete(player.id);
+        takeOff(player, session);
         leaveBooth(player, session.origin);
         console.log(`creator: ${player.nickname}: a página não abriu (${reason}); vai o criador do jogo${session.mandatory ? ", que não se pode deixar sem criar o personagem" : ""}`);
         onFailed(player, reason, session.mandatory);

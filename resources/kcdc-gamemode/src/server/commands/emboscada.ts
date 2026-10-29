@@ -15,11 +15,13 @@ export const emboscadaCommand: Command = {
         const [sub, who] = args;
         if (sub === undefined) {
             const status = ambushes.status();
+            const why = Player.all().filter((one) => one.ready).map((one) => `${one.nickname}: ${ambushes.lastReason.get(one.id) ?? "ainda não olhado"}`);
             const seen = status.surfaces.slice(0, 6).map(([surface, times]) => `${surface} ${times}`).join(", ");
             reply.lines([
                 `Salteadores ${status.enabled ? "ligados" : "desligados"}: ${status.active} gangue(s) nas estradas agora, ${status.started} desde o início.`,
                 `A cada ${ambushSettings.checkMs / 1000} s, ${Math.round(ambushSettings.chanceOnRoad * 100)}% de chance para quem viaja numa estrada e ${Math.round(ambushSettings.chanceOffRoad * 100)}% fora dela, fora dos povoados; a mesma pessoa no máximo a cada ${ambushSettings.playerCooldownMs / 60_000} min.`,
                 seen === "" ? "Ainda não li o chão sob ninguém." : `Chão lido sob os jogadores: ${seen}.`,
+                `Por que cada um não foi parado na última olhada: ${why.join("; ") || "ninguém no mundo"}.`,
             ]);
             return;
         }

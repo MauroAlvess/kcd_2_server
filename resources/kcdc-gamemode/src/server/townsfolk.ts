@@ -3,15 +3,22 @@
  * posts of those who only stand where they are put and talk through the game's choice list (the barbers and the skill
  * teachers). The vendors (`vendors.ts`) are townsfolk too, and walk about, so they keep their own day.
  *
- * A post has a day (`installPostLife`): by day it greets whoever comes near, looks at them, and now and then takes a few
- * steps about its place; at night it stands. And a body that has no clothes on (the soul's own outfit not landing) is
- * dressed in a villager's, so that nobody stands in the street in his shirt (`clothe`).
+ * A post has a day (`installPostLife`): by day it greets whoever comes near, looks at them, now and then takes a few steps
+ * about its place, and says a word to whoever passes; at night it walks to the nearest door of a building and goes in, and
+ * comes out of it in the morning (user, 2026-10-18: "eles precisam ir para dentro de casa à noite"). A post with no such door
+ * within reach goes in where it stands, once nobody is near to see it (2026-10-25, user: "uns NPC dormem na rua"): nobody spends the
+ * night in the street. A body that fell into a river, strayed or is shut in somewhere is made again at its place (`npc-keeper.ts`). And
+ * a body that has no clothes on (the soul's own outfit not landing) is dressed in a villager's, so that nobody stands in the street in
+ * his shirt (`clothe`).
  *
  * The framework forgets NPCs at every restart, and the level's own population is not run here, so each post is made
  * again from the lists a little after the server starts (once the level and the navigation mesh are up), and one that is
  * somehow brought down is back a moment later. Nobody can hurt them, nobody can loot them, and no name or health bar
  * floats over them, like the level's own townsfolk.
  */
+
+import { maybeGesture } from "./idle-gestures.js";
+import { keeperNote, npcKeeper } from "./npc-keeper.js";
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -135,18 +142,27 @@ export function townsperson(soul: Soul, name: string, position: Vector3, yaw: nu
  * stand (once they have been made), for a test or an administrator's list.
  */
 export interface PostHandle {
+    /** Whose posts these are, for the log: `barbers`, `teachers`, `travel`. */
+    readonly label: string;
     standing(): ReadonlyMap<string, number>;
     readonly posts: readonly Post[];
+    /** Takes the post's body out of the world for the night (it went in). */
+    sleep(id: string): void;
+    /** Makes the body of a post that slept again, at `position`; null when it was not asleep. */
+    wake(id: string, position: Vector3, yaw: number): Npc | null;
+    asleep(id: string): boolean;
 }
 
 export function installPosts(label: string, posts: readonly Post[], talk: (player: Player, post: Post, npc: Npc) => void): PostHandle {
     const byNpc = new Map<number, Post>();
     const bodies = new Map<string, number>();
+    const sleeping = new Set<string>();
 
-    const make = (post: Post): void => {
-        const npc = townsperson(post.soul, post.name, placeOf(post), post.yaw ?? 0);
+    const make = (post: Post, position: Vector3 = placeOf(post), yaw: number = post.yaw ?? 0): Npc => {
+        const npc = townsperson(post.soul, post.name, position, yaw);
         byNpc.set(npc.id, post);
         bodies.set(post.id, npc.id);
+        return npc;
     };
 
     const spawn = setTimeout(() => {
@@ -179,6 +195,9 @@ export function installPosts(label: string, posts: readonly Post[], talk: (playe
         setTimeout(() => {
             try {
                 Npc.getById(npc.id)?.remove();
+                if (sleeping.has(post.id)) {
+                    return;
+                }
                 make(post);
             } catch (error: unknown) {
                 console.error(`${label}: ${post.id} não voltou: ${error instanceof Error ? error.message : String(error)}`);
@@ -198,11 +217,55 @@ export function installPosts(label: string, posts: readonly Post[], talk: (playe
         bodies.clear();
     });
 
-    return { standing: () => bodies, posts };
+    return {
+        label,
+        standing: () => bodies,
+        posts,
+        sleep(id: string): void {
+            const npcId = bodies.get(id);
+            sleeping.add(id);
+            if (npcId === undefined) {
+                return;
+            }
+            byNpc.delete(npcId);
+            bodies.delete(id);
+            Npc.getById(npcId)?.remove();
+        },
+        wake(id: string, position: Vector3, yaw: number): Npc | null {
+            const post = posts.find((candidate) => candidate.id === id);
+            if (post === undefined || !sleeping.has(id)) {
+                return null;
+            }
+            sleeping.delete(id);
+            return make(post, position, yaw);
+        },
+        asleep: (id: string) => sleeping.has(id),
+    };
 }
 
 // ---------------------------------------------------------------------------------------------
 // A post's day.
+
+/**
+ * At dusk and at dawn the whole town started at once: every post that went in planned its walk to a door (a route on the navigation mesh), and every post that
+ * came out was made again, all in the same turn (up to 476 ms, perf-watch, 2026-10-26). Such an order is now given `perTurn` at a time in each `turnMs`, for
+ * all the posts of all the handles together, and the rest of the town goes on the turns that follow.
+ */
+export const postOrders = { perTurn: 4, turnMs: 1_000 };
+let ordersLeft = 0;
+let ordersSince = Number.NEGATIVE_INFINITY;
+
+function mayOrder(now: number): boolean {
+    if (now - ordersSince >= postOrders.turnMs) {
+        ordersSince = now;
+        ordersLeft = postOrders.perTurn;
+    }
+    if (ordersLeft <= 0) {
+        return false;
+    }
+    ordersLeft -= 1;
+    return true;
+}
 
 export const postLife = {
     tickMs: 2_000,
@@ -210,13 +273,84 @@ export const postLife = {
     greetM: 5,
     greetAgainMs: 10 * 60_000,
     lookAgainMs: 4_000,
-    /** Nobody is left alone to stroll with somebody this near (a lesson or a haircut is on). */
-    quietM: 12,
+    /**
+     * Nobody is left alone to stroll with somebody this near (a lesson or a haircut is on). It was 12 m, which kept every post
+     * standing still the whole time a player looked at it (user, 2026-10-18: "ainda parecem só bonecos parados nas vilas").
+     */
+    quietM: 6,
     roamM: 12,
-    pauseMs: [8_000, 25_000] as readonly [number, number],
+    pauseMs: [6_000, 16_000] as readonly [number, number],
+    /** A word to whoever passes within this (and not nearer than `greetM`), once in a while. */
+    chatM: 14,
+    chatEveryMs: [150_000, 300_000] as readonly [number, number],
     open: 6,
     bed: 22,
+    /** The door a post goes in at night: the level's nearest that belongs to a building, this near its place. */
+    homeM: 70,
+    arriveM: 2.5,
+    /** A walk to the door that does not get there in this long is finished in one step; with nobody near, after a few seconds. */
+    walkTimeoutMs: 180_000,
+    unseenAfterMs: 20_000,
+    unseenM: 80,
 };
+
+/** What a post says to whoever passes by, now and then (by day). */
+export const AMBIENT_LINES: readonly string[] = [
+    "Dizem que há salteadores na estrada de Kuttenberg.",
+    "O tempo anda bom para a colheita.",
+    "Ouvi dizer que o senhor destas terras vai dar uma festa.",
+    "Cuidado com os lobos depois que escurece.",
+    "O ferreiro não para de martelar desde cedo.",
+    "Tem caça de sobra nos bosques, mas é preciso saber onde procurar.",
+    "A taverna estava cheia ontem à noite.",
+    "Vi um mercador passar com uma carroça cheia de tecidos.",
+    "Dizem que o rei anda preocupado com os nobres do sul.",
+    "Se for viajar, leve uma tocha. As noites são escuras.",
+];
+
+/** A door of the level, as much of it as the night needs. */
+export interface DoorLike {
+    readonly position: { readonly x: number; readonly y: number; readonly z: number };
+    readonly areas: ReadonlyArray<{ contains(point: { x: number; y: number; z: number }): boolean }>;
+}
+
+/**
+ * Where a post goes in at night: just outside the nearest of the level's doors that belongs to a building (a door the level's
+ * areas link to a house, a workshop, a shop), within `homeM` of its place. Null when there is none.
+ */
+export function doorStepFor(spot: Spot, doors: readonly DoorLike[], homeM: number): Vector3 | null {
+    let best: DoorLike | null = null;
+    let nearest = homeM;
+    for (const door of doors) {
+        if (door.areas.length === 0) {
+            continue;
+        }
+        const range = flatDistance(door.position, spot);
+        if (range < nearest) {
+            nearest = range;
+            best = door;
+        }
+    }
+    if (best === null) {
+        return null;
+    }
+    const origin = best.position;
+    for (const radius of [1.8, 2.6, 3.5]) {
+        for (let bearing = 0; bearing < 12; bearing += 1) {
+            const angle = (bearing / 12) * 2 * Math.PI;
+            const raw = new Vector3(origin.x + Math.cos(angle) * radius, origin.y + Math.sin(angle) * radius, origin.z);
+            const step = placeOf(raw);
+            if (Navigation.ready && flatDistance(step, raw) > 1.2) {
+                continue;
+            }
+            if (best.areas.some((area) => area.contains(step))) {
+                continue;
+            }
+            return step;
+        }
+    }
+    return placeOf(origin);
+}
 
 const GREETINGS = ["nod", "waveSmall", "nodSubmissive"];
 
@@ -229,29 +363,131 @@ const flatDistance = (a: { x: number; y: number }, b: { x: number; y: number }):
 
 /**
  * Gives the posts of `handle` a day: by day each greets whoever comes near (once in a while, with one of `lines` after the
- * greeting of the hour), looks at them, and strolls a few steps about its place when nobody is near; at night it stands.
+ * greeting of the hour), looks at them, and strolls a few steps about its place when nobody is near; at night it goes in, by the
+ * nearest door of a building or, with none near, where it stands.
  */
-export function installPostLife(handle: PostHandle, lines: readonly string[], settings = postLife): void {
-    const state = new Map<string, { next: number; lookedAt: number; looking: number; greeted: Map<number, number> }>();
+export function installPostLife(handle: PostHandle, lines: readonly string[], settings = postLife, doors: () => readonly DoorLike[] = () => Door.all()): void {
+    interface Life {
+        next: number;
+        lookedAt: number;
+        looking: number;
+        greeted: Map<number, number>;
+        chatAt: number;
+        mode: "about" | "home" | "asleep";
+        /** Where it goes in at night; undefined until it is looked for. */
+        door?: Vector3 | null;
+        /** Its place on the walkable ground, worked out once. */
+        place?: Vector3;
+        started: number;
+    }
+    const state = new Map<string, Life>();
     const timer = setInterval(() => {
         try {
             const now = Date.now();
             const hour = World.hour;
             const day = hour >= settings.open && hour < settings.bed;
-            const players = Player.all().filter((player) => player.ready && player.alive && player.virtualWorld === 0);
+            // The world everybody plays in is the global one (4294967295); a test against 0 alone left every real player out.
+            const players = Player.all().filter((player) => player.ready && player.alive && (player.virtualWorld === 0 || player.virtualWorld === 0xffffffff));
+            // Where each player is, in plain numbers, read once for the round: each `.x` of an engine's vector is a call into the engine, and every post below
+            // measured every player (2026-10-28: the round was 4 ms of every call at thirty players).
+            const standing = players.map((player) => {
+                const at = player.position;
+                return { player, x: at.x, y: at.y };
+            });
+            const nobodyNear = (point: { x: number; y: number }): boolean => {
+                const spot = { x: point.x, y: point.y };
+                return standing.every((one) => flatDistance(one, spot) > settings.unseenM);
+            };
             for (const post of handle.posts) {
+                let mine = state.get(post.id);
+                if (mine === undefined) {
+                    mine = { next: now + 5_000 + Math.random() * 20_000, lookedAt: 0, looking: 0, greeted: new Map(), chatAt: now + settings.chatEveryMs[0] * Math.random(), mode: "about", started: 0 };
+                    state.set(post.id, mine);
+                }
+                if (handle.asleep(post.id)) {
+                    if (day) {
+                        // The morning is spread over the turns: a post is made again `postOrders.perTurn` at a time.
+                        if (!mayOrder(now)) {
+                            continue;
+                        }
+                        // Morning: out of the door, and back to its place.
+                        const body = handle.wake(post.id, mine.door ?? placeOf(post), post.yaw ?? 0);
+                        mine.mode = "about";
+                        mine.next = now + 4_000;
+                        if (body !== null && mine.door) {
+                            body.moveTo(placeOf(post), { speed: "walk", pathfinding: Navigation.ready ? "server" : "game", radius: 1.5 });
+                        }
+                    }
+                    continue;
+                }
                 const npcId = handle.standing().get(post.id);
                 const npc = npcId === undefined ? null : Npc.getById(npcId);
                 if (npc === null || !npc.alive) {
                     continue;
                 }
-                let mine = state.get(post.id);
-                if (mine === undefined) {
-                    mine = { next: now + 5_000 + Math.random() * 20_000, lookedAt: 0, looking: 0, greeted: new Map() };
-                    state.set(post.id, mine);
-                }
+                // Fallen into a river, strayed or shut in a house: made again at its place by day, in for the night by night (`npc-keeper.ts`).
                 const here = npc.position;
-                const near = players.filter((player) => flatDistance(player.position, here) <= settings.greetM).sort((a, b) => flatDistance(a.position, here) - flatDistance(b.position, here))[0];
+                const hereFlat = { x: here.x, y: here.y };
+                const place = mine.place ?? placeOf(post);
+                if (Navigation.ready) {
+                    mine.place = place;
+                }
+                // It walks about its place, and in the morning from its door back to it.
+                const walks = Math.max(settings.roamM, mine.door ? flatDistance(mine.door, place) : 0);
+                const stray = npcKeeper.look(`${handle.label}:${post.id}`, here, place, walks, now, mine.mode === "home");
+                if (stray !== null) {
+                    console.log(keeperNote(handle.label, post.name, here, place, stray, npcKeeper.rescued(`${handle.label}:${post.id}`, now)));
+                    handle.sleep(post.id);
+                    if (day) {
+                        handle.wake(post.id, place, post.yaw ?? 0);
+                        mine.mode = "about";
+                        mine.next = now + 4_000;
+                    } else {
+                        mine.mode = "asleep";
+                    }
+                    continue;
+                }
+                if (!day) {
+                    if (mine.door === undefined) {
+                        mine.door = doorStepFor(post, doors(), settings.homeM);
+                    }
+                    const door = mine.door;
+                    if (door !== null) {
+                        if (mine.mode !== "home") {
+                            // The evening too: a post sets out for its door when its turn comes.
+                            if (!mayOrder(now)) {
+                                continue;
+                            }
+                            mine.mode = "home";
+                            mine.started = now;
+                            npc.moveTo(door, { speed: "walk", pathfinding: Navigation.ready ? "server" : "game", radius: 1.5 });
+                        } else if (
+                            flatDistance(npc.position, door) <= settings.arriveM ||
+                            now - mine.started >= settings.walkTimeoutMs ||
+                            (now - mine.started >= settings.unseenAfterMs && nobodyNear(npc.position) && nobodyNear(door))
+                        ) {
+                            // At the door: in, to bed.
+                            handle.sleep(post.id);
+                            mine.mode = "asleep";
+                        }
+                        continue;
+                    }
+                    // No door near: in for the night where it stands, once nobody is near to see it go.
+                    if (mine.mode !== "home") {
+                        mine.mode = "home";
+                        mine.started = now;
+                    } else if (now - mine.started >= settings.unseenAfterMs && nobodyNear(here)) {
+                        handle.sleep(post.id);
+                        mine.mode = "asleep";
+                        continue;
+                    }
+                } else if (mine.mode === "home") {
+                    // Day came while it walked home.
+                    mine.mode = "about";
+                    npc.hold();
+                }
+                const nearest = standing.filter((one) => flatDistance(one, hereFlat) <= settings.greetM).sort((a, b) => flatDistance(a, hereFlat) - flatDistance(b, hereFlat))[0];
+                const near = nearest?.player;
                 if (near !== undefined) {
                     if (npc.status === "running") {
                         npc.hold();
@@ -270,11 +506,23 @@ export function installPostLife(handle: PostHandle, lines: readonly string[], se
                     continue;
                 }
                 mine.looking = 0;
-                if (!day || !Navigation.ready || now < mine.next || npc.status === "running" || players.some((player) => flatDistance(player.position, here) <= settings.quietM)) {
+                // A word to whoever passes by, now and then.
+                const passer = day ? standing.find((one) => flatDistance(one, hereFlat) <= settings.chatM)?.player : undefined;
+                if (passer !== undefined && now >= mine.chatAt) {
+                    const [soon, late] = settings.chatEveryMs;
+                    mine.chatAt = now + soon + Math.random() * (late - soon);
+                    npc.lookAt(passer);
+                    npc.say(AMBIENT_LINES[Math.floor(Math.random() * AMBIENT_LINES.length)] ?? "");
+                }
+                if (!day || !Navigation.ready || now < mine.next || npc.status === "running" || standing.some((one) => flatDistance(one, hereFlat) <= settings.quietM)) {
                     continue;
                 }
                 const [low, high] = settings.pauseMs;
                 mine.next = now + low + Math.random() * (high - low);
+                if (maybeGesture(npc, now)) {
+                    mine.next = now + 5_000 + Math.random() * 4_000;
+                    continue;
+                }
                 const spot = Navigation.randomPoint(placeOf(post), settings.roamM, { doors: "none" });
                 if (spot !== null) {
                     npc.moveTo(spot, { speed: "walk", pathfinding: "server", radius: 1.5 });

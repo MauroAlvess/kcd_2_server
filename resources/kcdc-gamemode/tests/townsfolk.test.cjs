@@ -14,11 +14,18 @@ function load({ navigationReady = true } = {}) {
     const state = { timers: [], handlers: new Map(), npcs: new Map(), logs: [], talks: [], next: 500, intervals: [], clock: 10_000_000, hour: 12, players: [], cleared: [] };
     const context = {
         exports: {},
+        // The keeper is the real one, over the same fakes (src/server/npc-keeper.ts).
+        require: (id) => (id === "./idle-gestures.js" ? { maybeGesture: () => false } : id === "./npc-keeper.js" ? keeper() : assert.fail(`unexpected require ${id}`)),
         console: { log: (line) => state.logs.push(line), error: (line) => state.logs.push(line) },
         Vector3: FakeVector3,
         setTimeout: (fn, ms) => { state.timers.push({ fn, ms, done: false }); return state.timers.length; },
         clearTimeout: (id) => { if (state.timers[id - 1]) state.timers[id - 1].done = true; },
-        Navigation: { get ready() { return navigationReady; }, closestPoint: (point) => new FakeVector3(point.x, point.y, point.z + 0.5), randomPoint: (centre, radius) => new FakeVector3(centre.x + radius / 2, centre.y, centre.z) },
+        Navigation: {
+            get ready() { return navigationReady; },
+            closestPoint: (point) => (state.offGround?.(point) ? null : new FakeVector3(point.x, point.y, point.z + 0.5)),
+            randomPoint: (centre, radius) => new FakeVector3(centre.x + radius / 2, centre.y, centre.z),
+            canReach: (from, to) => !(state.shutIn?.(from, to) ?? false),
+        },
         setInterval: (fn, ms) => { state.intervals.push({ fn, ms }); return state.intervals.length; },
         clearInterval: (id) => state.cleared.push(id),
         World: { get hour() { return state.hour; } },
@@ -46,6 +53,15 @@ function load({ navigationReady = true } = {}) {
             getById: (id) => state.npcs.get(id) ?? null,
         },
     };
+    let keeperModule = null;
+    function keeper() {
+        if (keeperModule === null) {
+            const realm = { ...context, exports: {} };
+            vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/npc-keeper.js"), "utf8"), realm);
+            keeperModule = realm.exports;
+        }
+        return keeperModule;
+    }
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/townsfolk.js"), "utf8"), context);
     return { api: context.exports, state };
 }
@@ -114,9 +130,11 @@ const person = (id, x, y) => ({ id, ready: true, alive: true, virtualWorld: 0, p
 
 function started() {
     const sut = load();
+    // The two posts of these tests are not rationed (the budget has its own test below).
+    sut.api.postOrders.perTurn = 1_000;
     const handle = sut.api.installPosts("posts", POSTS, () => {});
     sut.state.timers[0].fn();
-    sut.api.installPostLife(handle, ["Venha ver."]);
+    sut.api.installPostLife(handle, ["Venha ver."], sut.api.postLife, () => sut.state.doors ?? []);
     const tick = () => sut.state.intervals.at(-1).fn();
     return { sut, handle, tick, bodies: [...sut.state.npcs.values()] };
 }
@@ -187,7 +205,7 @@ test("at night a post still turns to whoever is near, but says nothing and does 
     assert.equal(first.walks.length, 0);
 });
 
-test("by day, with nobody within twelve metres, a post takes a few steps about its place now and then; with somebody near, or walking, it does not", () => {
+test("by day, with nobody within six metres, a post takes a few steps about its place now and then; with somebody near, or walking, it does not", () => {
     const { sut, tick, bodies } = started();
     const [first, second] = bodies;
     tick();
@@ -202,14 +220,14 @@ test("by day, with nobody within twelve metres, a post takes a few steps about i
     sut.state.clock += 2 * 60_000;
     first.status = "running";
     second.status = "idle";
-    sut.state.players.push(person(8, 52, 50));
+    sut.state.players.push(person(8, 45, 50));
     tick();
     assert.equal(first.walks.length, 1, "still on its way");
     assert.equal(second.walks.length, 1, "the second was left to stroll before");
     sut.state.clock += 2 * 60_000;
     second.position = { x: 40, y: 50, z: 60 };
     tick();
-    assert.equal(second.walks.length, 1, "somebody within twelve metres: it stays for them");
+    assert.equal(second.walks.length, 1, "somebody within six metres: it stays for them");
 });
 
 test("a body that is not there or has fallen is left alone, a failure inside a tick is logged, and the day stops with the resource", () => {
@@ -242,4 +260,193 @@ test("a body made with no outfit is made dressed: a villager's preset by GUID, t
     assert.ok(seen.size >= 4, "not one man repeated");
     const women = new Set(Array.from({ length: 40 }, (_, n) => sut.api.outfitFor("townswoman", `Dona ${n}`)));
     assert.ok(women.size >= 4);
+});
+
+test("at night a post walks to the nearest door of a building and goes in; in the morning it comes out of it and walks back to its place", () => {
+    const { sut, handle, tick, bodies } = started();
+    const [first, second] = bodies;
+    // A door of a house 50 m west of the first post (85 m from the second); a gate (no areas) nearer.
+    const house = { contains: (point) => point.x < -40 && Math.abs(point.y - 20) < 5 };
+    sut.state.doors = [
+        { position: { x: 0, y: 20, z: 30 }, areas: [] },
+        { position: { x: -40, y: 20, z: 30 }, areas: [house] },
+    ];
+    sut.state.hour = 23;
+    tick();
+    assert.equal(first.walks.length, 1, "off to the door");
+    const step = first.walks[0];
+    assert.ok(Math.hypot(step.x + 40, step.y - 20) <= 3.6 && !house.contains(step), "a step outside the house's door, not the gate");
+    assert.equal(second.walks.length, 0, "no door near the second: it does not walk off");
+
+    first.position = { x: step.x, y: step.y, z: 30 };
+    tick();
+    assert.equal(first.removed, true, "gone in");
+    assert.equal(handle.asleep("a"), true);
+    assert.equal(handle.standing().has("a"), false);
+    tick();
+    assert.equal([...sut.state.npcs.values()].filter((npc) => npc.options.name === "Barbeiro").length, 0, "nobody made at night");
+
+    sut.state.hour = 7;
+    tick();
+    const morning = [...sut.state.npcs.values()].find((npc) => npc.options.name === "Barbeiro");
+    assert.ok(morning, "out again in the morning");
+    assert.ok(Math.hypot(morning.position.x - step.x, morning.position.y - step.y) < 1, "out of the same door");
+    assert.equal(handle.asleep("a"), false);
+    assert.deepEqual([morning.walks[0].x, morning.walks[0].y], [10, 20], "and back to its place");
+});
+
+test("a walk home nobody watches, or one that takes too long, ends at the door in one step; one the morning overtakes stops where it is", () => {
+    const { sut, handle, tick, bodies } = started();
+    const [first] = bodies;
+    sut.state.doors = [{ position: { x: 30, y: 20, z: 30 }, areas: [{ contains: () => false }] }];
+    sut.state.hour = 23;
+    tick();
+    sut.state.clock += 25_000;
+    tick();
+    assert.equal(handle.asleep("a"), true, "nobody within 80 m for 20 s: in");
+
+    const watched = started();
+    watched.sut.state.doors = [{ position: { x: 30, y: 20, z: 30 }, areas: [{ contains: () => false }] }];
+    watched.sut.state.players.push(person(9, 60, 20));
+    watched.sut.state.hour = 23;
+    watched.tick();
+    watched.sut.state.clock += 25_000;
+    watched.tick();
+    assert.equal(watched.handle.asleep("a"), false, "watched: it walks on");
+    watched.sut.state.hour = 9;
+    watched.tick();
+    assert.equal(watched.bodies[0].holds >= 1, true, "the day came first: it stops and lives its day");
+});
+
+test("a post says a word now and then to whoever passes within fourteen metres, by day", () => {
+    const { sut, tick, bodies } = started();
+    const [first] = bodies;
+    tick();
+    sut.state.players.push(person(5, first.position.x + 10, first.position.y));
+    sut.state.clock += 10 * 60_000;
+    tick();
+    assert.equal(first.said.length, 1);
+    assert.ok(sut.api.AMBIENT_LINES.includes(first.said[0]));
+    tick();
+    assert.equal(first.said.length, 1, "not again at once");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Nobody sleeps in the street, and a body in the river or shut in a house comes back (2026-10-25, src/server/npc-keeper.ts).
+
+test("at night a post with no door near goes in where it stands once nobody is near to see it, and is out at its place in the morning", () => {
+    const { sut, handle, tick, bodies } = started();
+    const [, second] = bodies;
+    sut.state.doors = [{ position: { x: -40, y: 20, z: 30 }, areas: [{ contains: () => false }] }];
+    sut.state.players.push(person(4, second.position.x + 30, second.position.y));
+    sut.state.hour = 23;
+    tick();
+    sut.state.clock += 25_000;
+    tick();
+    assert.equal(handle.asleep("b"), false, "somebody 30 m off sees it: it stays a while");
+    sut.state.players.length = 0;
+    sut.state.clock += 25_000;
+    tick();
+    sut.state.clock += 25_000;
+    tick();
+    assert.equal(handle.asleep("b"), true, "nobody near: in for the night, not asleep in the street");
+    assert.equal(second.removed, true);
+
+    sut.state.hour = 7;
+    tick();
+    const morning = [...sut.state.npcs.values()].find((npc) => npc.options.name === "Mestra");
+    assert.ok(morning, "out again in the morning");
+    assert.deepEqual([morning.position.x, morning.position.y], [40, 50], "at its place");
+});
+
+test("a post found in the river, far astray or shut in a house is made again at its place, and the log says why; a body just brought back is left alone a while", () => {
+    const { sut, tick, bodies } = started();
+    const [first] = bodies;
+    tick();
+    // In the river: well below its place.
+    first.position = { x: 14, y: 22, z: 20 };
+    sut.state.clock += 11_000;
+    tick();
+    assert.equal(first.removed, true, "the body in the river is taken away");
+    const again = [...sut.state.npcs.values()].find((npc) => npc.options.name === "Barbeiro");
+    assert.ok(again && again !== first, "and made again");
+    assert.deepEqual([again.position.x, again.position.y], [10, 20], "at its place");
+    assert.ok(sut.state.logs.some((line) => /^npc-keeper: posts: Barbeiro caiu .* a 4 m do lugar \(14, 22, 20\): feito de novo no lugar$/.test(line)), sut.state.logs.join("\n"));
+
+    // Right away it is left alone, wherever it is.
+    again.position = { x: 200, y: 20, z: 30.5 };
+    sut.state.clock += 11_000;
+    tick();
+    assert.equal(again.removed, false, "left alone a while after being brought back");
+    sut.state.clock += 130_000;
+    tick();
+    assert.equal(again.removed, true, "then, far astray, brought back again");
+    assert.ok(sut.state.logs.some((line) => /Barbeiro foi longe demais do lugar, a 190 m .*\(2a vez neste início\)/.test(line)));
+});
+
+test("a post with no walk back to its place twice running (a locked house) is brought back; one off the walkable ground twice running too", () => {
+    const { sut, tick, bodies } = started();
+    const [first, second] = bodies;
+    sut.state.shutIn = (from) => Math.abs(from.x - 18) < 0.1;
+    first.position = { x: 18, y: 20, z: 30.5 };
+    for (let look = 0; look < 8 && !first.removed; look += 1) {
+        sut.state.clock += 31_000;
+        tick();
+    }
+    assert.equal(first.removed, true, "shut in: brought back");
+    assert.ok(sut.state.logs.some((line) => /Barbeiro não tinha caminho de volta \(preso numa casa trancada ou num canto\)/.test(line)));
+
+    sut.state.offGround = (point) => Math.abs(point.x - 45) < 0.1;
+    second.position = { x: 45, y: 50, z: 60 };
+    for (let look = 0; look < 4 && !second.removed; look += 1) {
+        sut.state.clock += 11_000;
+        tick();
+    }
+    assert.equal(second.removed, true, "in deep water: brought back");
+    assert.ok(sut.state.logs.some((line) => /Mestra estava fora do chão andável \(na água funda\)/.test(line)));
+});
+
+test("at dusk and at dawn the posts are given their walks and their bodies a few at a time, for the whole town, and the rest follow on the next turns (2026-10-26)", () => {
+    const sut = load();
+    const many = Array.from({ length: 6 }, (_, at) => ({ id: `p${at}`, name: `Posto ${at}`, soul: "townsman", x: 10 + at * 3, y: 20, z: 30 }));
+    const handle = sut.api.installPosts("posts", many, () => {});
+    sut.state.timers[0].fn();
+    sut.api.installPostLife(handle, [], sut.api.postLife, () => sut.state.doors ?? []);
+    const tick = () => sut.state.intervals.at(-1).fn();
+    const bodies = [...sut.state.npcs.values()];
+    assert.equal(bodies.length, 6);
+    // A house with a door near them all.
+    const house = { contains: (point) => point.x < -40 };
+    sut.state.doors = [{ position: { x: -40, y: 20, z: 30 }, areas: [house] }];
+    sut.api.postOrders.perTurn = 2;
+    sut.state.hour = 23;
+
+    tick();
+    assert.equal(bodies.filter((npc) => npc.walks.length > 0).length, 2, "two set out at the first turn");
+    tick();
+    assert.equal(bodies.filter((npc) => npc.walks.length > 0).length, 2, "the clock has not moved a second: no more orders yet");
+    sut.state.clock += 1_000;
+    tick();
+    assert.equal(bodies.filter((npc) => npc.walks.length > 0).length, 4, "two more on the next turn");
+    sut.state.clock += 1_000;
+    tick();
+    assert.equal(bodies.filter((npc) => npc.walks.length > 0).length, 6, "and the last two");
+
+    // They go in, and in the morning they are made again two at a time.
+    for (const npc of bodies) npc.position = { x: npc.walks[0].x, y: npc.walks[0].y, z: 30 };
+    for (const offset of [0, 1_000, 2_000]) {
+        sut.state.clock += offset === 0 ? 1_000 : 1_000;
+        tick();
+    }
+    assert.equal(bodies.filter((npc) => npc.removed).length, 6, "all are in for the night");
+    sut.state.hour = 7;
+    sut.state.clock += 1_000;
+    tick();
+    assert.equal([...sut.state.npcs.values()].length, 2, "two come out at the first turn of the morning");
+    sut.state.clock += 1_000;
+    tick();
+    assert.equal([...sut.state.npcs.values()].length, 4);
+    sut.state.clock += 1_000;
+    tick();
+    assert.equal([...sut.state.npcs.values()].length, 6, "and the town is up");
 });

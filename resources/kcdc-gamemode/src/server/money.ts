@@ -5,6 +5,8 @@
  * Everything here counts in units of the item; `coins` turns that into what the player reads.
  */
 
+import { addUnits } from "./inventory-add.js";
+
 export const MONEY_ITEM = "money";
 export const MONEY_GUID = "5ef63059-322e-4e1b-abe8-926e100c770e";
 /** The game shows a tenth of the money item's amount. */
@@ -42,6 +44,7 @@ export function takeMoney(holder: Player | Npc, units: number): boolean {
     return left <= 0 && Inventory.remove(holder, { units: taken }).ok;
 }
 
+/** Gives exactly `units`, or nothing at all (a game call takes 10,000 units at most: `inventory-add.ts`). */
 export function giveMoney(holder: Player | Npc, units: number): boolean {
-    return units <= 0 || Inventory.add(holder, { item: MONEY_ITEM, amount: units }).ok;
+    return units <= 0 || addUnits(holder, { item: MONEY_ITEM, amount: units }).ok;
 }

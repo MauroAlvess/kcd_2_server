@@ -34,10 +34,38 @@ interface Session {
 const byStash = new Map<number, Session>();
 const byKey = new Map<string, Session>();
 const byPlayer = new Map<number, Session>();
+/** When each player's alforjes screen last closed. */
+const closedAt = new Map<number, number>();
 
-function rowsOf(stash: Stash): BagRow[] {
-    const state = stash.getInventory();
-    return state === null ? [] : cleanBags(state.items.map((row) => ({ id: row.id, item: row.item, amount: row.amount, metadata: { ...row.metadata } })));
+/**
+ * Called when a player closes the alforjes screen themselves (not when they walked off, died or left): the horse's menu comes
+ * back (`horse-menu.ts`; 2026-10-19: "ao fechar e apertar E de novo o jogador sobe sozinho no cavalo e desce ... o correto é
+ * fechou o menu abrir o menu de interação com montar, bolsa e sair").
+ */
+export const bagsClosed: Array<(player: Player, key: string) => void> = [];
+
+/**
+ * Whether the player has a horse's alforjes open, or closed them this recently: an E pressed on an item of the screen must not
+ * ask for the horse's menu, whose first choice ("Montar") the same key then takes (2026-10-19: "ao apertar E em um item para
+ * guardar no cavalo meu jogador montou no cavalo").
+ */
+export function bagsBusy(playerId: number, now = Date.now(), graceMs = 1_500): boolean {
+    return byPlayer.has(playerId) || now - (closedAt.get(playerId) ?? Number.NEGATIVE_INFINITY) < graceMs;
+}
+
+/**
+ * What the screen holds, or null when the container is gone: `getInventory` answers null once it is, and "gone" is not "empty" (2026-10-29, the user: "o
+ * Alustin colocou itens no cavalo e ao voltar perdeu"; the screen closes with the container already gone when the player leaves, loses the access or times
+ * out, and the last write read that as an empty horse and deleted what it carried). A caller that gets null keeps what the horse's record says.
+ */
+function rowsOf(stash: Stash): BagRow[] | null {
+    let state: ReturnType<Stash["getInventory"]>;
+    try {
+        state = stash.getInventory();
+    } catch {
+        return null;
+    }
+    return state === null ? null : cleanBags(state.items.map((row) => ({ id: row.id, item: row.item, amount: row.amount, metadata: { ...row.metadata } })));
 }
 
 /** Fills a container with rows, as they are; once more without their identities when it refuses them. */
@@ -105,7 +133,12 @@ export function openBags(player: Player, key: string | null): Outcome {
 
 /** Writes what the screen holds into the horse's record. */
 function sync(session: Session): void {
-    saveBags(session.key, rowsOf(session.stash));
+    const rows = rowsOf(session.stash);
+    if (rows === null) {
+        console.log(`horses: as alforjes do cavalo ${session.key} já tinham sumido do jogo quando foram lidas: ficou guardado o que estava na ficha`);
+        return;
+    }
+    saveBags(session.key, rows);
 }
 
 function end(session: Session): void {
@@ -113,6 +146,7 @@ function end(session: Session): void {
     byStash.delete(session.stash.id);
     byKey.delete(session.key);
     byPlayer.delete(session.playerId);
+    closedAt.set(session.playerId, Date.now());
     const stash = session.stash;
     // On the next tick, so every other handler of this event still finds the stash.
     setTimeout(() => stash.destroy(), 0);
@@ -150,10 +184,22 @@ export function installHorseBags(): void {
             sync(session);
         }
     });
-    Events.on("stashClose", (stash) => {
-        const session = byStash.get(stash.id);
+    Events.on("stashClose", (stash, player, reason) => {
+        let id: number;
+        try {
+            id = stash.id;
+        } catch {
+            // Despawned before its close event arrived.
+            return;
+        }
+        const session = byStash.get(id);
         if (session !== undefined) {
             end(session);
+            if (reason === "closed" && player !== null && player !== undefined && player.id === session.playerId) {
+                for (const fn of bagsClosed) {
+                    fn(player, session.key);
+                }
+            }
         }
     });
     Events.on("stashDestroy", (stash) => {
@@ -169,6 +215,7 @@ export function installHorseBags(): void {
         if (session !== undefined) {
             end(session);
         }
+        closedAt.delete(player.id);
     });
     horseLost.push((record, horse) => {
         const open = byKey.get(record.key);

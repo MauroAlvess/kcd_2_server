@@ -145,7 +145,44 @@ function readRequest(payload: unknown): ScreenRequest | undefined {
 /** Raw effects `/screenfx raw` put up, so `/screenfx clear` takes them down too. */
 const raw: number[] = [];
 
+/** The screen goes dark while a coach takes the player from one stop to another (server `travel.ts`), and comes back on arrival. */
+const TRAVEL_EVENT = "kcdc-gamemode:travel.fade";
+let travelDark = 0;
+
+function travelFade(phase: unknown, ms: unknown): void {
+    const time = typeof ms === "number" && ms >= 0 && ms <= 10_000 ? ms : 1_500;
+    if (phase === "out") {
+        if (travelDark !== 0 && Hud.isScreenEffectActive(travelDark)) {
+            return;
+        }
+        const params: Record<string, number> = {};
+        for (const param of Hud.screenEffects().find((effect) => effect.name === "colorGrade")?.params ?? []) {
+            if (param.name === "brightness" || param.name === "saturation") {
+                params[param.name] = param.min;
+            } else if (param.name === "darkness") {
+                params[param.name] = param.max;
+            }
+        }
+        // Never left dark for good: it ends by itself if the word to bring the picture back does not come.
+        travelDark = Hud.addScreenEffect("colorGrade", params as Parameters<typeof Hud.addScreenEffect>[1], { fadeInMs: time, fadeOutMs: 1_500, durationMs: 15_000 });
+    } else if (phase === "in" && travelDark !== 0) {
+        Hud.removeScreenEffect(travelDark, { fadeOutMs: time });
+        travelDark = 0;
+    }
+}
+
 export function installScreen(): void {
+    Events.on(TRAVEL_EVENT, (payload) => {
+        try {
+            const body = (typeof payload === "string" ? JSON.parse(payload) : payload) as Record<string, unknown> | null;
+            if (body !== null && typeof body === "object") {
+                travelFade(body["phase"], body["ms"]);
+            }
+        } catch (thrown: unknown) {
+            console.error(`screen: the travel fade failed: ${thrown instanceof Error ? thrown.message : String(thrown)}`);
+        }
+    });
+
     Events.on(SCREEN_EVENT, (payload) => {
         const request = readRequest(payload);
         if (!request) {

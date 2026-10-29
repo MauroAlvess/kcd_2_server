@@ -1,5 +1,5 @@
 import type { Command, CommandContext } from "../command.js";
-import { treasure } from "../treasure.js";
+import { treasure, treasureSettings } from "../treasure.js";
 
 export const tesourosCommand: Command = {
     name: "tesouros",
@@ -16,6 +16,7 @@ export const tesourosCommand: Command = {
             const status = treasure.status();
             reply.lines([
                 `Tesouros ${status.enabled ? "ligados" : "desligados"}: ${status.chests} baú(s) do mundo com algo (${Math.round(status.share * 100)}% dos que podem ter): nível 1 (perto de gente) ${status.byTier[1]}, nível 2 ${status.byTier[2]}, nível 3 (longe ou trancado) ${status.byTier[3]}.`,
+                `${status.sacks} saco(s) de comida do mundo com um pouco de fruta ou legume (${Math.round(treasureSettings.sackShare * 100)}% deles): maçã, pera, ameixa, cebola.`,
                 `${status.filled} abastecimento(s) desde que o servidor subiu; um baú vazio é abastecido de novo depois de uma hora, sem ninguém perto.${status.refused.length > 0 ? ` O jogo não conhece: ${status.refused.join(", ")}.` : ""}`,
             ]);
             return;

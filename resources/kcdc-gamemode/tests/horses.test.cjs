@@ -35,6 +35,7 @@ function load({ seed, admins = [] } = {}) {
     const players = new Map();
     const horses = new Map();
     const intervals = [];
+    const timeouts = [];
     const chat = [];
     const logs = [];
     let nextId = 500;
@@ -51,11 +52,29 @@ function load({ seed, admins = [] } = {}) {
             owner: null,
             ownerId: 0,
             alive: true,
+            /** KCDC 1.7.0: a player's own horse is knocked out where a death would be; `immortal` makes the stub's kill do that too. */
+            unconscious: false,
+            immortal: false,
+            killed: 0,
             mounted: false,
             rider: null,
             riderId: 0,
             destroyWithOwner: true,
             moves: [],
+            kill() {
+                if (!this.alive) return false;
+                this.killed += 1;
+                if (this.immortal) { this.unconscious = true; return true; }
+                this.alive = false;
+                fire("horseDeath", this, null, "scripted");
+                return true;
+            },
+            revive() {
+                if (this.alive) return false;
+                this.alive = true;
+                this.unconscious = false;
+                return true;
+            },
             giveTo(player) {
                 if (player !== null && player.connected === false) throw new Error("not connected");
                 this.owner = player;
@@ -81,6 +100,7 @@ function load({ seed, admins = [] } = {}) {
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
         setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
         clearInterval() {},
+        setTimeout: (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
         Vector3: class { constructor(x, y, z) { this.x = x; this.y = y; this.z = z; } },
         Chat: { sendToPlayer: (player, text) => chat.push(text) },
         Events: { on: (name, fn) => handlers.set(name, fn), onClient: (name, fn) => clientHandlers.set(name, fn) },
@@ -88,7 +108,7 @@ function load({ seed, admins = [] } = {}) {
             ready: true,
             findPath: (from, to) => ({ points: [from, { x: (from.x + to.x) / 2, y: from.y, z: from.z }, to], complete: true, length: Math.hypot(to.x - from.x, to.y - from.y) }),
         },
-        Player: { getById: (id) => players.get(id) ?? null },
+        Player: { getById: (id) => players.get(id) ?? null, all: () => [...players.values()] },
         Horse: {
             spawn: (position, rotation, soul, name, gear) => {
                 spawned.push({ position, rotation, soul, name, gear });
@@ -103,13 +123,21 @@ function load({ seed, admins = [] } = {}) {
     context.exports.installHorses();
 
     const notices = [];
+    /** Who was told of somebody's whistle (2026-10-22): [listener id, whistler id]. */
+    const heard = [];
     const player = (steamId, nickname, id, position = { x: 0, y: 0, z: 0 }) => {
-        const made = { steamId, nickname, id, position, connected: true, emit: (event, payload) => notices.push({ to: id, event, text: JSON.parse(payload).text }) };
+        const made = {
+            steamId, nickname, id, position, connected: true, ready: true, virtualWorld: 0,
+            emit: (event, payload) => {
+                if (event === "kcdc-gamemode:whistle.heard") heard.push([id, JSON.parse(payload).id]);
+                else notices.push({ to: id, event, text: JSON.parse(payload).text });
+            },
+        };
         players.set(id, made);
         return made;
     };
     return {
-        api: context.exports, context, disk, handlers, clientHandlers, horses, intervals, chat, logs, notices, spawned, fire, makeHorse, player,
+        api: context.exports, context, disk, handlers, clientHandlers, horses, intervals, timeouts, chat, logs, notices, heard, spawned, fire, makeHorse, player,
         saved: () => JSON.parse(disk.files.get("playerdata/horses.json")).horses,
     };
 }
@@ -209,6 +237,81 @@ test("a horse that dies is forgotten, as in the game", () => {
     sut.fire("horseDeath", horse, null, "combat");
     assert.deepEqual(sut.saved(), []);
     assert.ok(sut.logs.some((line) => /Trovão de Mauro morreu/.test(line)));
+});
+
+test("a kept horse that is knocked out is dead for good after two looks: gone from its owner's animals, its alforjes lost, made nobody's and killed (2026-10-25)", () => {
+    const sut = load();
+    const lost = [];
+    sut.api.horseLost.push((record, horse) => lost.push([record.name, horse.id]));
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const horse = sut.makeHorse({ name: "Trovão" });
+    horse.giveTo(mauro);
+    assert.equal(sut.intervals[1].ms, sut.api.KNOCKOUT_LOOK_MS, "looked at once a second");
+
+    horse.unconscious = true;
+    sut.intervals[1].fn();
+    assert.equal(sut.saved().length, 1, "one look is not enough");
+    assert.equal(horse.killed, 0);
+
+    sut.intervals[1].fn();
+    assert.deepEqual(sut.saved(), [], "the record is gone, so is the line in Animais");
+    assert.deepEqual(lost, [["Trovão", horse.id]], "its alforjes are handled like a dead horse's");
+    assert.equal(horse.owner, null, "nobody's from now on");
+    assert.equal(horse.killed, 1);
+    assert.equal(horse.alive, false);
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro ficou desacordado e morre de vez/.test(line)));
+    assert.equal(sut.logs.filter((line) => /de Mauro morreu/.test(line)).length, 0, "and the death that follows its own kill is not handled twice");
+    assert.ok(sut.notices.some((notice) => notice.to === 1 && /Seu cavalo Trovão morreu/.test(notice.text)), "the owner is told");
+
+    sut.timeouts[0].fn();
+    assert.ok(sut.horses.has(horse.id), "a horse that died stays where it fell");
+    sut.intervals[1].fn();
+    assert.equal(horse.killed, 1, "and is not killed again");
+});
+
+test("a horse the game keeps alive when it is killed is taken out of the world a few seconds later, and is not filed again meanwhile", () => {
+    const sut = load();
+    const horse = sut.makeHorse({ name: "Relâmpago" });
+    horse.giveTo(sut.player(MAURO, "Mauro", 1));
+    horse.immortal = true;
+    horse.unconscious = true;
+    // The owner's connection is gone: the horse stays his in the game's eyes.
+    horse.giveTo = () => { throw new Error("not connected"); };
+    horse.owner = sut.player(MAURO, "Mauro", 1);
+    sut.intervals[1].fn();
+    sut.intervals[1].fn();
+    assert.deepEqual(sut.saved(), []);
+    assert.equal(horse.alive, true, "the game would not let it die");
+    assert.equal(sut.timeouts.at(-1).ms, sut.api.KNOCKOUT_FINISH_MS);
+
+    sut.intervals[0].fn();
+    assert.deepEqual(sut.saved(), [], "the minute tick does not file it again while it is being finished");
+
+    sut.timeouts.at(-1).fn();
+    assert.equal(sut.horses.has(horse.id), false, "taken out of the world");
+    assert.ok(sut.logs.some((line) => /o jogo manteve Relâmpago vivo/.test(line)));
+});
+
+test("a horse that gets up before the second look is not lost, and a horse nobody keeps is left to the game", () => {
+    const sut = load();
+    const kept = sut.makeHorse({ name: "Trovão" });
+    kept.giveTo(sut.player(MAURO, "Mauro", 1));
+    const stray = sut.makeHorse({ name: "Solto" });
+    kept.unconscious = true;
+    stray.unconscious = true;
+    sut.intervals[1].fn();
+    kept.unconscious = false;
+    sut.intervals[1].fn();
+    kept.unconscious = true;
+    sut.intervals[1].fn();
+    assert.equal(sut.saved().length, 1, "the count starts again when it is up");
+    assert.equal(kept.killed, 0);
+    assert.equal(stray.killed, 0, "nobody keeps it");
+    sut.intervals[1].fn();
+    sut.intervals[1].fn();
+    assert.equal(stray.killed, 0);
+    assert.equal(stray.alive, true);
+    assert.deepEqual(sut.saved(), []);
 });
 
 test("a horse removed for good is forgotten, but stopping the resource keeps every record", () => {
@@ -340,6 +443,47 @@ test("X, the game's whistle, calls the nearest horse; a rider, or a player with 
     const before = sut.notices.length;
     sut.api.whistle(mauro, Date.now() + 20_000);
     assert.equal(sut.notices.length, before, "riding his own horse: nothing to call");
+
+    // Another horse, or a cart's seat: the key is only the game's.
+    horse.riderId = 0;
+    horse.mounted = false;
+    mauro.horse = { id: 99 };
+    sut.api.whistle(mauro, Date.now() + 30_000);
+    assert.equal(sut.notices.length, before, "on somebody else's horse: nothing to call");
+    mauro.horse = null;
+    sut.api.whistle(mauro, Date.now() + 40_000);
+    assert.equal(sut.notices.length, before + 1, "on foot again: the horse comes");
+});
+
+// 2026-10-22: "tem como colocar para os jogadores escutarem o assobio quando um jogador aperta X".
+
+test("a whistle is told to the players near the whistler, whether the whistler has a horse or not, and to nobody far, in another world, or riding", () => {
+    const sut = load();
+    const whistle = sut.clientHandlers.get("kcdc-gamemode:horse.whistle");
+    const mauro = sut.player(MAURO, "Mauro", 1, { x: 0, y: 0, z: 0 });
+    const hans = sut.player(HANS, "Hans", 2, { x: 12, y: 0, z: 0 });
+    sut.player("76561198000000005", "Longe", 3, { x: 80, y: 0, z: 0 });
+    const other = sut.player("76561198000000006", "Outro mundo", 4, { x: 3, y: 0, z: 0 });
+    other.virtualWorld = 7;
+
+    whistle(hans);
+    assert.deepEqual(sut.heard, [[1, 2]], "Hans has no horse, and Mauro, near him, hears the whistle all the same; the far one and the one in another world do not, nor does the whistler");
+    sut.heard.length = 0;
+
+    const horse = sut.makeHorse({ position: { x: 0, y: 40, z: 0 }, name: "Carpiado" });
+    horse.giveTo(mauro);
+    sut.api.whistle(mauro, Date.now() + 10_000);
+    assert.deepEqual(sut.heard, [[2, 1]], "and the owner's whistle is heard by Hans, who is 12 m off");
+    assert.equal(horse.moves.length, 1, "the horse still comes");
+    assert.equal(sut.api.WHISTLE_HEARD_M, 30);
+
+    // Not twice within the two seconds, and not from a saddle.
+    sut.heard.length = 0;
+    sut.api.whistle(mauro, Date.now() + 10_500);
+    assert.deepEqual(sut.heard, []);
+    mauro.horse = { id: 99 };
+    sut.api.whistle(mauro, Date.now() + 30_000);
+    assert.deepEqual(sut.heard, [], "on a horse the key is only the game's");
 });
 
 test("/cavalo listar and liberar are for administrators, and a released horse is nobody's", () => {
@@ -379,4 +523,90 @@ test("an owner may leave a horse free for anybody to mount, and lock it again; n
     assert.match(sut.api.setHorseShared(MAURO, key, false).message, /está trancado: só você monta/);
     assert.equal(sut.fire("horseMounting", horse, hans), false);
     assert.equal(sut.api.horsesOf(MAURO)[0].record.shared, undefined);
+});
+
+test("of several horses, the one chosen for X comes; the others no longer are; when it cannot come, the nearest does", () => {
+    const sut = load();
+    const whistle = (at) => sut.api.whistle(mauro, at);
+    const mauro = sut.player(MAURO, "Mauro", 1, { x: 0, y: 0, z: 0 });
+    const near = sut.makeHorse({ position: { x: 0, y: 20, z: 0 }, name: "Perto" });
+    const far = sut.makeHorse({ position: { x: 0, y: 90, z: 0 }, name: "Longe" });
+    near.giveTo(mauro);
+    far.giveTo(mauro);
+    const [first, second] = sut.api.horsesOf(MAURO).map((owned) => owned.record.key);
+    whistle(Date.now());
+    assert.equal(near.moves.length, 1, "with none chosen, the nearest");
+
+    const nope = sut.api.setActiveHorse(HANS, second);
+    assert.equal(nope.ok, false, "only the owner chooses");
+    const chosen = sut.api.setActiveHorse(MAURO, second);
+    assert.equal(chosen.ok, true);
+    assert.match(chosen.message, /Longe é o cavalo que vem quando você aperta X/);
+    assert.equal(sut.api.activeHorseOf(MAURO), second);
+    whistle(Date.now() + 5_000);
+    assert.equal(far.moves.length, 1, "the chosen one comes, though the other is nearer");
+    assert.equal(near.moves.length, 1);
+
+    sut.api.setActiveHorse(MAURO, first);
+    assert.equal(sut.api.activeHorseOf(MAURO), first, "one at a time");
+    assert.deepEqual(Array.from(sut.api.horsesOf(MAURO).map((owned) => owned.record.active === true)), [true, false]);
+
+    near.mounted = true;
+    near.riderId = 77;
+    whistle(Date.now() + 10_000);
+    assert.equal(far.moves.length, 2, "the chosen one is ridden by somebody: the nearest that can come does");
+
+    for (const interval of sut.intervals) interval.fn();
+    const back = load({ seed: JSON.parse(sut.disk.files.get("playerdata/horses.json")) });
+    assert.equal(back.api.activeHorseOf(MAURO), first, "kept across a restart");
+});
+
+test("a kept horse dies for real only while its owner is in the game: with the owner away it is brought back where it lies, and kept (2026-10-26)", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const horse = sut.makeHorse({ name: "Trovão" });
+    horse.giveTo(mauro);
+    mauro.ready = false;
+
+    horse.kill();
+    assert.equal(horse.alive, false, "the game killed it");
+    assert.equal(sut.saved().length, 1, "but nothing was forgotten: the record is still there");
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro morreu com o dono fora do jogo: volta à vida/.test(line)));
+
+    const revive = sut.timeouts.find((timer) => timer.ms === sut.api.REVIVE_AFTER_MS);
+    assert.ok(revive, "it is brought back a moment later, not inside the engine's own death");
+    revive.fn();
+    assert.equal(horse.alive, true);
+    assert.equal(sut.saved().length, 1);
+    assert.equal(sut.logs.filter((line) => /de Mauro morreu$/.test(line)).length, 0, "never logged as lost");
+});
+
+test("the same horse dies for real when its owner is there", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const horse = sut.makeHorse({ name: "Trovão" });
+    horse.giveTo(mauro);
+    horse.kill();
+    assert.deepEqual(sut.saved(), []);
+    assert.equal(sut.timeouts.filter((timer) => timer.ms === sut.api.REVIVE_AFTER_MS).length, 0);
+});
+
+test("a kept horse knocked out while its owner is away gets up by itself: it is not given up for dead (2026-10-26)", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const horse = sut.makeHorse({ name: "Trovão" });
+    horse.giveTo(mauro);
+    mauro.ready = false;
+    horse.unconscious = true;
+    for (let looks = 0; looks < 4; looks += 1) {
+        sut.intervals[1].fn();
+    }
+    assert.equal(sut.saved().length, 1);
+    assert.equal(horse.killed, 0);
+    assert.equal(horse.owner, mauro, "still the owner's");
+
+    mauro.ready = true;
+    sut.intervals[1].fn();
+    sut.intervals[1].fn();
+    assert.deepEqual(sut.saved(), [], "with the owner back in the game the knockout is the death again");
 });

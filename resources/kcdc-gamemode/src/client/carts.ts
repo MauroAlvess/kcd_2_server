@@ -4,6 +4,15 @@
  */
 
 const RESOURCE = "kcdc-gamemode";
+const TEXT = "Subir na carroça";
+
+/** The cart the player stands beside, as the server last said, or 0. */
+let near = 0;
+
+/** Whether the player stands beside a cart: the E is then the cart's, and the talk hint stays down (`property-labels.ts`). */
+export function cartIsNear(): boolean {
+    return near > 0;
+}
 
 export function installCarts(): void {
     let hint = 0;
@@ -16,9 +25,14 @@ export function installCarts(): void {
         } catch {
             return;
         }
+        near = id;
+        // The server says it again every few seconds: a hint the game took down meanwhile is put back.
+        if (id > 0 && hint !== 0 && !ActionHint.setText(hint, TEXT)) {
+            hint = 0;
+        }
         if (id > 0 && hint === 0) {
             try {
-                hint = ActionHint.create({ key: "primary_action", text: "Subir na carroça" }, () => Events.emitServer(`${RESOURCE}:cart.use`));
+                hint = ActionHint.create({ key: "primary_action", text: TEXT }, () => Events.emitServer(`${RESOURCE}:cart.use`));
             } catch {
                 hint = 0;
             }

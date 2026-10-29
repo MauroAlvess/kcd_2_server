@@ -9,7 +9,7 @@
  */
 
 export type RosterTag = "list" | "pick" | "nom";
-export type RosterFilter = "all" | "admin" | "patron" | "noble" | "noguild";
+export type RosterFilter = "all" | "online" | "offline" | "admin" | "patron" | "noble" | "noguild" | "banned";
 
 export interface RosterQuery {
     readonly tag: RosterTag;
@@ -24,7 +24,7 @@ export const PAGE_SIZE: Readonly<Record<RosterTag, number>> = { list: 12, pick: 
 /** The longest search text taken. */
 export const SEARCH_MAX = 40;
 
-export const FILTERS: readonly RosterFilter[] = ["all", "admin", "patron", "noble", "noguild"];
+export const FILTERS: readonly RosterFilter[] = ["all", "online", "offline", "admin", "patron", "noble", "noguild", "banned"];
 
 export const DEFAULT_QUERY: RosterQuery = { tag: "list", q: "", page: 0, filter: "all" };
 

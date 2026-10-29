@@ -42,6 +42,12 @@ export interface TitleDef {
     readonly unique?: boolean;
     /** The ids of the titles this one may name. Empty or missing: it names nobody. */
     readonly appoints?: readonly string[];
+    /**
+     * The titles this one serves under, first the nearest: in the hierarchy's tree a holder hangs from a holder of one of them in
+     * the same command -- named by the same one, or below them -- rather than straight from whoever named them both (user,
+     * 2026-10-19: "nomeei um guarda do portão e ele ficou na hierarquia errada ... um guarda não é abaixo de capitão?").
+     */
+    readonly reportsTo?: readonly string[];
 }
 
 export interface BranchInfo {
@@ -61,7 +67,7 @@ export const BRANCHES: readonly BranchInfo[] = [
 
 const NOBILITY_BELOW_LORD = ["cavaleiro", "escudeiro", "pequeno-nobre"] as const;
 /** The posts of a lordship: named by the lords above. */
-const LORDSHIP_OFFICES = ["burgrave", "hetman", "capitao-guarda", "chanceler", "juiz-senhorial", "mordomo", "tesoureiro", "bailio", "meirinho", "arauto"] as const;
+const LORDSHIP_OFFICES = ["burgrave", "hetman", "capitao-guarda", "chanceler", "juiz-senhorial", "mordomo", "tesoureiro", "bailio", "meirinho", "arauto", "soldado"] as const;
 /** The posts of the towns and the guilds. */
 const TOWN_OFFICES = ["burgomestre", "conselheiro", "alcaide", "mestre-guilda", "chefe-mercado", "coletor-pedagios", "guarda-portoes", "capitao-milicia", "escrivao", "mestre-oficio", "administrador-hospedaria"] as const;
 const LOWER_CLERGY = ["padre", "monge", "frade", "diacono", "acolito"] as const;
@@ -93,7 +99,7 @@ export const TITLES: readonly TitleDef[] = [
     {
         id: "cavaleiro", male: "Cavaleiro", female: "Cavaleira", native: "rytíř", branch: "lesser", tier: 1, kind: "blood",
         gloss: "Nobreza inferior ou posição militar honorífica: guerreiro reconhecido pelo serviço, que pode ter terras, comandar homens ou servir a um senhor. Nem todo cavaleiro é rico.",
-        appoints: ["escudeiro", "pequeno-nobre"],
+        appoints: ["escudeiro", "pequeno-nobre", "soldado"],
     },
     {
         id: "escudeiro", male: "Escudeiro", female: "Escudeira", branch: "lesser", tier: 2, kind: "blood",
@@ -106,7 +112,7 @@ export const TITLES: readonly TitleDef[] = [
     // The posts of a lordship.
     { id: "burgrave", male: "Burgrave", female: "Burgrave", native: "purkrabí", branch: "lesser", tier: 3, kind: "office", gloss: "Administra um castelo, uma fortaleza ou um domínio em nome de uma autoridade superior." },
     { id: "hetman", male: "Hetman", female: "Hetman", native: "hejtman", branch: "lesser", tier: 3, kind: "office", gloss: "Comanda forças militares ou exerce funções de administração territorial, conforme o contexto." },
-    { id: "capitao-guarda", male: "Capitão da guarda", female: "Capitã da guarda", branch: "lesser", tier: 4, kind: "office", gloss: "Comanda os guardas de um castelo ou de uma residência nobre." },
+    { id: "capitao-guarda", male: "Capitão da guarda", female: "Capitã da guarda", branch: "lesser", tier: 4, kind: "office", gloss: "Comanda os guardas de um castelo ou de uma residência nobre.", reportsTo: ["burgrave"] },
     { id: "chanceler", male: "Chanceler", female: "Chanceler", branch: "lesser", tier: 4, kind: "office", gloss: "Cuida de documentos oficiais, cartas, selos e registros." },
     { id: "juiz-senhorial", male: "Juiz senhorial", female: "Juíza senhorial", branch: "lesser", tier: 4, kind: "office", gloss: "Julga disputas e infrações dentro da jurisdição do senhor." },
     { id: "mordomo", male: "Mordomo", female: "Mordoma", branch: "lesser", tier: 4, kind: "office", gloss: "Organiza a casa nobre, os criados, os suprimentos e as despesas." },
@@ -114,6 +120,8 @@ export const TITLES: readonly TitleDef[] = [
     { id: "bailio", male: "Bailio", female: "Bailia", branch: "lesser", tier: 5, kind: "office", gloss: "Oficial de justiça: executa ordens, fiscaliza obrigações e auxilia na administração da justiça." },
     { id: "meirinho", male: "Meirinho", female: "Meirinha", branch: "lesser", tier: 5, kind: "office", gloss: "Administrador senhorial: supervisiona terras, trabalhadores, rendas e deveres dos habitantes." },
     { id: "arauto", male: "Arauto", female: "Arauta", branch: "lesser", tier: 5, kind: "office", gloss: "Anuncia decretos, transmite mensagens e participa de cerimônias." },
+    // The soldier (user, 2026-10-29: "vamos criar o título de soldado"): the last rung of the arms, under the captains, with the power to arrest.
+    { id: "soldado", male: "Soldado", female: "Soldada", branch: "lesser", tier: 5, kind: "office", gloss: "Serve em armas a um senhor ou à cidade: guarda a ordem e prende quem a quebra, sob as ordens dos capitães.", reportsTo: ["capitao-guarda", "capitao-milicia", "hetman"] },
     // The Church, with a ladder of its own.
     {
         id: "arcebispo", male: "Arcebispo", female: "Arcebispa", branch: "church", tier: 1, kind: "lordly",
@@ -142,15 +150,15 @@ export const TITLES: readonly TitleDef[] = [
     { id: "acolito", male: "Acólito", female: "Acólita", branch: "church", tier: 6, kind: "office", gloss: "Serve ao altar e auxilia o clero nas cerimônias." },
     // The towns and the guilds.
     { id: "burgomestre", male: "Burgomestre", female: "Burgomestre", branch: "town", tier: 1, kind: "office", gloss: "Prefeito: administra a cidade, coordena decisões municipais e representa seus interesses perante a nobreza." },
-    { id: "conselheiro", male: "Conselheiro municipal", female: "Conselheira municipal", branch: "town", tier: 2, kind: "office", gloss: "Participa das decisões sobre impostos, mercados, manutenção urbana e leis locais." },
+    { id: "conselheiro", male: "Conselheiro municipal", female: "Conselheira municipal", branch: "town", tier: 2, kind: "office", gloss: "Participa das decisões sobre impostos, mercados, manutenção urbana e leis locais.", reportsTo: ["burgomestre"] },
     { id: "alcaide", male: "Alcaide da aldeia", female: "Alcaide da aldeia", branch: "town", tier: 2, kind: "office", gloss: "Representante da aldeia: recolhe informações, comunica ordens, organiza as obrigações da comunidade e serve de intermediário com o senhor local." },
     { id: "mestre-guilda", male: "Mestre de guilda", female: "Mestra de guilda", branch: "town", tier: 2, kind: "office", gloss: "Lidera uma corporação profissional, fiscaliza a qualidade dos produtos e negocia privilégios para seus membros." },
-    { id: "chefe-mercado", male: "Chefe de mercado", female: "Chefe de mercado", branch: "town", tier: 3, kind: "office", gloss: "Cuida da ordem, dos lugares e das medidas na praça do mercado." },
-    { id: "coletor-pedagios", male: "Coletor de pedágios", female: "Coletora de pedágios", branch: "town", tier: 3, kind: "office", gloss: "Cobra a passagem em pontes, portões e estradas." },
-    { id: "guarda-portoes", male: "Guarda dos portões", female: "Guarda dos portões", branch: "town", tier: 3, kind: "office", gloss: "Vigia as entradas da cidade e controla quem passa." },
-    { id: "capitao-milicia", male: "Capitão da milícia urbana", female: "Capitã da milícia urbana", branch: "town", tier: 3, kind: "office", gloss: "Comanda os cidadãos armados que defendem a cidade." },
-    { id: "escrivao", male: "Escrivão", female: "Escrivã", branch: "town", tier: 3, kind: "office", gloss: "Escreve e guarda os registros, as cartas e as contas." },
-    { id: "mestre-oficio", male: "Mestre de ofício", female: "Mestra de ofício", branch: "town", tier: 3, kind: "office", gloss: "Mestre reconhecido de um ofício, que ensina aprendizes e responde pela qualidade do trabalho." },
+    { id: "chefe-mercado", male: "Chefe de mercado", female: "Chefe de mercado", branch: "town", tier: 3, kind: "office", gloss: "Cuida da ordem, dos lugares e das medidas na praça do mercado.", reportsTo: ["burgomestre"] },
+    { id: "coletor-pedagios", male: "Coletor de pedágios", female: "Coletora de pedágios", branch: "town", tier: 3, kind: "office", gloss: "Cobra a passagem em pontes, portões e estradas.", reportsTo: ["burgomestre"] },
+    { id: "guarda-portoes", male: "Guarda dos portões", female: "Guarda dos portões", branch: "town", tier: 4, kind: "office", gloss: "Vigia as entradas da cidade e controla quem passa.", reportsTo: ["capitao-milicia", "capitao-guarda"] },
+    { id: "capitao-milicia", male: "Capitão da milícia urbana", female: "Capitã da milícia urbana", branch: "town", tier: 3, kind: "office", gloss: "Comanda os cidadãos armados que defendem a cidade.", reportsTo: ["burgomestre"] },
+    { id: "escrivao", male: "Escrivão", female: "Escrivã", branch: "town", tier: 3, kind: "office", gloss: "Escreve e guarda os registros, as cartas e as contas.", reportsTo: ["burgomestre"] },
+    { id: "mestre-oficio", male: "Mestre de ofício", female: "Mestra de ofício", branch: "town", tier: 3, kind: "office", gloss: "Mestre reconhecido de um ofício, que ensina aprendizes e responde pela qualidade do trabalho.", reportsTo: ["mestre-guilda"] },
     { id: "administrador-hospedaria", male: "Administrador de hospedaria", female: "Administradora de hospedaria", branch: "town", tier: 3, kind: "office", gloss: "Tem a seu cargo uma hospedaria: os quartos, a cozinha e os criados." },
 ];
 
@@ -204,6 +212,20 @@ function rankOfBlood(title: TitleDef): number {
 /** The blood title a player holds, if any (they hold one at a time). */
 export function bloodTitleOf(held: readonly string[]): TitleDef | null {
     return known(held).find((title) => title.kind === "blood") ?? null;
+}
+
+/**
+ * What the spouse of a title holder is called at their side (user, 2026-10-25: "um lorde manda em uma terra; se ele tiver uma esposa ela vira lady"):
+ * the wife of a king, a prince, a marquis or a lord takes the feminine of his title -- Rainha, Princesa, Marquesa, Lady -- and the wife of a knight, a
+ * squire or a small noble is a Dama. A husband, and the spouse of somebody with no rank of the blood, are only "Esposo" or "Esposa" ("Consorte" when
+ * nobody knows which). `rank` is the holder's blood title; the courtesy is the wife's and goes to no husband.
+ */
+export function consortStyle(rank: TitleDef | null, holderFemale: boolean, spouseFemale: boolean | null): string {
+    const plain = spouseFemale === true ? "Esposa" : spouseFemale === false ? "Esposo" : "Consorte";
+    if (rank === null || rank.kind !== "blood" || holderFemale || spouseFemale !== true) {
+        return plain;
+    }
+    return rank.branch === "lesser" ? "Dama" : rank.female;
 }
 
 /** Whether a title may be named by whoever holds `held` (an administrator is not asked). */
@@ -321,10 +343,12 @@ export function summarize(held: readonly string[], female: boolean): string {
 /**
  * How far down the realm's ladder a title stands, the same in every branch (user, 2026-10-17: "Luance está no mesmo nível de um
  * lorde na árvore e isso não é correto"): 1 the King, 2 prince, marquess and archbishop, 3 lord, bishop and burgomaster, 4 knights
- * and squires, the offices of a castle's lord (burgrave, hetman), abbots, priors, parish priests, and the town's councillors and
- * officers, 5 the household and the clergy's lower ranks (captain of the guard, chancellor, judge, steward, treasurer, bailiff,
- * reeve, herald, monk, friar, deacon, acolyte). The tree is drawn by it: a holder stands in the row of their level, under whoever
- * named them.
+ * and squires, the offices of a castle's lord (burgrave, hetman), abbots, priors, parish priests, and the town's councillors,
+ * village headmen and guild masters, 5 the household and the clergy's lower ranks (captain of the guard, chancellor, judge,
+ * steward, treasurer, bailiff, reeve, herald, monk, friar, deacon, acolyte) and the town's officers (the militia's captain, the
+ * market's chief, the toll collector, the scribe, the craft master, the innkeeper), 6 the gate guard and the soldier, under the captains (user,
+ * 2026-10-19: "um guarda não é abaixo de capitão?"). The tree is drawn by it: a holder stands in the row of their level, under
+ * whoever named them, or under whom their title serves (`reportsTo`) in the same command.
  */
 const LEVELS: Readonly<Record<string, number>> = {
     rei: 1,
@@ -346,9 +370,17 @@ const LEVELS: Readonly<Record<string, number>> = {
     frade: 5,
     diacono: 5,
     acolito: 5,
+    "capitao-milicia": 5,
+    "chefe-mercado": 5,
+    "coletor-pedagios": 5,
+    escrivao: 5,
+    "mestre-oficio": 5,
+    "administrador-hospedaria": 5,
+    "guarda-portoes": 6,
+    soldado: 6,
 };
 
-/** The level of a title on the realm's ladder, 1 (the King) to 5; every title not listed above is 4. */
+/** The level of a title on the realm's ladder, 1 (the King) to 6; every title not listed above is 4. */
 export function levelOf(title: TitleDef): number {
     return LEVELS[title.id] ?? 4;
 }
@@ -357,4 +389,79 @@ export function levelOf(title: TitleDef): number {
 export function order(title: TitleDef): number {
     const branch = BRANCHES.findIndex((candidate) => candidate.id === title.branch);
     return branch * 1000 + title.tier * 100 + TITLES.indexOf(title);
+}
+
+// ---------------------------------------------------------------------------------------------
+// What a title lets its holder do besides naming (2026-10-29): arrest, and hand out the guilds.
+
+/** The level of somebody who holds no title: the commoners stand below the last rung of the ladder. */
+export const COMMONER_LEVEL = 7;
+
+/** The level of a set of titles: the highest of them (the lowest number); `COMMONER_LEVEL` for none. */
+export function levelOfTitles(held: readonly string[]): number {
+    let best = COMMONER_LEVEL;
+    for (const title of known(held)) {
+        best = Math.min(best, levelOf(title));
+    }
+    return best;
+}
+
+/**
+ * The titles whose holders may arrest somebody below them on the ladder and put them in the pillory (user, 2026-10-29: "nos cargos que fizerem sentido, exemplo guarda,
+ * capitão, milícia"): the ones that keep the peace by arms or judge, and the lords and the Crown above them. An administrator may always.
+ */
+export const ARREST_TITLES: readonly string[] = [
+    "rei",
+    "principe",
+    "marques",
+    "lorde",
+    "cavaleiro",
+    "burgrave",
+    "hetman",
+    "capitao-guarda",
+    "juiz-senhorial",
+    "bailio",
+    "burgomestre",
+    "capitao-milicia",
+    "guarda-portoes",
+    "soldado",
+];
+
+/** Whether any of the held titles gives the power to arrest (an administrator is not asked). */
+export function mayArrestWith(held: readonly string[]): boolean {
+    return known(held).some((title) => ARREST_TITLES.includes(title.id));
+}
+
+/**
+ * The titles whose holders hand out the guilds (user, 2026-10-29: "um mestre de ofício ou guilda, ou cargos acima que façam sentido ... a seção Escrivão"): the clerk who
+ * writes the documents, the masters of the guilds and of the trades, the town's own officers who answer for the registers, the lord's chancellor and burgrave, and the
+ * lords and the Crown. The masters hand out only their own guild; the rest, any. An administrator may always.
+ */
+export const GUILD_GRANT_TITLES: readonly string[] = [
+    "rei",
+    "principe",
+    "marques",
+    "lorde",
+    "burgrave",
+    "chanceler",
+    "burgomestre",
+    "conselheiro",
+    "alcaide",
+    "escrivao",
+    "mestre-guilda",
+    "mestre-oficio",
+];
+
+/** The titles that hand out only the guild their holder belongs to. */
+export const GUILD_MASTER_TITLES: readonly string[] = ["mestre-guilda", "mestre-oficio"];
+
+/** Whether any of the held titles gives the power to hand out guilds. */
+export function mayGrantGuildWith(held: readonly string[]): boolean {
+    return known(held).some((title) => GUILD_GRANT_TITLES.includes(title.id));
+}
+
+/** Whether the guilds a holder may hand out are only their own: every title of theirs that gives the power is a master's. */
+export function grantsOwnGuildOnly(held: readonly string[]): boolean {
+    const giving = known(held).filter((title) => GUILD_GRANT_TITLES.includes(title.id));
+    return giving.length > 0 && giving.every((title) => GUILD_MASTER_TITLES.includes(title.id));
 }

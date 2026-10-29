@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 const dist = (name) => fs.readFileSync(path.join(__dirname, "../dist/server", name), "utf8");
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -310,7 +311,7 @@ test("choosing a seat sits the player there; a locked cart, a taken seat, a long
 test("E far from every cart, or from a dead body, asks nothing; the client is told which cart is near, once per change", () => {
     const sut = load();
     const hans = sut.player(HANS, "Hans", 2, { x: 0, y: 0, z: 0 });
-    const cart = sut.makeCart("wagon_b_covered", { x: 4, y: 0, z: 0 });
+    const cart = sut.makeCart("wagon_b_covered", { x: 3, y: 0, z: 0 });
     sut.api.useCart(sut.player(MAURO, "Mauro", 3, { x: 300, y: 0, z: 0 }));
     assert.equal(sut.dialogues.opened.length, 0);
     hans.alive = false;
@@ -327,6 +328,104 @@ test("E far from every cart, or from a dead body, asks nothing; the client is to
     near.fn();
     assert.deepEqual(sut.emitted.filter((entry) => entry.to === 2).map((entry) => entry.payload.id), [cart.id, 0]);
     assert.ok(sut.emitted.some((entry) => entry.to === 3 && entry.payload.id === 0) === false, "nothing said to somebody who was never near");
+});
+
+test("a cart is a body, not a point: the hint reaches 3.5 m from the length of the wagon, along its heading, and no further (2026-10-21: not 12 m from the axle)", () => {
+    const sut = load();
+    const hans = sut.player(HANS, "Hans", 2, { x: 500, y: 500, z: 0 });
+    // Heading 0: ahead (the horses) is +y, the wagon runs back along -y from the front axle.
+    const cart = sut.makeCart("wagon_b_covered", { x: 0, y: 0, z: 0 }, 0);
+    const near = sut.intervals.find((interval) => interval.ms === 1_000);
+    const nearFrom = (x, y) => {
+        hans.position = { x, y, z: 0 };
+        return sut.api.cartNear(hans);
+    };
+    assert.equal(nearFrom(0, -8)?.id, cart.id, "eight metres behind the axle, two and a half from the tail");
+    assert.equal(nearFrom(0, -10), null, "four and a half from the tail");
+    assert.equal(nearFrom(3, -3)?.id, cart.id, "beside it, amidships");
+    assert.equal(nearFrom(5, -3), null, "five metres to the side");
+    assert.equal(nearFrom(0, 4)?.id, cart.id, "by the bench and the horses' shoulders");
+    assert.equal(nearFrom(0, 6), null, "beyond the horses' shoulders");
+    assert.equal(nearFrom(9, 0), null, "nine metres to the side, which the first version still answered");
+    assert.ok(sut.api.bodyDistance(cart, { x: 0, y: -5.5 }) === 0, "the tail of the body");
+    assert.ok(Math.abs(sut.api.bodyDistance(cart, { x: 3, y: 9 }) - Math.hypot(3, 7.5)) < 1e-9, "a point ahead is measured from the bench, not from the axle");
+
+    // The same wagon turned a quarter, heading west (-x): the body follows the heading.
+    const turned = sut.makeCart("wagon_b_covered", { x: 100, y: 100, z: 0 }, 90);
+    assert.equal(nearFrom(100 + 8, 100)?.id, turned.id, "behind the axle is now east");
+    assert.equal(nearFrom(100 - 8, 100), null, "and ahead of it west is not");
+
+    hans.position = { x: 0, y: -8, z: 0 };
+    near.fn();
+    assert.equal(sut.emitted.filter((entry) => entry.to === 2).at(-1).payload.id, cart.id, "the client is told");
+    // Too high above or below is another floor.
+    hans.position = { x: 0, y: -2, z: 9 };
+    assert.equal(sut.api.cartNear(hans), null);
+});
+
+test("a player the server still has on a cart that is nowhere near them is let out, the seat freed and the hint back (2026-10-20)", () => {
+    const sut = load({ admins: [MAURO] });
+    const mauro = sut.player(MAURO, "Mauro", 3, { x: 0, y: 0, z: 0 });
+    const cart = sut.makeCart("wagon_b_covered", { x: 4, y: 0, z: 0 });
+    const near = sut.intervals.find((interval) => interval.ms === 1_000);
+    assert.equal(cart.putPlayer(mauro, "driver"), true);
+    near.fn();
+    assert.deepEqual(sut.emitted.filter((entry) => entry.to === 3).map((entry) => entry.payload.id), [], "on the cart: no hint, and nothing said");
+
+    // Moved by an administrator's command while seated: the cart does not know.
+    mauro.position = { x: 900, y: 900, z: 0 };
+    near.fn();
+    assert.equal(cart.seatOf(mauro), null, "let out");
+    assert.equal(cart.getOccupant("driver"), null, "the reins are free for whoever comes");
+    assert.ok(sut.logs.some((line) => /Mauro constava no assento driver da carroça \d+ mas estava a \d+ m dela: foi tirado/.test(line)));
+
+    // Back beside it, the hint comes.
+    mauro.position = { x: 3, y: 1, z: 0 };
+    near.fn();
+    assert.equal(sut.emitted.filter((entry) => entry.to === 3).at(-1).payload.id, cart.id);
+
+    // Whoever is really on it, however fast it goes, is left alone.
+    assert.equal(cart.putPlayer(mauro, "bench"), true);
+    mauro.position = { x: 4 + 20, y: 0, z: 0 };
+    near.fn();
+    assert.equal(cart.seatOf(mauro), "bench", "twenty metres is a moving cart's lag, not a stale seat");
+});
+
+test("the round that tells every player of the cart beside them looks at each cart once, not once for each player (2026-10-25)", () => {
+    const sut = load();
+    const reads = { position: 0, rotation: 0, seatOf: 0 };
+    const wagons = [0, 1, 2, 3].map((n) => sut.makeCart("wagon_b_covered", { x: n * 100, y: 0, z: 0 }));
+    for (const cart of wagons) {
+        const { position, rotation, seatOf } = cart;
+        Object.defineProperty(cart, "position", { get() { reads.position += 1; return position; }, set() {}, configurable: true });
+        Object.defineProperty(cart, "rotation", { get() { reads.rotation += 1; return rotation; }, configurable: true });
+        cart.seatOf = (player) => { reads.seatOf += 1; return seatOf(player); };
+    }
+    const walkers = [0, 1, 2, 3, 4, 5].map((n) => sut.player(`7656119800000010${n}`, `P${n}`, 10 + n, { x: (n % 4) * 100 + 3, y: -3, z: 0 }));
+    sut.intervals.find((interval) => interval.ms === 1_000).fn();
+    assert.equal(reads.position, 4, "one read of each cart's place for the whole round");
+    assert.equal(reads.rotation, 4, "and one of which way it heads");
+    assert.equal(reads.seatOf, 0, "nobody asks each cart where they sit: the seats are read once");
+    walkers.forEach((walker, n) => {
+        assert.equal(sut.emitted.filter((entry) => entry.to === walker.id).at(-1)?.payload.id, wagons[n % 4].id, `${walker.nickname} is told of the cart beside them`);
+    });
+});
+
+test("a coach's wagon (travel.ts) is nobody's: no '[E] Subir' beside it, nobody gets on and is told why, and nobody registers it", () => {
+    const sut = load();
+    const hans = sut.player(HANS, "Hans", 2, { x: 0, y: 0, z: 0 });
+    const coach = sut.makeCart("wagon_b_covered", { x: 4, y: 0, z: 0 });
+    sut.api.reservedCarts.set(coach.id, () => "Essa carroça é do cocheiro: fale com ele para viajar.");
+    sut.intervals.find((interval) => interval.ms === 1_000).fn();
+    assert.equal(sut.emitted.some((entry) => entry.event === "kcdc-gamemode:cart.near" && entry.payload.id === coach.id), false);
+    sut.api.useCart(hans);
+    assert.equal(sut.dialogues.opened.length, 0, "E beside it asks for no seat");
+    assert.equal(sut.fire("cartEntering", coach, hans, "bench"), false, "the game's own prompt at a bench is refused too");
+    assert.equal(sut.chat.at(-1).text, "Essa carroça é do cocheiro: fale com ele para viajar.");
+    assert.match(sut.api.registerCart(hans).message, /Nenhuma carroça sem dono/);
+
+    sut.api.reservedCarts.delete(coach.id);
+    assert.equal(sut.fire("cartEntering", coach, hans, "bench"), undefined, "once it is no coach's, it is a cart like any other");
 });
 
 test("a saved cart is brought back where it was left, with its owner and name, after a restart, and a cart removed from the world is forgotten", () => {
@@ -347,7 +446,7 @@ test("a saved cart is brought back where it was left, with its owner and name, a
     assert.ok(back.cart !== null);
     assert.equal(back.cart.blueprint, "cart_b");
     assert.deepEqual([back.cart.position.x, back.cart.position.y], [123, 456]);
-    assert.ok(again.logs.some((line) => /1 carroça\(s\) com dono guardada\(s\); 1 de volta ao mundo/.test(line)));
+    assert.ok(again.logs.some((line) => /1 carroça\(s\) guardada\(s\) \(0 do mundo, 1 com dono\); 1 de volta ao mundo/.test(line)), again.logs.join("|"));
 
     back.cart.destroy();
     assert.deepEqual(plain(again.api.cartsOf(HANS)), [], "an administrator removed it: it is no longer kept");
@@ -358,9 +457,88 @@ test("an administrator can let a cart go, and a stored file with bad rows loads 
     const sut = load({ seed: { v: 1, carts: [{ key: "ok", owner: HANS, ownerName: "Hans", blueprint: "wagon_b_covered", name: "", x: 1, y: 2, z: 3, yaw: 0 }, { key: "bad" }, "nope", { key: "nan", owner: HANS, blueprint: "cart_b", name: "", x: "1", y: 2, z: 3, yaw: 0 }] } });
     assert.equal(sut.api.allCarts().length, 1);
     assert.equal(sut.api.releaseCart("ok"), true);
-    assert.equal(sut.api.releaseCart("ok"), false);
-    assert.equal(sut.api.allCarts().length, 0);
-    assert.equal(sut.carts.size, 1, "it stays in the world, ownerless");
+    assert.equal(sut.api.releaseCart("ok"), false, "it is nobody's already");
+    assert.equal(sut.api.cartsOf(HANS).length, 0, "no longer Hans's");
+    assert.equal(sut.api.allCarts().length, 1, "but still kept: a world cart");
+    assert.equal(JSON.parse(sut.disk.files.get("playerdata/carts.json")).carts[0].owner, "");
+    assert.equal(sut.carts.size, 1, "it stays in the world");
+});
+
+test("an administrator leaves a cart in the world for everybody: it is kept, anybody sits in it, and it is back where it stood after a restart", () => {
+    const sut = load({ admins: [MAURO] });
+    const admin = sut.player(MAURO, "Mauro", 1, { x: 10, y: 20, z: 5 }, 0);
+    const outcome = sut.api.placeCart(admin, "wagon_b_covered");
+    assert.equal(outcome.ok, true, outcome.message);
+    assert.match(outcome.message, /para todos/);
+    const [placed] = sut.api.allCarts();
+    assert.equal(sut.api.isWorldCart(placed.record), true);
+    assert.equal(placed.record.owner, "");
+    assert.deepEqual(plain(sut.api.cartsOf(MAURO)), [], "it is nobody's cart");
+    assert.deepEqual([placed.cart.position.x, placed.cart.position.y], [10, 27], "seven metres ahead of the one who put it");
+
+    const hans = sut.player(HANS, "Hans", 2, { x: 10, y: 25, z: 5 });
+    assert.equal(sut.api.mayDrive(hans, placed.cart), true, "anybody may sit in it, the reins included");
+    assert.equal(sut.api.seatPage(hans, placed.cart).line, "Carroça coberta: onde você quer ficar?", "no owner named");
+    assert.ok(sut.api.seatPage(hans, placed.cart).options.some((option) => option.id === "seat:driver" && option.enabled));
+
+    placed.cart.position = { x: 40, y: 50, z: 6 };
+    sut.fire("cartExit", placed.cart, hans, "driver");
+    const seed = JSON.parse(sut.disk.files.get("playerdata/carts.json"));
+    const again = load({ seed });
+    const [back] = again.api.allCarts();
+    assert.ok(back.cart !== null, "back in the world after a restart");
+    assert.deepEqual([back.cart.position.x, back.cart.position.y], [40, 50], "where it was last left");
+    assert.ok(again.logs.some((line) => /1 carroça\(s\) guardada\(s\) \(1 do mundo, 0 com dono\); 1 de volta ao mundo/.test(line)), again.logs.join("|"));
+
+    assert.equal(sut.api.removeCart(placed.record.key), true, "an administrator takes it away for good");
+    assert.equal(placed.cart.destroyed, true);
+    assert.deepEqual(plain(sut.api.allCarts()), []);
+    assert.deepEqual(JSON.parse(sut.disk.files.get("playerdata/carts.json")).carts, []);
+    assert.equal(sut.logs.some((line) => /foi removida do mundo e deixa de ser guardada/.test(line)), false, "taking it away on purpose is not a loss");
+    assert.equal(sut.api.removeCart(placed.record.key), false);
+});
+
+test("a cart an administrator left in the world can be registered as a player's: the world loses it, it is locked to its new owner, kept and not taken twice", () => {
+    const sut = load({ admins: [MAURO] });
+    const admin = sut.player(MAURO, "Mauro", 1, { x: 10, y: 20, z: 5 }, 0);
+    assert.equal(sut.api.placeCart(admin, "wagon_b_covered").ok, true);
+    const [placed] = sut.api.allCarts();
+    const jaromir = sut.player(HANS, "Jaromir", 2, { x: 10, y: 25, z: 5 });
+    const far = sut.player("76561198000000044", "Ana", 3, { x: 900, y: 900, z: 5 });
+    assert.match(sut.api.registerCart(far).message, /Nenhuma carroça sem dono/, "out of reach, it is nobody's to give");
+
+    const done = sut.api.registerCart(jaromir);
+    assert.equal(done.ok, true, done.message);
+    assert.match(done.message, /que era do mundo, agora é de Jaromir/);
+    assert.equal(sut.api.recordOfCart(placed.cart).owner, HANS);
+    assert.equal(sut.api.isWorldCart(sut.api.recordOfCart(placed.cart)), false);
+    assert.equal(sut.api.cartsOf(HANS).length, 1);
+    assert.equal(sut.api.mayDrive(sut.player("76561198000000009", "Eve", 4), placed.cart), false, "locked to its new owner");
+    assert.equal(sut.api.mayDrive(jaromir, placed.cart), true);
+    assert.match(sut.api.registerCart(sut.player("76561198000000045", "Bia", 5, { x: 10, y: 25, z: 5 })).message, /Nenhuma carroça sem dono/, "already somebody's: not given a second time");
+});
+
+test("the world's carts are limited, a model must exist, and an owned cart let go becomes one of them", () => {
+    const sut = load({ admins: [MAURO] });
+    const admin = sut.player(MAURO, "Mauro", 1);
+    assert.equal(sut.api.placeCart(admin, "carruagem").ok, false);
+    for (let n = 0; n < sut.api.MAX_WORLD_CARTS; n += 1) assert.equal(sut.api.placeCart(admin, "cart_b").ok, true, `cart ${n}`);
+    const refused = sut.api.placeCart(admin);
+    assert.equal(refused.ok, false);
+    assert.match(refused.message, /40 carroças do mundo/);
+
+    const hans = sut.player(HANS, "Hans", 2);
+    sut.api.removeCart(sut.api.allCarts()[0].record.key);
+    assert.equal(sut.api.giveCart(hans).ok, true);
+    const mine = sut.api.cartsOf(HANS)[0];
+    assert.equal(sut.api.mayDrive(sut.player("76561198000000009", "Eve", 3), mine.cart), false, "his own cart is locked to others");
+    assert.equal(sut.api.releaseCart(mine.record.key), true);
+    assert.equal(sut.api.mayDrive(sut.player("76561198000000010", "Ana", 4), mine.cart), true, "let go, it is everybody's");
+});
+
+test("the gift note names who gave the cart", () => {
+    const sut = load();
+    assert.match(sut.api.cartGiftNote("Radovan"), /^Radovan deu a você uma carroça\./);
 });
 
 test("the names of the seats and of the models are the player's words", () => {

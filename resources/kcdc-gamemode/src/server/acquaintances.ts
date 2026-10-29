@@ -56,6 +56,16 @@ function persist(): void {
     }
 }
 
+/** A player starts again (`character-reset.ts`): nobody knows them any longer, and they know nobody. */
+export function forgetAcquaintances(steamId: string): void {
+    const book = load();
+    delete book[steamId];
+    for (const page of Object.values(book)) {
+        delete page[steamId];
+    }
+    persist();
+}
+
 /** Whether `viewer` has been told `target`'s name. Everybody knows themselves; nobody can know a player without a Steam id. */
 export function knows(viewer: Player, target: Player): boolean {
     if (viewer.id === target.id) {

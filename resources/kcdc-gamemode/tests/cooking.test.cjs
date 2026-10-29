@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 // Cooking, drying and smoking by the places the level makes them at (src/server/cooking.ts): the raw taken, the made handed over.
 
@@ -12,11 +13,12 @@ const itemUses = (() => {
     return context.exports;
 })();
 
-function load({ refuse = new Set(), removeOk = true } = {}) {
-    const state = { rows: [], revision: 7, removed: null, added: [], logs: [], chat: [], handlers: new Map(), client: new Map(), emitted: [] };
+function load({ refuse = new Set(), removeOk = true, pots = [{ guid: "pot", position: { x: 60, y: 60, z: 70 } }] } = {}) {
+    const state = { played: [], stopped: [], timers: [], rows: [], revision: 7, removed: null, added: [], logs: [], chat: [], handlers: new Map(), client: new Map(), emitted: [] };
     const context = {
         exports: {},
         require: (id) => {
+            if (id === "./cook-animation.js") return { cookingAnimation: { ms: 4000 }, playCooking: (player) => { state.played.push(player.nickname); return true; }, stopCooking: (player) => state.stopped.push(player.nickname) };
             if (id === "./cooking-data.js") {
                 return {
                     COOKED: { "raw-deer": "cooked-deer", "raw-egg": "cooked-egg" },
@@ -34,12 +36,14 @@ function load({ refuse = new Set(), removeOk = true } = {}) {
         },
         console: { log: (line) => state.logs.push(line) },
         Math,
+        setTimeout: (fn, ms) => { state.timers.push({ fn, ms }); return state.timers.length; },
+        clearTimeout() {},
         Chat: { sendToPlayer: (player, text) => state.chat.push(text) },
         Events: {
             on: (name, fn) => state.handlers.set(name, fn),
             onClient: (name, fn) => state.client.set(name, fn),
         },
-        CookPot: { all: () => [{ guid: "pot", position: { x: 60, y: 60, z: 70 } }] },
+        CookPot: { all: () => pots },
         Inventory: {
             get: () => ({ revision: state.revision, items: state.rows }),
             remove: (player, request) => {
@@ -132,6 +136,11 @@ test("installed, each player who arrives is told which items the server takes ov
 
     sut.state.rows = [{ id: "r1", item: "raw-deer", amount: 1 }];
     sut.state.client.get("kcdc-gamemode:cook.use")(player, JSON.stringify({ item: "raw-deer", id: "r1", revision: 7 }));
+    assert.deepEqual(sut.state.played, ["Hans"], "the player cooks, with the animation of the game");
+    assert.deepEqual(sut.state.chat, [], "and nothing is swapped until it ends");
+    assert.equal(sut.state.timers[0].ms, 4000);
+    sut.state.timers[0].fn();
+    assert.deepEqual(sut.state.stopped, ["Hans"]);
     assert.deepEqual(sut.state.chat, ["Você cozinhou no local: 1x cooked-deer."]);
     assert.deepEqual(sut.state.emitted.at(-1), { event: "kcdc-gamemode:notify", payload: { text: "Você cozinhou no local: 1x cooked-deer." } });
 
@@ -153,4 +162,33 @@ test("each place is its trade's: a player of another guild is refused and nothin
     assert.equal(sut.api.cook(hunter), "não é para você: fogo", "the fire is the innkeepers'");
     const atRack = { ...sut.player(201, 200, 50.5), crafts: ["secador", "defumador"] };
     assert.match(sut.api.cook(atRack), /secou/);
+});
+
+test("the rack and the smokehouse (a frame, and a hut with its point inside) are worked from farther off than a fire is: each is two metres from its edge, and a metre more for the press (2026-10-22)", () => {
+    const sut = load();
+    // The fire at (10, 10), the rack at (200, 200), the smokehouse at (300, 300).
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 10 + 3.5, y: 10, z: 100 })), ["fogo"], "a fire: 2 + 0.6 and a metre");
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 10 + 3.7, y: 10, z: 100 })), []);
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 200 + 4.1, y: 200, z: 50 })), ["secador"], "a rack: 2 + 1.2 and a metre");
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 200 + 4.3, y: 200, z: 50 })), []);
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 300 + 5.4, y: 300, z: 50 })), ["defumador"], "a hut: 2 + 2.5 and a metre");
+    assert.deepEqual(Array.from(sut.api.stationsNear({ x: 300 + 5.6, y: 300, z: 50 })), []);
+});
+
+test("a stew pot with a meal in it is told apart from an empty one, a pot whose eating is off and a fire with no pot (2026-10-28: the game's E there is the pot's Comer)", () => {
+    const sut = load({
+        pots: [
+            { guid: "full", position: { x: 60, y: 60, z: 70 }, enabled: true, portions: 3 },
+            { guid: "empty", position: { x: 64, y: 60, z: 70 }, enabled: true, portions: 0 },
+            { guid: "off", position: { x: 68, y: 60, z: 70 }, enabled: false, portions: 4 },
+        ],
+    });
+    const near = sut.api.stationPoints({ x: 64, y: 60 }, 20);
+    const meal = (x) => sut.api.hasMeal(near.find((station) => station[0] === "fogo" && station[1] === x));
+    assert.equal(meal(60), true, "a pot with portions");
+    assert.equal(meal(64), false, "an empty pot");
+    assert.equal(meal(68), false, "a pot the server keeps from being eaten from");
+    const hearth = sut.api.stationPoints({ x: 10, y: 10 }, 5).find((station) => station[0] === "fogo");
+    assert.equal(sut.api.hasMeal(hearth), false, "a hearth of the level's list has no pot of the server's");
+    assert.equal(sut.api.hasMeal(["fogo", 60, 60, 70]), false, "only the places the list gave count, not a copy");
 });

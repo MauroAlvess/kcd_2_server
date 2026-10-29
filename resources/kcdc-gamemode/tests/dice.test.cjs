@@ -2,11 +2,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 const { test } = require("node:test");
 
 /** `emptyAtStart`: the level lists no table until `revealTables()`, as a level not loaded yet would. */
 function setup({ emptyAtStart = false } = {}) {
     let tablesHidden = emptyAtStart;
+    /** The tables a world resource places later, and the ones a level edit or a script takes away (KCDC 1.7.2). */
+    const placed = [];
+    const taken = new Set();
     const timeouts = [];
     const logs = [];
     const handlers = new Map();
@@ -26,7 +30,9 @@ function setup({ emptyAtStart = false } = {}) {
     // The pot (dice-pot.js): what each carries, and what was held, bound and given back.
     const purses = new Map();
     const pot = { holds: [], binds: [], releases: [] };
+    const restart = { pending: false };
     const dicePots = {
+        stop() { this.stopped = true; },
         coinsOf: (player) => purses.get(player.id) ?? 1000,
         hold: (first, second, stake) => {
             for (const player of [first, second]) if ((purses.get(player.id) ?? 1000) < stake) return { short: player };
@@ -60,6 +66,7 @@ function setup({ emptyAtStart = false } = {}) {
         // Names as the other player knows them; here everybody knows everybody.
         require: (name) => {
             if (name === "./dice-pot.js") return { dicePots, STAKE_STEPS: [0, 5, 10, 20, 50, 100, 200, 500, 1000], coinsText: (coins) => `${coins} ${coins === 1 ? "moeda" : "moedas"}` };
+            if (name === "./restart-notice.js") return { restartPending: () => restart.pending };
             assert.equal(name, "./acquaintances.js");
             return { labelFor: (_viewer, target) => target.nickname };
         },
@@ -87,7 +94,8 @@ function setup({ emptyAtStart = false } = {}) {
         } },
         Dice: {
             // table1quest is table1 again on a quest layer: same chairs, another GUID.
-            tables: () => (tablesHidden ? [] : [{ id: "table1", position: { x: 0, y: 0, z: 0 }, seats: ["seat1", "seat2"] }, { id: "table2", position: { x: 20, y: 0, z: 0 }, seats: ["seat3", "seat4"] }, { id: "table1quest", position: { x: 0.3, y: 0, z: 0 }, seats: ["seat5", "seat6"] }]),
+            // KCDC 1.7.2: `Dice.tables(world)` lists the tables of one world; a table a world resource placed (`placed`) can be in one world only, and one taken away is gone.
+            tables: (world) => (tablesHidden ? [] : [{ id: "table1", position: { x: 0, y: 0, z: 0 }, seats: ["seat1", "seat2"] }, { id: "table2", position: { x: 20, y: 0, z: 0 }, seats: ["seat3", "seat4"] }, { id: "table1quest", position: { x: 0.3, y: 0, z: 0 }, seats: ["seat5", "seat6"] }, ...placed].filter((row) => !taken.has(row.id) && (world === undefined || row.world === undefined || row.world === world))),
             matchOf: (id) => matches.get(id) ?? 0,
             start: (first, second, options) => {
                 if (failStart) throw new Error("Native start refused");
@@ -126,7 +134,7 @@ function setup({ emptyAtStart = false } = {}) {
     const lobby = context.exports.diceLobby;
     lobby.install();
     const add = (id, seat = id === 1 ? "seat1" : "seat2", world = 0) => {
-        const player = Object.assign(new Player(), { id, nickname: `Player ${id}`, ready: true, alive: true, mounted: false, health: 100, virtualWorld: world, position: { x: seat === "seat3" || seat === "seat4" ? 20 : 0, y: 0, z: 0 }, messages: [], chat: [], emit: (...args) => player.messages.push(args), teleport: (position) => { player.position = position; return true; } });
+        const player = Object.assign(new Player(), { id, nickname: `Player ${id}`, ready: true, alive: true, mounted: false, health: 100, virtualWorld: world, position: { x: seat === "seat3" || seat === "seat4" ? 20 : 0, y: 0, z: 0 }, messages: [], busy: [], chat: [], emit: (...args) => (args[0] === "kcdc-gamemode:dice.busy" ? player.busy : player.messages).push(args), teleport: (position) => { player.position = position; return true; } });
         players.push(player);
         return player;
     };
@@ -139,6 +147,8 @@ function setup({ emptyAtStart = false } = {}) {
     return {
         a, b, add, lobby, starts, sessions, areas, emit, choose, context, players, timeouts, logs, purses, pot, pageOf, optionOf,
         revealTables: () => { tablesHidden = false; },
+        place: (row) => { placed.push(row); },
+        takeAway: (id) => { taken.add(id); },
         freeDice: (player) => { let result; messages.get("playground:freeDice")({ player: player.id }, (value) => result = value); return result; },
         containsCalls: () => containsCalls,
         interactWith: (player, table) => clients.get("kcdc-gamemode:dice.interact")(player, { token: JSON.parse(player.messages.at(-1)[1]).token, table }),
@@ -148,6 +158,7 @@ function setup({ emptyAtStart = false } = {}) {
         pair: () => { clients.get("kcdc-gamemode:dice.interact")(a, { token: JSON.parse(a.messages.at(-1)[1]).token, table: JSON.parse(a.messages.at(-1)[1]).tables[0]?.id }); clients.get("kcdc-gamemode:dice.interact")(b, { token: JSON.parse(b.messages.at(-1)[1]).token, table: JSON.parse(b.messages.at(-1)[1]).tables[0]?.id }); },
         failOpen: () => { failOpen = true; },
         failStart: () => { failStart = true; },
+        client: (name, ...args) => clients.get(name)(...args),
     };
 }
 
@@ -660,4 +671,73 @@ test("a level that lists no table at start is asked again later, and says so", (
     assert.equal(h.lobby.sameTable(h.a, h.b), true);
     h.timeouts[1].handler();
     assert.equal(h.areas.length, 3, "a later retry adds nothing twice");
+});
+
+test("a match running is told to every machine, who plays and at which table; only its two players are `playingNow`", () => {
+    const h = setup();
+    const bystander = h.add(3, "seat1");
+    const busy = (player) => player.busy.map((message) => JSON.parse(message[1]));
+    h.pair();
+    assert.deepEqual(busy(bystander), [], "nothing while they only wait and agree");
+    assert.equal(h.lobby.playingNow(h.a), false);
+    h.choose(h.a, "agree");
+    h.choose(h.b, "agree");
+    assert.equal(h.starts.length, 1);
+    assert.equal(h.lobby.playingNow(h.a), true);
+    assert.equal(h.lobby.playingNow(h.b), true);
+    assert.equal(h.lobby.playingNow(bystander), false);
+    assert.deepEqual(busy(bystander).at(-1), { matches: [{ ids: [1, 2], at: { x: 0, y: 0, z: 0 } }] });
+    assert.deepEqual(busy(h.a).at(-1), { matches: [{ ids: [1, 2], at: { x: 0, y: 0, z: 0 } }] }, "the players are told too: they know what to leave alone");
+
+    // Somebody who comes in later asks for it with the rest of the table's state.
+    const late = h.add(4, "seat3");
+    h.client("kcdc-gamemode:dice.sync", late);
+    assert.deepEqual(busy(late).at(-1), { matches: [{ ids: [1, 2], at: { x: 0, y: 0, z: 0 } }] });
+
+    h.context.Dice.stop(1);
+    assert.equal(h.lobby.playingNow(h.a), false);
+    assert.deepEqual(busy(bystander).at(-1), { matches: [] }, "and told again when it ends");
+});
+
+test("a table a world resource places later gets a lobby within two seconds, and the log says the tables changed (KCDC 1.7.2)", () => {
+    const h = setup();
+    const before = h.areas.length;
+    h.place({ id: "table9", position: { x: 40, y: 0, z: 0 }, seats: ["seat9", "seat10"] });
+    h.advance(1_000);
+    assert.equal(h.areas.length, before, "not yet: it looks again every two seconds");
+    h.advance(1_100);
+    assert.equal(h.areas.length, before + 1, "an area for it, like the level's own");
+    assert.ok(h.areas.at(-1).id.endsWith(":table9"));
+    assert.ok(h.logs.some((line) => /^dice: as mesas mudaram: 3 mesas de dados agora$/.test(line)), h.logs.join("|"));
+
+    const c = h.add(3, "seat9");
+    c.position.x = 40;
+    h.advance(300);
+    assert.equal(JSON.parse(c.messages.at(-1)[1]).tables.map((row) => row.id)[0], "table9", "a player who stands there is offered it");
+});
+
+test("a table that is taken away ends the setup at it, tells whoever was waiting, and is no longer offered (KCDC 1.7.2)", () => {
+    const h = setup();
+    h.interact(h.b);
+    const waiting = h.b.chat.length;
+    h.takeAway("table1");
+    h.takeAway("table1quest");
+    h.advance(2_100);
+    assert.ok(h.areas.filter((area) => area.id.endsWith(":table1") || area.id.endsWith(":table1quest")).every((area) => !area.exists), "the areas are taken down");
+    assert.ok(h.b.chat.length > waiting && h.b.chat.at(-1) === "A mesa de dados não existe mais.", "the one waiting is told");
+    assert.equal(JSON.parse(h.b.messages.at(-1)[1]).tables.length, 0, "and has nothing to join");
+    assert.ok(h.logs.some((line) => /as mesas mudaram: 1 mesas de dados agora/.test(line)), h.logs.join("|"));
+});
+
+test("a table placed in one world is not offered to a player of another (KCDC 1.7.2)", () => {
+    const h = setup();
+    h.place({ id: "table7", position: { x: 60, y: 0, z: 0 }, seats: ["seat7", "seat8"], world: 5 });
+    h.advance(2_100);
+    const here = h.add(5, "seat7", 5);
+    here.position.x = 60;
+    const there = h.add(6, "seat7", 0);
+    there.position.x = 60;
+    h.advance(300);
+    assert.equal(JSON.parse(here.messages.at(-1)[1]).tables.map((row) => row.id)[0], "table7", "in its own world it is offered");
+    assert.equal(JSON.parse(there.messages.at(-1)[1]).tables.length, 0, "in the other it is not");
 });

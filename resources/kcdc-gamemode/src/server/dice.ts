@@ -1,19 +1,28 @@
 import { labelFor } from "./acquaintances.js";
 import { coinsText, dicePots, STAKE_STEPS } from "./dice-pot.js";
+import { restartPending } from "./restart-notice.js";
+import { EDGE_M, reachTo } from "./reach.js";
 
 const STATE_EVENT = "kcdc-gamemode:dice.state";
 const INTERACT_EVENT = "kcdc-gamemode:dice.interact";
+const BUSY_EVENT = "kcdc-gamemode:dice.busy";
 const SETUP_TIMEOUT = 60_000;
 const DEFAULT_SCORE = 2000;
 const MIN_SCORE = 100;
 const MAX_SCORE = 100_000;
 const SCORE_STEP = 500;
+/** How often the lobby looks again for the tables a script or a world resource placed, or a level edit took out (KCDC 1.7.2: the stock lobby does the same). */
+const TABLE_SYNC_INTERVAL = 2_000;
 
 interface Table {
     readonly info: DiceTableInfo;
     readonly area: Area;
     /** Shared by catalog rows that are one physical table on different quest layers. */
     readonly station: string;
+    /** Where it stands, kept as plain numbers: a table does not move, and every player is measured against every table four times a second (2026-10-27). */
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
 }
 
 interface Lobby {
@@ -64,8 +73,8 @@ const stakeText = (stake: number): string => (stake === 0 ? "sem aposta" : `apos
 /** The keys of the game's dice table, said to both when a match starts. */
 const TABLE_KEYS = "Teclas padrão da mesa: E marca um dado, F pontua e joga o resto, Q pontua e passa a vez; segure Esc para desistir. No controle: A marca, X pontua, Y passa, segure B.";
 
-/** How near a table a player stands to play at it: the radius of the table's area. */
-const TABLE_REACH_M = 3;
+/** How near a table a player stands to play at it: the radius of the table's area, the one reach of our prompts to its middle (`reach.ts`). */
+const TABLE_REACH_M = reachTo(EDGE_M.table);
 
 /** Retries of a table list that came back empty at start, in case the level was not there yet. */
 const TABLE_RETRY_MS = [30_000, 120_000];
@@ -76,10 +85,17 @@ class DiceLobby {
     private readonly tables: Table[] = [];
     private readonly lobbies = new Map<string, Lobby>();
     private readonly members = new Map<number, Member>();
+    /** Players in a match now, by network id. */
+    private readonly playing = new Set<number>();
+    /** The matches running now, by match id: the two players and the table's centre, told to every machine (`dice-quiet.ts`). */
+    private readonly running = new Map<number, { readonly ids: [number, number]; readonly at: { x: number; y: number; z: number } }>();
     private readonly invitations = new Map<number, Invitation>();
     /** The tables whose area each player stands in, from areaEnter/areaExit. */
     private readonly inside = new Map<number, Set<Table>>();
     private nextToken = 1;
+    private nextTableSync = 0;
+    /** Which tables each virtual world has, from `Dice.tables(world)`: a table can be placed in, or taken out of, one world only (KCDC 1.7.2). */
+    private readonly available = new Map<number, Set<string>>();
 
     install(): void {
         Messages.handle("playground:freeDice", (payload, reply) => {
@@ -91,7 +107,10 @@ class DiceLobby {
             for (const delay of TABLE_RETRY_MS) setTimeout(() => { if (this.tables.length === 0) this.setupTables(); }, delay);
         }
         const timer = setInterval(() => this.tick(), 250);
-        Events.onClient("kcdc-gamemode:dice.sync", (sender) => this.offer(sender as Player, true));
+        Events.onClient("kcdc-gamemode:dice.sync", (sender) => {
+            this.offer(sender as Player, true);
+            (sender as Player).emit(BUSY_EVENT, this.busyJson());
+        });
         Events.onClient(INTERACT_EVENT, (sender, payload) => {
             let state: unknown;
             try {
@@ -139,18 +158,29 @@ class DiceLobby {
             if (this.members.get(entity.id)?.lobby.table === table || this.invitations.get(entity.id)?.table === table) this.leave(entity);
             this.refresh(entity);
         });
-        Events.on("diceMatchStart", (_match, first, second) => {
+        Events.on("diceMatchStart", (match, first, second) => {
             this.leave(first);
             this.leave(second);
+            this.playing.add(first.id);
+            this.playing.add(second.id);
+            this.running.set(match, { ids: [first.id, second.id], at: this.centreOf(first) });
+            this.tellBusy();
         });
-        Events.on("diceMatchEnd", (match) => {
+        Events.on("diceMatchEnd", (match, first, second) => {
             for (const lobby of this.lobbies.values()) {
                 if (lobby.match === match) lobby.match = 0;
             }
+            if (first) this.playing.delete(first.id);
+            if (second) this.playing.delete(second.id);
+            // A player who has gone since is null here: the match itself remembers who played it.
+            for (const id of this.running.get(match)?.ids ?? []) this.playing.delete(id);
+            if (this.running.delete(match)) this.tellBusy();
         });
+        Events.on("playerDisconnect", (player) => this.playing.delete(player.id));
         Events.on("resourceStop", (name) => {
             if (name !== "kcdc-gamemode") return;
             clearInterval(timer);
+            dicePots.stop();
             for (const lobby of this.lobbies.values()) {
                 this.cancel(lobby);
                 if (lobby.match) Dice.stop(lobby.match);
@@ -162,16 +192,72 @@ class DiceLobby {
 
     /** One area per table of the level. Returns how many tables there are; said in the log, since nothing works without them. */
     private setupTables(): number {
-        for (const info of Dice.tables()) {
+        this.syncTables();
+        const stations = new Set(this.tables.map((table) => table.station)).size;
+        console.log(this.tables.length === 0 ? "dice: o nível ainda não listou nenhuma mesa de dados" : `dice: ${stations} mesas de dados no nível (${this.tables.length} contando as camadas de missão)`);
+        return this.tables.length;
+    }
+
+    /**
+     * Follows `Dice.tables()` (KCDC 1.7.2): the level's own tables are there from the start, but `SmartObject.spawn` and the world resources (the World Builder's
+     * dice tables) place more later, and `SmartObject.remove` or taking a placed one down takes them away again. Returns whether the set of tables changed.
+     */
+    private syncTables(): boolean {
+        this.nextTableSync = Date.now() + TABLE_SYNC_INTERVAL;
+        // The global world sees every world's tables, so its list is the union the areas cover.
+        const listed = Dice.tables();
+        const ids = new Set(listed.map((info) => info.id));
+        let changed = false;
+        for (const table of this.tables.filter((table) => !ids.has(table.info.id))) {
+            this.dropTable(table);
+            changed = true;
+        }
+        // Asked again on use, for the worlds the players are in now.
+        this.available.clear();
+        for (const info of listed) {
             if (this.tables.some((table) => table.info.id === info.id)) continue;
             const area = Area.create({ id: `kcdc-gamemode:dice:${info.id}`, name: "Dice table", type: "sphere", position: new Vector3(info.position.x, info.position.y, info.position.z), radius: TABLE_REACH_M, labels: ["dice"] });
             // Quest layers can place the same table twice; both rows seat the same chairs.
             const twin = this.tables.find((other) => Math.hypot(other.info.position.x - info.position.x, other.info.position.y - info.position.y, other.info.position.z - info.position.z) < 1);
-            this.tables.push({ info, area, station: twin?.station ?? info.id });
+            this.tables.push({ info, area, station: twin?.station ?? info.id, x: info.position.x, y: info.position.y, z: info.position.z });
+            changed = true;
         }
-        const stations = new Set(this.tables.map((table) => table.station)).size;
-        console.log(this.tables.length === 0 ? "dice: o nível ainda não listou nenhuma mesa de dados" : `dice: ${stations} mesas de dados no nível (${this.tables.length} contando as camadas de missão)`);
-        return this.tables.length;
+        return changed;
+    }
+
+    /** A table that is gone ends the setups at it; a match already running is Dice's to finish. */
+    private dropTable(table: Table): void {
+        const gone = "A mesa de dados não existe mais.";
+        for (const lobby of [...this.lobbies.values()]) {
+            if (lobby.table !== table) continue;
+            // cancel() tells only a negotiating pair; whoever is still waiting is told here.
+            for (const member of lobby.members) {
+                if (!lobby.negotiation?.players.includes(member)) say(member.player, gone);
+            }
+            this.cancel(lobby, gone);
+            if (!lobby.match) this.lobbies.delete(lobby.key);
+        }
+        for (const invitation of new Set(this.invitations.values())) {
+            if (invitation.table === table) this.cancelInvitation(invitation.first.id, gone);
+        }
+        this.tables.splice(this.tables.indexOf(table), 1);
+        table.area.destroy();
+        for (const [id, tables] of this.inside) {
+            if (!tables.delete(table)) continue;
+            if (!tables.size) this.inside.delete(id);
+            const player = Player.getById(id);
+            if (player) this.refresh(player);
+        }
+    }
+
+    /** Whether the world has the table: the lobby's areas cover every world's tables at once (KCDC 1.7.2: a table can be in one world only). */
+    private availableIn(world: number, table: Table): boolean {
+        let ids = this.available.get(world);
+        if (!ids) {
+            ids = new Set(Dice.tables(world).map((info) => info.id));
+            this.available.set(world, ids);
+        }
+        return ids.has(table.info.id);
     }
 
     /** Whether `player` stands at `table`: by the area's own events, or by the distance, in case an event was missed. */
@@ -180,14 +266,14 @@ class DiceLobby {
     }
 
     private eligible(player: Player, table: Table, world: number): boolean {
-        return player.ready && player.health > 0 && player.virtualWorld === world && table.area.exists && table.area.enabled && (table.area.containsPlayer(player) || this.distance(player, table) <= TABLE_REACH_M) && Dice.matchOf(player.id) === 0;
+        return player.ready && player.health > 0 && player.virtualWorld === world && this.availableIn(world, table) && table.area.exists && table.area.enabled && (table.area.containsPlayer(player) || this.distance(player, table) <= TABLE_REACH_M) && Dice.matchOf(player.id) === 0;
     }
 
     /** Server-resource request only. Waiting lobbies and invitations occupy a table too. */
     private teleportToFreeTable(player: Player): { message?: string; error?: string } {
         if (!player.ready || !player.alive || player.mounted || Dice.matchOf(player.id) || Crafting.session(player)) return { error: "Leave the current activity before teleporting." };
         const tables = this.tables.filter((table) => {
-            if (table.info.id !== table.station) return false;
+            if (table.info.id !== table.station || !this.availableIn(player.virtualWorld, table)) return false;
             const lobby = this.lobbies.get(`${player.virtualWorld}:${table.station}`);
             if (lobby && (lobby.match || lobby.negotiation || lobby.members.size)) return false;
             if ([...this.invitations.values()].some((invitation) => invitation.first.virtualWorld === player.virtualWorld && invitation.table.station === table.station)) return false;
@@ -206,8 +292,11 @@ class DiceLobby {
     }
 
     private distance(player: Player, table: Table): number {
-        const p = player.position, q = table.info.position;
-        return Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+        return this.distanceFrom(player.position, table);
+    }
+
+    private distanceFrom(p: { x: number; y: number; z: number }, table: Table): number {
+        return Math.hypot(p.x - table.x, p.y - table.y, p.z - table.z);
     }
 
     private refresh(player: Player): void {
@@ -273,11 +362,21 @@ class DiceLobby {
     }
 
     private tick(): void {
+        if (Date.now() >= this.nextTableSync && this.syncTables()) console.log(`dice: as mesas mudaram: ${new Set(this.tables.map((table) => table.station)).size} mesas de dados agora`);
         // Only players standing at a table can change what they are offered (or who just walked off one: their offer
         // still lists it).
         for (const player of Player.all()) {
             const offered = (this.offers.get(player.id)?.tables.length ?? 0) > 0;
-            if (this.inside.has(player.id) || this.members.has(player.id) || offered || this.tables.some((table) => this.distance(player, table) <= TABLE_REACH_M)) this.refresh(player);
+            if (this.inside.has(player.id) || this.members.has(player.id) || offered) {
+                this.refresh(player);
+                continue;
+            }
+            // The player's place is read once, not once for each table of the level (every quarter second, for everybody: 2026-10-25, perf-watch), and copied
+            // into plain numbers: each `.x` of an engine's vector is a call into the engine, and 73 tables by thirty players by three of them was 2.7 ms a look
+            // (2026-10-28).
+            const place = player.position;
+            const at = { x: place.x, y: place.y, z: place.z };
+            if (this.tables.some((table) => this.distanceFrom(at, table) <= TABLE_REACH_M)) this.refresh(player);
         }
         for (const invitation of new Set(this.invitations.values())) {
             if (Date.now() >= invitation.deadline) this.cancelInvitation(invitation.first.id, "O convite para os dados expirou.");
@@ -378,6 +477,10 @@ class DiceLobby {
         // Detach before close: dialogueClosed is synchronous and means cancel
         // only while these sessions still belong to a pending negotiation.
         this.cancel(lobby);
+        if (restartPending()) {
+            for (const member of negotiation.players) Chat.sendToPlayer(member.player, "O servidor vai reiniciar em instantes: joguem depois que ele voltar.");
+            return;
+        }
         const first = negotiation.players.find((member) => member.seat === lobby.table.info.seats[0])!;
         const second = negotiation.players.find((member) => member !== first)!;
         // The stake from both, and their dice out of the inventory for the match (the game's own dice screen stays away).
@@ -492,6 +595,54 @@ class DiceLobby {
         if (this.distance(a, first) > 10 && this.distance(b, second) > 10) return null;
         const side = (player: Player, table: Table) => `${player.nickname} a ${this.distance(player, table).toFixed(1)} m da mesa ${table.info.id}${this.inside.get(player.id)?.has(table) ? " (dentro da área)" : ""}`;
         return `${side(a, first)}; ${side(b, second)}; alcance ${TABLE_REACH_M} m${a.virtualWorld !== b.virtualWorld ? "; mundos diferentes" : ""}`;
+    }
+
+    /** Whether the player sits at a dice table now, waiting or playing: their place is not kept meanwhile (`position.ts`). */
+    seated(player: Player): boolean {
+        return this.members.has(player.id) || this.playing.has(player.id);
+    }
+
+    /**
+     * Whether the player is in a match that is running (not waiting at the table): nobody outside the game talks to them, follows
+     * them or trades with them, and their table's sounds are stopped on every other machine (2026-10-20).
+     */
+    playingNow(player: Player): boolean {
+        return this.playing.has(player.id);
+    }
+
+    /** The centre of the table nearest the player: the one `Dice.start` sat them at. */
+    private centreOf(player: Player): { x: number; y: number; z: number } {
+        let best: Table | undefined;
+        for (const table of this.tables) {
+            if (best === undefined || this.distance(player, table) < this.distance(player, best)) best = table;
+        }
+        const at = best?.info.position ?? player.position;
+        return { x: at.x, y: at.y, z: at.z };
+    }
+
+    /** The matches running, as the clients read them (`dice-quiet.ts`). */
+    busyJson(): string {
+        return JSON.stringify({ matches: [...this.running.values()].map((match) => ({ ids: match.ids, at: match.at })) });
+    }
+
+    /** Every machine is told who is playing, whenever a match begins or ends. */
+    private tellBusy(): void {
+        const text = this.busyJson();
+        for (const player of Player.all()) player.emit(BUSY_EVENT, text);
+    }
+
+    /** Before an announced restart: every pending agreement undone and every match stopped, settled as at any end. */
+    stopAll(): string {
+        let stopped = 0;
+        for (const lobby of this.lobbies.values()) {
+            this.cancel(lobby);
+            if (lobby.match) {
+                for (const member of [...this.members.values()].filter((one) => one.lobby === lobby)) Chat.sendToPlayer(member.player, "O jogo de dados foi encerrado: o servidor vai reiniciar. A aposta e os dados voltam para vocês.");
+                Dice.stop(lobby.match);
+                stopped += 1;
+            }
+        }
+        return `${stopped} partida(s) de dados encerrada(s) antes do reinício`;
     }
 
     /** Two players who already agreed to play (the talk menu, `encounters.ts`): seated at the table they share to agree the score. */

@@ -78,9 +78,9 @@ test("every relation the page offers sits in the generation its name says", () =
     assert.deepEqual(rows, {
         bisavo: "bisavos", bisava: "bisavos",
         avo: "avos", ava: "avos",
-        pai: "pais", mae: "pais", tio: "pais", tia: "pais",
-        esposo: "geracao", esposa: "geracao", irmao: "geracao", irma: "geracao", primo: "geracao", prima: "geracao",
-        filho: "filhos", filha: "filhos", filho_adotivo: "filhos", filha_adotiva: "filhos", filho_bastardo: "filhos", filha_bastarda: "filhos", sobrinho: "filhos", sobrinha: "filhos",
+        pai: "pais", mae: "pais", tio: "pais", tia: "pais", sogro: "pais", sogra: "pais", padrasto: "pais", madrasta: "pais",
+        esposo: "geracao", esposa: "geracao", companheiro: "geracao", companheira: "geracao", irmao: "geracao", irma: "geracao", primo: "geracao", prima: "geracao", cunhado: "geracao", cunhada: "geracao",
+        filho: "filhos", filha: "filhos", filho_adotivo: "filhos", filha_adotiva: "filhos", filho_bastardo: "filhos", filha_bastarda: "filhos", sobrinho: "filhos", sobrinha: "filhos", genro: "filhos", nora: "filhos", enteado: "filhos", enteada: "filhos",
         neto: "netos", neta: "netos",
         bisneto: "bisnetos", bisneta: "bisnetos",
     });
@@ -412,7 +412,84 @@ test("every relation turns around, for either gender, into one of the opposite g
     assert.equal(api.inverseRelation("filho_bastardo", "male"), "pai");
     assert.equal(api.inverseRelation("filha_adotiva", "female"), "mae");
     assert.equal(api.inverseRelation("esposa", null), null, "no gender, no word");
-    assert.equal(api.inverseRelation("sogra", "male"), null, "a relation the catalog does not have");
+    assert.equal(api.inverseRelation("tio-avo", "male"), null, "a relation the catalog does not have");
+});
+
+test("the other side of a marriage and the step-family turn around too, by the gender of who adds them (2026-10-25)", () => {
+    const { api } = load();
+    const turned = (relation, gender) => api.inverseRelation(relation, gender);
+    assert.deepEqual([turned("sogra", "male"), turned("sogra", "female"), turned("sogro", "male")], ["genro", "nora", "genro"], "the mother-in-law has a son-in-law or a daughter-in-law");
+    assert.deepEqual([turned("genro", "male"), turned("nora", "female"), turned("genro", "female")], ["sogro", "sogra", "sogra"]);
+    assert.deepEqual([turned("cunhado", "male"), turned("cunhado", "female"), turned("cunhada", "female")], ["cunhado", "cunhada", "cunhada"]);
+    assert.deepEqual([turned("padrasto", "male"), turned("madrasta", "female"), turned("enteado", "male"), turned("enteada", "female")], ["enteado", "enteada", "padrasto", "madrasta"]);
+    assert.deepEqual([turned("companheiro", "male"), turned("companheira", "female"), turned("companheira", "male")], ["companheiro", "companheira", "companheiro"]);
+});
+
+test("in-laws, step-relatives and the partner of a union are relatives of the tree and no more: none is an heir, and a mirror is made for each", () => {
+    const { api, linked } = load();
+    for (const [relation, name] of [["sogro", "Hans"], ["sogra", "Anezka"], ["cunhado", "Petr"], ["cunhada", "Eliska"], ["genro", "Vaclav"], ["nora", "Dorota"], ["padrasto", "Jindrich"], ["enteada", "Marketa"], ["companheira", "Katka"]]) {
+        const made = api.addPerson(ME, relation, undefined, name);
+        assert.equal(made.ok, true, relation);
+    }
+    const rows = Object.fromEntries(plain(api.listFamily(ME)).map((person) => [person.relation, person.row]));
+    assert.deepEqual(rows, { sogro: "pais", sogra: "pais", cunhado: "geracao", cunhada: "geracao", genro: "filhos", nora: "filhos", padrasto: "pais", enteada: "filhos", companheira: "geracao" });
+
+    // A player added as a mother-in-law: the one who adds is her daughter-in-law in her tree.
+    const made = linked(ME, "sogra", undefined, "Anezka Kovar", OTHER, { name: "Dorota Capon", gender: "female" });
+    assert.equal(made.mirror.kind, "added");
+    assert.equal(plain(api.listFamily(OTHER))[0].label, "Nora");
+    assert.deepEqual(plain(api.familyHeirs(ME)), [], "an in-law is no heir");
+    assert.deepEqual(plain(api.familyHeirs(OTHER)), [], "and neither is the daughter-in-law of one");
+    assert.deepEqual(plain(api.spousesOf(ME)), [], "nor is any of them a spouse");
+});
+
+test("a partner of a union is not married, and not alone: 'em união' for a living one; a spouse is still the first word (2026-10-25)", () => {
+    const { api } = load();
+    assert.deepEqual(plain(api.maritalStatus(ME, "female")), { label: "Caelebs", gloss: "solteira" });
+    const partner = api.addPerson(ME, "companheiro", undefined, "Jindrich Kovar").person;
+    assert.deepEqual(plain(api.maritalStatus(ME, "female")), { label: "Coniuncta", gloss: "em união" });
+    assert.deepEqual(plain(api.maritalStatus(ME, "male")), { label: "Coniunctus", gloss: "em união" });
+    const wife = api.addPerson(ME, "esposa", undefined, "Dorota").person;
+    assert.equal(api.maritalStatus(ME, "male").gloss, "casado", "the marriage comes first");
+    api.editPerson(ME, wife.id, { deceased: true });
+    assert.equal(api.maritalStatus(ME, "male").gloss, "em união", "a widower with a living partner is in a union");
+    api.editPerson(ME, partner.id, { deceased: true });
+    assert.equal(api.maritalStatus(ME, "male").gloss, "viúvo", "and a widower again when the partner dies too");
+});
+
+test("somebody whose tree names a player as their partner puts that player in a union, and the other side of a link they made does not count twice", () => {
+    const { api, linked } = load();
+    const made = linked(OTHER, "companheira", undefined, "Dorota", ME, { name: "Mauro Capon", gender: "male" });
+    assert.equal(made.mirror.kind, "added");
+    assert.equal(api.maritalStatus(OTHER, "male").gloss, "em união", "by his own tree");
+    assert.equal(api.maritalStatus(ME, "female").gloss, "em união", "and by her mirror of it");
+    // The mirror is an echo of his word: with the partner of his tree marked dead, he is not in a union by her mirror.
+    api.editPerson(OTHER, plain(api.listFamily(OTHER))[0].id, { deceased: true });
+    assert.equal(api.maritalStatus(OTHER, "male").gloss, "solteiro");
+});
+
+test("the living spouses of a player: the ones of their own tree, linked or only a name, and those whose trees name them; nobody twice, nobody dead", () => {
+    const named = load();
+    named.api.addPerson(ME, "esposa", undefined, "Alzbeta Capon");
+    assert.deepEqual(plain(named.api.spousesOf(ME)), [{ steamId: null, name: "Alzbeta Capon", relation: "esposa" }]);
+
+    const { api, linked } = load();
+    const added = linked(ME, "esposa", undefined, "Dorota", OTHER, { name: "Mauro Capon", gender: "male" });
+    assert.equal(added.mirror.kind, "added");
+    assert.deepEqual(plain(api.spousesOf(ME)), [{ steamId: OTHER, name: "Dorota", relation: "esposa" }], "linked: the player is named");
+    assert.deepEqual(plain(api.spousesOf(OTHER)), [{ steamId: ME, name: "Mauro Capon", relation: "esposo" }], "and so is he in hers, once, though both trees say it");
+
+    const dead = api.editPerson(ME, added.person.id, { deceased: true });
+    assert.equal(dead.ok, true);
+    assert.deepEqual(plain(api.spousesOf(ME)), [], "a spouse marked dead is not a consort");
+    assert.deepEqual(plain(api.spousesOf(OTHER)).map((spouse) => spouse.steamId), [ME], "though he is still her husband in her own tree");
+    assert.deepEqual(plain(api.spousesOf("")), []);
+});
+
+test("whose tree names a player as their spouse, of its own accord, is that player's spouse even when the player's own tree is empty", () => {
+    const sut = load();
+    sut.files.set(FILE, JSON.stringify({ [OTHER]: { persons: [{ id: "p1", relation: "esposo", degree: null, name: "Mauro", createdAt: 1, steamId: ME }], updatedAt: 1 } }));
+    assert.deepEqual(plain(sut.api.spousesOf(ME)), [{ steamId: OTHER, name: "", relation: null }]);
 });
 
 test("a relative who is a player gets the one who added them in their own tree, as the relation turned around", () => {

@@ -17,6 +17,12 @@
  * traveller picked at random per look, which made a road with ten travellers a tenth as dangerous for each).
  *
  * `/emboscada` (administrators) says how it goes, switches it off and on, and sends a gang at a player to try it.
+ *
+ * Run by the victim's own game (user, 2026-10-18: "bati neles, correram estáticos e não lutaram comigo nem foram atrás de mim,
+ * só foram embora para sempre"). A body is run by the client the server elects, and each client runs a limited number: near a
+ * village's herds the gang went to nobody, ran on the spot and gave up. The gang is pinned to the victim (`npc.pin`) from the
+ * start, an order to fight that ended is given again, and a bandit who stands still for a few seconds away from his target is
+ * sent running at it along the server's route; each of them is told in the log (`ambush: ...`).
  */
 
 import { banditCamps, banditSettings } from "./bandits.js";
@@ -51,6 +57,18 @@ export const ambushSettings = {
     campMarginM: 220,
     gangMin: 2,
     gangMax: 3,
+    /** Of the gangs, this share are Cumans: more of them, one with a bow, and they do not talk -- they strike. */
+    cumanChance: 0.35,
+    cumanMin: 3,
+    cumanMax: 4,
+    /**
+     * A place the map names counts as a village only when its outline is no wider than this: the level names its countryside
+     * too, and a road between villages was never far enough from every named place (not one gang was started from 2026-10-15 to
+     * 2026-10-19).
+     */
+    settlementMaxM: 900,
+    /** The reasons nobody was stopped are written to the log this often. */
+    reportEveryMs: 10 * 60_000,
     /** Where the gang comes from: this far behind the player, out of their sight. */
     spawnDistanceM: 30,
     /** How close the leader comes before making his demand. */
@@ -66,6 +84,10 @@ export const ambushSettings = {
     corpseMs: 10 * 60_000,
     corpseClearM: 50,
     retryMs: 4_000,
+    /** Standing this long, farther than `chaseFromM` from the one he is after: sent running there by the server's route. */
+    stillMs: 3_000,
+    chaseFromM: 3,
+    chaseEveryMs: 5_000,
     /** What they ask: this share of the purse, in whole coins, between the two bounds (units of the money item). */
     demandShare: 0.3,
     demandMin: 10 * MONEY_UNIT,
@@ -78,6 +100,8 @@ type Stage = "approach" | "demand" | "fight" | "leaving" | "over";
 
 interface Ambush {
     readonly id: number;
+    /** Highwaymen ask for the purse; Cumans strike. */
+    readonly kind: "bandits" | "cumans";
     readonly victim: Player;
     readonly gang: number[];
     readonly leader: number;
@@ -92,6 +116,8 @@ interface Ambush {
     readonly deadAt: Map<number, number>;
     /** When the victim was last within reach of the gang, for giving up a chase. */
     seenAt: number;
+    /** Where each bandit was last seen to move, and when: one who stands still is sent running. */
+    readonly watch: Map<number, { x: number; y: number; at: number; chaseAt: number }>;
 }
 
 export interface AmbushStatus {
@@ -130,6 +156,11 @@ export class Ambushes {
     private nextStart = 0;
     private started = 0;
     private probing = false;
+    /** Why players were not stopped since the last report, and each player's last reason, for `/emboscada`. */
+    private readonly reasons = new Map<string, number>();
+    readonly lastReason = new Map<number, string>();
+    private looks = 0;
+    private reportedAt = 0;
 
     constructor(
         private readonly settings = ambushSettings,
@@ -174,6 +205,11 @@ export class Ambushes {
         return [...this.ambushes.values()].filter((ambush) => ambush.stage === "approach" || ambush.stage === "demand" || ambush.stage === "fight" || (ambush.stage === "leaving" && this.living(ambush).length > 0)).length;
     }
 
+    /** The bodies of the gangs that are out now (highwaymen, Cumans): what a lock-on prefers over a player (`lockon-priority.ts`). */
+    gangIds(): number[] {
+        return [...this.byNpc.keys()];
+    }
+
     isRoadBandit(npcId: number): boolean {
         return this.byNpc.has(npcId);
     }
@@ -188,7 +224,7 @@ export class Ambushes {
 
     /** Why this player may not be stopped now, or "" when they may. */
     reasonNotTo(player: Player, moved: number): string {
-        if (!player.ready || !player.alive || player.virtualWorld !== 0) {
+        if (!player.ready || !player.alive || (player.virtualWorld !== 0 && player.virtualWorld !== 0xffffffff)) {
             return "fora do mundo";
         }
         if ((this.notBefore.get(player.id) ?? 0) > this.now()) {
@@ -207,8 +243,20 @@ export class Ambushes {
         if (banditCamps.camps.some((camp) => flat(camp.center, position) < this.settings.campMarginM)) {
             return "perto de um acampamento";
         }
-        // A place the map names (a village, a town, a castle), or houses all around: not a road between places.
-        if (Area.nearby(position, this.settings.settlementMarginM).some((area) => area.location !== "")) {
+        // A place the map names (a village, a town, a castle), or houses all around: not a road between places. Only an outline
+        // the size of a village counts: the countryside has names too.
+        const village = (area: Area): boolean => {
+            if (area.location === "") {
+                return false;
+            }
+            try {
+                const { min, max } = area.bounds;
+                return Math.max(max.x - min.x, max.y - min.y) <= this.settings.settlementMaxM;
+            } catch {
+                return true;
+            }
+        };
+        if (Area.nearby(position, this.settings.settlementMarginM).some(village)) {
             return "perto de um povoado";
         }
         if (Area.nearby(position, this.settings.housesMarginM).some((area) => area.labels.some((label) => /^(private|personal|interior|castle)$/i.test(label)))) {
@@ -234,7 +282,14 @@ export class Ambushes {
         if (!this.enabled || this.probing || now < this.nextStart || this.active() >= this.settings.maxActive) {
             return;
         }
-        const candidates = players.filter((player) => this.reasonNotTo(player, moved.get(player.id) ?? 0) === "");
+        const candidates = players.filter((player) => {
+            const reason = this.reasonNotTo(player, moved.get(player.id) ?? 0);
+            this.lastReason.set(player.id, reason === "" ? "pode ser parado" : reason);
+            this.reasons.set(reason === "" ? "pode ser parado" : reason, (this.reasons.get(reason === "" ? "pode ser parado" : reason) ?? 0) + 1);
+            return reason === "";
+        });
+        this.looks += 1;
+        this.report(now);
         if (candidates.length === 0) {
             return;
         }
@@ -266,6 +321,25 @@ export class Ambushes {
             });
     }
 
+    /** Every so often, why nobody was stopped: the next report after a quiet road says where to look. */
+    private report(now: number): void {
+        if (this.reportedAt === 0) {
+            this.reportedAt = now;
+            return;
+        }
+        if (now - this.reportedAt < this.settings.reportEveryMs) {
+            return;
+        }
+        if (this.reasons.size > 0) {
+            const parts = [...this.reasons].sort((a, b) => b[1] - a[1]).map(([reason, count]) => `${reason} ${count}`);
+            const seen = [...this.surfaces].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([surface, count]) => `${surface} ${count}`);
+            console.log(`ambush: em ${this.looks} olhada(s): ${parts.join(", ")}; chão lido: ${seen.join(", ") || "nenhum"}; gangues desde o início: ${this.started}`);
+        }
+        this.reasons.clear();
+        this.looks = 0;
+        this.reportedAt = now;
+    }
+
     // -----------------------------------------------------------------------------------------
     // The gang.
 
@@ -274,7 +348,9 @@ export class Ambushes {
         if (!Navigation.ready) {
             return false;
         }
-        const count = this.settings.gangMin + Math.floor(this.random() * (this.settings.gangMax - this.settings.gangMin + 1));
+        const kind: Ambush["kind"] = this.random() < this.settings.cumanChance ? "cumans" : "bandits";
+        const [least, most] = kind === "cumans" ? [this.settings.cumanMin, this.settings.cumanMax] : [this.settings.gangMin, this.settings.gangMax];
+        const count = least + Math.floor(this.random() * (most - least + 1));
         const souls = banditCamps.souls();
         const forward = groundForward(victim.rotation as Quaternion);
         const back = Math.atan2(-forward.y, -forward.x);
@@ -294,14 +370,21 @@ export class Ambushes {
                     soul: souls[Math.floor(this.random() * souls.length)] ?? "bandit",
                     position: point,
                     rotation: yawTowards(from.x - point.x, from.y - point.y),
-                    name: "Salteador",
+                    name: kind === "cumans" ? "Cumano" : "Salteador",
                     nametag: false,
                     interactable: false,
                     lootable: true,
                     health: banditSettings.health,
                     maxHealth: banditSettings.health,
                 });
-                banditCamps.dress(npc, false);
+                if (kind === "cumans") {
+                    // The last of them shoots.
+                    banditCamps.dressCuman(npc, index === count - 1);
+                } else {
+                    banditCamps.dress(npc, false);
+                }
+                // The victim's own game runs them, whatever else it is running near there.
+                npc.pin(victim);
                 gang.push(npc.id);
             } catch (error: unknown) {
                 console.log(`ambush: um salteador não pôde ser criado: ${error instanceof Error ? error.message : String(error)}`);
@@ -317,6 +400,7 @@ export class Ambushes {
         const now = this.now();
         const ambush: Ambush = {
             id: this.nextId++,
+            kind,
             victim,
             gang,
             leader: gang[0]!,
@@ -328,6 +412,7 @@ export class Ambushes {
             orderedAt: new Map(),
             deadAt: new Map(),
             seenAt: now,
+            watch: new Map(),
         };
         this.ambushes.set(ambush.id, ambush);
         gang.forEach((id) => this.byNpc.set(id, ambush));
@@ -337,7 +422,7 @@ export class Ambushes {
         for (const id of gang) {
             Npc.getById(id)?.follow(victim, { speed: "run", radius: 3 });
         }
-        console.log(`ambush: ${gang.length} salteador(es) atrás de ${victim.nickname} em ${from.x.toFixed(0)} ${from.y.toFixed(0)}`);
+        console.log(`ambush: ${gang.length} ${kind === "cumans" ? "cumano(s)" : "salteador(es)"} atrás de ${victim.nickname} em ${from.x.toFixed(0)} ${from.y.toFixed(0)}`);
         return true;
     }
 
@@ -468,6 +553,7 @@ export class Ambushes {
         }
         const from = ambush.victim.position;
         for (const npc of this.living(ambush)) {
+            npc.pin(null);
             npc.flee(from, { speed: "run", radius: 70 });
         }
         this.enter(ambush, "leaving");
@@ -522,6 +608,48 @@ export class Ambushes {
         }
     }
 
+    private noted = 0;
+    private notedAt = 0;
+
+    /** One line in the log about a bandit of a gang (at most forty a minute): what he was told, who runs him, how far he is. */
+    private note(npc: Npc, target: Player, what: string): void {
+        const now = this.now();
+        if (now - this.notedAt > 60_000) {
+            this.notedAt = now;
+            this.noted = 0;
+        }
+        if (this.noted >= 40) {
+            return;
+        }
+        this.noted += 1;
+        const runner = npc.simulator;
+        console.log(`ambush: salteador ${npc.id} e ${target.nickname}, a ${Math.round(flat(npc.position, target.position))} m: ${what}; ${npc.status}, ${runner === null || runner === undefined ? "PARADO (nenhum jogo o roda)" : `rodado por ${runner.nickname}`}`);
+    }
+
+    /**
+     * A bandit who has stood where he is for `stillMs`, farther than `chaseFromM` from `target`, is sent running at it along
+     * the server's route. True when he was.
+     */
+    private chase(ambush: Ambush, npc: Npc, target: Player, now: number): boolean {
+        const here = npc.position;
+        const seen = ambush.watch.get(npc.id);
+        if (seen === undefined || flat(here, seen) > 0.7) {
+            ambush.watch.set(npc.id, { x: here.x, y: here.y, at: now, chaseAt: seen?.chaseAt ?? 0 });
+            return false;
+        }
+        if (now - seen.at < this.settings.stillMs || now < seen.chaseAt || flat(here, target.position) <= this.settings.chaseFromM) {
+            return false;
+        }
+        seen.chaseAt = now + this.settings.chaseEveryMs;
+        // The victim's game runs him: pinned again, in case the pin was lost (the victim went out of range and came back).
+        npc.pin(target.id === ambush.victim.id ? ambush.victim : target);
+        const goal = target.position;
+        const sent = npc.moveTo(new Vector3(goal.x, goal.y, goal.z), { speed: "run", radius: 1.8, pathfinding: Navigation.ready ? "server" : "game" });
+        this.note(npc, target, `parado há ${Math.round((now - seen.at) / 1000)} s: mandado correr até ele (${sent ? "aceito" : "RECUSADO"})`);
+        ambush.orderedAt.set(npc.id, now - this.settings.retryMs);
+        return true;
+    }
+
     private nearestPlayer(point: Vector3): number {
         let nearest = Number.POSITIVE_INFINITY;
         for (const player of Player.all()) {
@@ -559,11 +687,20 @@ export class Ambushes {
                 if (!victimHere || !ambush.victim.alive || gang.length === 0) {
                     this.leave(ambush, "");
                 } else if (leader !== null && leader.alive && distanceBetween(leader.position, ambush.victim.position) <= this.settings.demandRangeM) {
-                    this.makeDemand(ambush);
+                    if (ambush.kind === "cumans") {
+                        // Cumans do not bargain.
+                        leader.say("Hayde! Hayde!");
+                        this.fight(ambush, "Cumanos! Eles atacam sem dizer palavra.");
+                    } else {
+                        this.makeDemand(ambush);
+                    }
                 } else if (now - ambush.since >= this.settings.approachMs) {
                     this.leave(ambush, "");
                 } else {
                     for (const npc of gang) {
+                        if (this.chase(ambush, npc, ambush.victim, now)) {
+                            continue;
+                        }
                         if (now - (ambush.orderedAt.get(npc.id) ?? 0) >= this.settings.retryMs * 2) {
                             npc.follow(ambush.victim, { speed: "run", radius: 3 });
                             ambush.orderedAt.set(npc.id, now);
@@ -616,9 +753,17 @@ export class Ambushes {
                 }
                 for (const npc of gang) {
                     const target = Player.getById(ambush.targets.get(npc.id) ?? ambush.victim.id) ?? ambush.victim;
-                    const stalled = npc.status === "blocked" || npc.status === "failed";
-                    if (!ambush.orderedAt.has(npc.id) || (stalled && now - (ambush.orderedAt.get(npc.id) ?? 0) >= this.settings.retryMs)) {
-                        npc.attack(target);
+                    if (this.chase(ambush, npc, target, now)) {
+                        continue;
+                    }
+                    // An order that ended (the body stands, or reached its goal) is given again; one that failed, too.
+                    const ended = npc.status === "blocked" || npc.status === "failed" || npc.status === "idle" || npc.status === "reached";
+                    if (!ambush.orderedAt.has(npc.id) || (ended && now - (ambush.orderedAt.get(npc.id) ?? 0) >= this.settings.retryMs)) {
+                        const first = !ambush.orderedAt.has(npc.id);
+                        const ordered = npc.attack(target);
+                        if (first || !ordered) {
+                            this.note(npc, target, `ataque ${ordered ? "ordenado" : "RECUSADO"}`);
+                        }
                         ambush.orderedAt.set(npc.id, now);
                     }
                 }

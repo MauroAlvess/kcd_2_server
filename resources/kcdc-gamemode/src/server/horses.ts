@@ -10,7 +10,7 @@
  * "alforjes" (`horse-bags.ts`), a stash the server keeps and opens on the transfer screen, whose rows are kept here, with
  * the horse (`bags`).
  *
- * A horse that dies is forgotten, as in the game. `/cavalo` tells an owner where their horse is and calls it to them;
+ * A horse that dies is forgotten, as in the game -- and so is one that is knocked out (see `watchKnockouts`). `/cavalo` tells an owner where their horse is and calls it to them;
  * so do the panel's Chamar and X, the game's own whistle (`src/client/whistle.ts`), which on its own would whistle for a
  * horse a multiplayer player does not have.
  *
@@ -39,6 +39,13 @@ const REPLAN_AFTER_MS = 1_500;
 
 /** One whistle per player this often; the client already makes a held key one whistle. */
 const WHISTLE_EVERY_MS = 2_000;
+
+/**
+ * How far a whistle is told to the other players (user, 2026-10-22: "tem como colocar para os jogadores escutarem o assobio quando um jogador
+ * aperta X"): the game's own sound (`v_horse_whistle`) is heard to 20 m, so those a little further than that are told, and each client plays
+ * it on the whistler's body (`client/whistle.ts`).
+ */
+export const WHISTLE_HEARD_M = 30;
 
 interface Call {
     readonly playerId: number;
@@ -83,8 +90,11 @@ export interface BagRow {
     metadata?: Record<string, unknown>;
 }
 
-/** The most rows a horse's alforjes keep (the game's container takes 128). */
-export const MAX_BAG_ROWS = 96;
+/**
+ * The most rows a horse's alforjes keep: everything the game's container takes (`setInventory`: at most 128 rows). It was 96 until 2026-10-29, and a bag of 97 to 128 rows
+ * lost its last rows each time the screen closed.
+ */
+export const MAX_BAG_ROWS = 128;
 
 export interface SavedHorse {
     key: string;
@@ -102,6 +112,11 @@ export interface SavedHorse {
     bags?: BagRow[];
     /** Left free by its owner (user, 2026-10-17): anybody may mount it. Otherwise only the owner (and an administrator) does. */
     shared?: boolean;
+    /**
+     * The one X calls, of an owner who keeps several (user, 2026-10-19: "um jogador pode ter mais de um cavalo e escolher qual vai
+     * ficar ativo ao ser chamado no X"). One per owner at most; with none, or when it cannot come, X calls the nearest.
+     */
+    active?: true;
 }
 
 const records = new Map<string, SavedHorse>();
@@ -195,6 +210,18 @@ function load(): void {
                 savedAt: typeof raw.savedAt === "number" ? raw.savedAt : 0,
                 ...(cleanBags(raw.bags).length > 0 ? { bags: cleanBags(raw.bags) } : {}),
             });
+        }
+    }
+    // One horse X calls per owner: a file that says more keeps the first.
+    const activeOwners = new Set<string>();
+    for (const record of records.values()) {
+        if (record.active !== true) {
+            continue;
+        }
+        if (activeOwners.has(record.owner)) {
+            delete record.active;
+        } else {
+            activeOwners.add(record.owner);
         }
     }
     lastWritten = JSON.stringify([...records.values()].map(({ savedAt: _savedAt, ...rest }) => rest));
@@ -305,6 +332,9 @@ export function saveBags(key: string, rows: unknown): boolean {
         return false;
     }
     const clean = cleanBags(rows);
+    if (Array.isArray(rows) && clean.length < rows.length) {
+        console.log(`horses: nas alforjes de ${record.name || record.key} ${rows.length - clean.length} linha(s) de ${rows.length} não puderam ser guardadas (sem classe, quantidade inteira positiva ou além do limite de ${MAX_BAG_ROWS})`);
+    }
     if (clean.length > 0) {
         record.bags = clean;
     } else {
@@ -321,6 +351,182 @@ export function recordOf(key: string): SavedHorse | null {
 
 /** Called with a horse's record just before a dead horse is forgotten: its alforjes are the place to give back what was in them. */
 export const horseLost: Array<(record: SavedHorse, horse: Horse) => void> = [];
+
+/** A kept horse is lost for good: its alforjes are given back (`horseLost`), its record goes -- and with it the line in the owner's Animais -- and the file is written. */
+function lose(key: string, record: SavedHorse, horse: Horse, how: string): void {
+    console.log(`horses: o cavalo ${record.name || record.key} de ${record.ownerName} ${how}`);
+    for (const lost of horseLost) {
+        try {
+            lost(record, horse);
+        } catch (error: unknown) {
+            console.log(`horses: não consegui tratar as alforjes de ${record.name || record.key}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    forget(key);
+    persist();
+}
+
+/**
+ * A horse that is knocked out is a dead one (user, 2026-10-25: "matei o cavalo duas vezes, ele voltou à vida; devia ir embora definitivo e sumir dos meus
+ * animais"). The game holds a player's own horse immortal: a blow that would kill it knocks it out instead (`Horse.unconscious`, KCDC 1.7.0), it lies where
+ * it fell and gets up by itself some minutes later -- it never died, `horseDeath` never came, nothing here forgot it, and it went on in the owner's Animais.
+ * Here the knockout is the death. A kept horse seen knocked out on `KNOCKOUT_LOOKS` looks in a row, `KNOCKOUT_LOOK_MS` apart, is lost the way a dead one is
+ * (`lose`), made nobody's -- it is the game's "own horse" that cannot die -- and killed; if the game still keeps it alive `KNOCKOUT_FINISH_MS` later it is
+ * taken out of the world, so that it cannot get up. A horse nobody keeps is the game's to deal with.
+ */
+export const KNOCKOUT_LOOK_MS = 1_000;
+export const KNOCKOUT_LOOKS = 2;
+export const KNOCKOUT_FINISH_MS = 5_000;
+
+/** The kept horses seen knocked out at the last look, by horse id, and on how many looks in a row. */
+let knockedOut = new Map<number, number>();
+/** The horses given up for dead whose end is not certain yet: not filed again, whoever owns them for the moment. */
+const condemned = new Set<number>();
+
+/**
+ * A kept horse dies for real only while its owner is in the game (user, 2026-10-26: "cavalos só podem morrer de verdade se o dono estiver online"; three horses of
+ * players who were not there were shot dead in Raborsch, 2026-10-26 10:11-10:16 UTC). Whose horse is whose is the record's `owner` (a Steam id).
+ */
+export function ownerOnline(owner: string): boolean {
+    return owner !== "" && Player.all().some((player) => player.steamId === owner && player.ready);
+}
+
+/** How long after a horse's death with its owner away it is brought back (the engine is still finishing the death). */
+export const REVIVE_AFTER_MS = 300;
+
+/** A kept horse that died or was knocked out while its owner is away: it is brought back where it lies, at full health, and nothing is forgotten. */
+function spareHorse(horse: Horse, record: SavedHorse, how: string): void {
+    console.log(`horses: o cavalo ${record.name || record.key} de ${record.ownerName} ${how} com o dono fora do jogo: volta à vida`);
+    setTimeout(() => {
+        try {
+            horse.revive();
+        } catch (error: unknown) {
+            console.log(`horses: não consegui trazer ${record.name || record.key} de volta: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }, REVIVE_AFTER_MS);
+}
+
+export function watchKnockouts(): void {
+    if (stopping) {
+        return;
+    }
+    const seen = new Map<number, number>();
+    for (const [key, id] of [...liveByKey]) {
+        const horse = Horse.getById(id);
+        if (horse === null || horse.unconscious !== true) {
+            continue;
+        }
+        // Knocked out with the owner away, it gets up by itself, as the game has it: only an owner who is there loses a horse.
+        const kept = records.get(key);
+        if (kept !== undefined && !ownerOnline(kept.owner)) {
+            continue;
+        }
+        const looks = (knockedOut.get(id) ?? 0) + 1;
+        if (looks >= KNOCKOUT_LOOKS) {
+            endKnockedOut(key, horse);
+        } else {
+            seen.set(id, looks);
+        }
+    }
+    knockedOut = seen;
+}
+
+function endKnockedOut(key: string, horse: Horse): void {
+    const record = records.get(key);
+    if (record === undefined) {
+        return;
+    }
+    const id = horse.id;
+    const label = horse.name || record.name;
+    const owner = Player.all().find((player) => player.steamId === record.owner && player.ready) ?? null;
+    condemned.add(id);
+    lose(key, record, horse, `ficou desacordado e morre de vez (${record.soul})`);
+    try {
+        horse.giveTo(null);
+    } catch {
+        // Nobody's already, or the owner's connection is gone.
+    }
+    try {
+        horse.kill();
+    } catch (error: unknown) {
+        console.log(`horses: não consegui matar ${label || record.key}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    setTimeout(() => {
+        condemned.delete(id);
+        const left = Horse.getById(id);
+        if (left !== null && left.alive) {
+            console.log(`horses: o jogo manteve ${label || record.key} vivo; ele foi tirado do mundo`);
+            try {
+                left.destroy();
+            } catch {
+                // Gone already.
+            }
+        }
+    }, KNOCKOUT_FINISH_MS);
+    if (owner !== null) {
+        tell(owner, `${label ? `Seu cavalo ${label}` : "Seu cavalo"} morreu: ele já não está entre os seus animais.`);
+    }
+}
+
+/**
+ * The horses of a deleted character (2026-10-25, user: "ao apagar o personagem deve perder os cavalos, carroças e tudo, até apoiador"): taken out of the world and forgotten, with
+ * whatever their alforjes held. Forgotten first, so that their going is not taken for a loss. How many went.
+ */
+export function forgetHorsesOf(steamId: string): number {
+    if (steamId === "") {
+        return 0;
+    }
+    let count = 0;
+    for (const record of [...records.values()]) {
+        if (record.owner !== steamId) {
+            continue;
+        }
+        const id = liveByKey.get(record.key);
+        forget(record.key);
+        count += 1;
+        if (id !== undefined) {
+            try {
+                Horse.getById(id)?.destroy();
+            } catch {
+                // Gone already.
+            }
+        }
+    }
+    if (count > 0) {
+        persist();
+    }
+    return count;
+}
+
+/** The key a live horse is kept under, or null when it is nobody's. */
+export function keyOfHorse(horse: Horse): string | null {
+    return keyByLive.get(horse.id) ?? null;
+}
+
+/**
+ * One kept horse taken away from its owner for good, out of the world and forgotten, with what its alforjes held given back (`horseLost`):
+ * a supporter's gift handed over by mistake (2026-10-25, the administrator's "retirar benefícios"). False when it is not that player's.
+ */
+export function removeHorse(key: string, steamId: string): boolean {
+    const record = records.get(key);
+    if (steamId === "" || record === undefined || record.owner !== steamId) {
+        return false;
+    }
+    const id = liveByKey.get(key);
+    const horse = id === undefined ? null : Horse.getById(id);
+    if (horse !== null) {
+        lose(key, record, horse, "foi retirado por um administrador");
+        try {
+            horse.destroy();
+        } catch {
+            // Gone already.
+        }
+        return true;
+    }
+    forget(key);
+    persist();
+    return true;
+}
 
 /** Lets a horse go: it stays in the world, but it is nobody's any more and is not kept. */
 export function release(key: string): boolean {
@@ -339,6 +545,41 @@ export function release(key: string): boolean {
     }
     persist();
     return true;
+}
+
+/**
+ * Gives a horse of `steamId`'s to another player, who keeps it from then on (user, 2026-10-19: the horse "aparece nos meus
+ * animais e lá posso dar a algum jogador"). It goes as it is, with its alforjes; locked to its new owner, and not the one X calls.
+ */
+export function giveHorseTo(steamId: string, key: string, target: Player): Outcome {
+    const record = records.get(key);
+    if (steamId === "" || record === undefined || record.owner !== steamId) {
+        return { ok: false, message: "Esse cavalo não é seu." };
+    }
+    if (target.steamId === steamId) {
+        return { ok: false, message: "Esse cavalo já é seu." };
+    }
+    if (!STEAM_ID.test(target.steamId)) {
+        return { ok: false, message: `${target.nickname} entrou sem identificação Steam: não há como guardar o cavalo para ele.` };
+    }
+    const label = record.name !== "" ? record.name : "O cavalo";
+    const from = record.ownerName;
+    record.owner = target.steamId;
+    record.ownerName = target.nickname;
+    delete record.active;
+    delete record.shared;
+    persist();
+    const id = liveByKey.get(key);
+    const horse = id === undefined ? null : Horse.getById(id);
+    if (horse !== null) {
+        try {
+            horse.giveTo(target);
+        } catch {
+            // Taken back when the new owner next comes into the world.
+        }
+    }
+    console.log(`horses: ${from} deu o cavalo ${record.name || record.key} a ${target.nickname}`);
+    return { ok: true, message: `${label} agora é de ${target.nickname}.` };
 }
 
 /** Leaves a horse of `steamId`'s free for anybody to mount, or takes it back so that only they do. */
@@ -401,6 +642,32 @@ export function describeRoute(from: Vector3, to: Vector3): string {
     return `rota de ${path.points.length} cantos, ${Math.round(path.length)} m${path.complete ? "" : ", incompleta"}`;
 }
 
+/** The key of the horse X calls for this owner, or null when they chose none. */
+export function activeHorseOf(steamId: string): string | null {
+    for (const record of records.values()) {
+        if (record.owner === steamId && record.active === true) {
+            return record.key;
+        }
+    }
+    return null;
+}
+
+/** Makes one of the owner's horses the one X calls; the others are not, any more. */
+export function setActiveHorse(steamId: string, key: string): Outcome {
+    const record = records.get(key);
+    if (record === undefined || record.owner !== steamId || steamId === "") {
+        return { ok: false, message: "Esse cavalo não é seu." };
+    }
+    for (const other of records.values()) {
+        if (other.owner === steamId && other.key !== key && other.active === true) {
+            delete other.active;
+        }
+    }
+    record.active = true;
+    persist();
+    return { ok: true, message: `${record.name || "Seu cavalo"} é o cavalo que vem quando você aperta X.` };
+}
+
 /** The horse `key` of the player's -- or, with null, the nearest of them -- comes running, when it is near enough to hear. */
 export function callHorse(player: Player, key: string | null): Outcome {
     const candidates = horsesOf(player.steamId)
@@ -412,6 +679,10 @@ export function callHorse(player: Player, key: string | null): Outcome {
         return { ok: false, message: key === null ? "Nenhum cavalo seu pode vir agora (nenhum, morto, ou alguém está montado)." : "Esse cavalo não pode vir agora: morto, fora do mundo, ou alguém está montado." };
     }
     const label = nearest.owned.record.name || "Seu cavalo";
+    // KCDC 1.7.0: a horse the game could not kill is knocked out where it fell; it cannot come until it gets up by itself.
+    if (nearest.horse.unconscious === true) {
+        return { ok: false, message: `${label} está desacordado e se levanta sozinho em alguns minutos. Vá até ele.` };
+    }
     if (nearest.distance > CALL_RANGE_M) {
         return { ok: false, message: `${label} está longe demais para ouvir (${nearest.distance.toFixed(0)} m, a ${compassDirection(player.position, nearest.horse.position)}). Vá até ele.` };
     }
@@ -460,20 +731,56 @@ export function callEnded(horse: Horse, status: string, later: (fn: () => void, 
     }, REPLAN_AFTER_MS);
 }
 
+/** Whether a player may ride a horse: null for one that is not kept here (the game's own rules apply), else yes or no. */
+export function mayRide(horse: Horse, rider: Player): boolean | null {
+    const key = keyByLive.get(horse.id);
+    const record = key === undefined ? undefined : records.get(key);
+    if (record === undefined) {
+        return null;
+    }
+    return record.owner === rider.steamId || record.shared === true || isAdmin(rider);
+}
+
+/** Tells every other player within `WHISTLE_HEARD_M` of a whistler that they whistled; their clients play the sound on the whistler. */
+export function tellWhistle(whistler: Player): void {
+    const at = whistler.position;
+    for (const other of Player.all()) {
+        if (other.id === whistler.id || !other.ready || other.virtualWorld !== whistler.virtualWorld) {
+            continue;
+        }
+        if (Math.hypot(other.position.x - at.x, other.position.y - at.y, other.position.z - at.z) <= WHISTLE_HEARD_M) {
+            try {
+                other.emit(`${RESOURCE}:whistle.heard`, JSON.stringify({ id: whistler.id }));
+            } catch {
+                // Gone already.
+            }
+        }
+    }
+}
+
 /**
- * X, the game's whistle: the owner's nearest horse comes, as from the panel. A player riding one of their horses, or
- * with none, hears nothing back -- the whistle is only the game's then.
+ * X, the game's whistle: the owner's nearest horse comes, as from the panel, and whoever is near hears it. A player riding any horse, in a
+ * cart's seat, or with none of their own, hears nothing back -- the whistle is only the game's then.
  */
 export function whistle(player: Player, now = Date.now()): void {
     if (now - (lastWhistle.get(player.id) ?? -Infinity) < WHISTLE_EVERY_MS) {
         return;
     }
     lastWhistle.set(player.id, now);
+    // On a horse (any), or in a cart's seat, the key is only the game's own (user, 2026-10-18: it "só pode funcionar para descer do cavalo").
+    if (player.horse || (typeof Cart !== "undefined" && Cart.all(player.virtualWorld).some((cart) => cart.seatOf(player) !== null))) {
+        return;
+    }
+    // Whoever is near hears it, whether the whistler has a horse to call or not.
+    tellWhistle(player);
     const owned = horsesOf(player.steamId);
     if (owned.length === 0 || owned.some(({ horse }) => horse !== null && horse.riderId === player.id)) {
         return;
     }
-    const outcome = callHorse(player, null);
+    // The horse the owner chose for X, while it can come: alive, in the world, nobody on it. Otherwise the nearest, as before.
+    const chosen = activeHorseOf(player.steamId);
+    const ready = chosen === null ? undefined : owned.find(({ record, horse }) => record.key === chosen && horse !== null && horse.alive && !horse.mounted);
+    const outcome = callHorse(player, ready === undefined ? null : chosen);
     player.emit(`${RESOURCE}:notify`, JSON.stringify({ text: outcome.message }));
 }
 
@@ -495,7 +802,7 @@ function tick(): void {
     // A horse that became somebody's without the event reaching here (revived after it died, say) is filed now.
     for (const horse of Horse.all()) {
         const owner = horse.owner;
-        if (!keyByLive.has(horse.id) && owner !== null && STEAM_ID.test(owner.steamId) && horse.alive) {
+        if (!keyByLive.has(horse.id) && owner !== null && STEAM_ID.test(owner.steamId) && horse.alive && !condemned.has(horse.id)) {
             horse.destroyWithOwner = false;
             track(horse, owner);
         }
@@ -516,7 +823,7 @@ export function installHorses(): void {
 
     Events.on("horseOwnerChanged", (horse, player) => {
         // The owner leaving fires this with null: the horse waits for them, and its record stays.
-        if (player === null || stopping || !STEAM_ID.test(player.steamId)) {
+        if (player === null || stopping || !STEAM_ID.test(player.steamId) || condemned.has(horse.id)) {
             return;
         }
         horse.destroyWithOwner = false;
@@ -550,12 +857,12 @@ export function installHorses(): void {
     });
 
     Events.on("horseMounting", (horse, rider) => {
-        const key = keyByLive.get(horse.id);
-        const record = key === undefined ? undefined : records.get(key);
-        if (record === undefined || record.owner === rider.steamId || record.shared === true || isAdmin(rider)) {
+        if (mayRide(horse, rider) !== false) {
             return undefined;
         }
-        Chat.sendToPlayer(rider, `Esse cavalo pertence a ${record.ownerName || "outra pessoa"}.`);
+        const key = keyByLive.get(horse.id);
+        const record = key === undefined ? undefined : records.get(key);
+        Chat.sendToPlayer(rider, `Esse cavalo pertence a ${record?.ownerName || "outra pessoa"}.`);
         return false;
     });
 
@@ -573,19 +880,14 @@ export function installHorses(): void {
     Events.on("horseDeath", (horse) => {
         const key = keyByLive.get(horse.id);
         const record = key === undefined ? undefined : records.get(key);
-        if (record === undefined) {
+        if (key === undefined || record === undefined) {
             return;
         }
-        console.log(`horses: o cavalo ${record.name || record.key} de ${record.ownerName} morreu`);
-        for (const lost of horseLost) {
-            try {
-                lost(record, horse);
-            } catch (error: unknown) {
-                console.log(`horses: não consegui tratar as alforjes de ${record.name || record.key}: ${error instanceof Error ? error.message : String(error)}`);
-            }
+        if (!ownerOnline(record.owner)) {
+            spareHorse(horse, record, "morreu");
+            return;
         }
-        forget(key!);
-        persist();
+        lose(key, record, horse, "morreu");
     });
 
     Events.on("horseDestroy", (horse) => {
@@ -604,12 +906,14 @@ export function installHorses(): void {
     Events.on("playerDisconnect", (player) => lastWhistle.delete(player.id));
 
     const timer = setInterval(tick, SAVE_EVERY_MS);
+    const watcher = setInterval(watchKnockouts, KNOCKOUT_LOOK_MS);
 
     Events.on("resourceStop", (name) => {
         if (name !== RESOURCE) {
             return;
         }
         clearInterval(timer);
+        clearInterval(watcher);
         tick();
         stopping = true;
         // Taken away so a restarted resource does not put a second copy of each beside the first.

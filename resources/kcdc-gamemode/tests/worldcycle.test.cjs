@@ -137,13 +137,38 @@ test("a storm brings the rain and the wind up over the blend, and a clear sky ta
     sut.clock.now += 3 * 60_000;
     sut.cycle.tick();
     const rain = sut.calls.rain.at(-1)[0];
-    assert.ok(rain >= 0.8 && rain <= 1, `full ${rain}`);
+    assert.ok(rain >= 0.6 && rain <= 0.85, `full ${rain}`);
     const wind = sut.calls.wind.at(-1);
     const speed = Math.hypot(wind.x, wind.y);
     assert.ok(speed >= 10 && speed <= 18, `wind ${speed}`);
 
     sut.cycle.apply(sut.api.weatherById("limpo"), true);
     assert.equal(sut.calls.rain.at(-1)[0], 0, "an instant change lands at once");
+});
+
+test("rain is the exception: about a tenth of the draws, shorter than the rest, lighter, and never after rain", () => {
+    const sut = load();
+    const kinds = sut.api.WEATHER;
+    const rainy = kinds.filter((kind) => kind.rain[1] > 0);
+    const share = rainy.reduce((sum, kind) => sum + kind.weight, 0) / kinds.reduce((sum, kind) => sum + kind.weight, 0);
+    assert.ok(share > 0.05 && share < 0.12, `rain is ${Math.round(share * 100)}% of the draws`);
+    for (const kind of rainy) {
+        assert.ok(kind.lasts !== undefined && kind.lasts[1] <= 20, `${kind.id} is short`);
+        assert.ok(kind.rain[1] <= 0.85, `${kind.id} falls lighter`);
+    }
+
+    // After rain, the next is dry, whatever the draw.
+    for (const draw of [0, 0.25, 0.5, 0.75, 0.999]) {
+        const after = load({ randoms: [draw, draw, draw] });
+        after.cycle.kind = rainy[0];
+        assert.equal(after.cycle.pick().rain[1], 0, `draw ${draw}`);
+    }
+
+    // A rainy kind lasts its own few minutes: 8 to 20, not the usual 20 to 45.
+    sut.clock.now = 5_000_000;
+    assert.equal(sut.cycle.apply(sut.api.weatherById("tempestade")), true);
+    const minutes = (sut.cycle.until - sut.clock.now) / 60_000;
+    assert.ok(minutes >= 8 && minutes <= 15, `${minutes} minutes`);
 });
 
 test("a change asked for while the sky is still blending waits and happens on a later tick", () => {

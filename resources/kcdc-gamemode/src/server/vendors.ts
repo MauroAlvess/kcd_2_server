@@ -8,8 +8,8 @@
  * dice and their badges, a brooch, a rosary) -- on the game's own trade screen, at the game's own price for the item
  * (`Inventory.getItemPrice`) plus a margin, or the book's price. Each also buys the goods of its own trade, and only
  * those (`data/vendor-buys.json`, made from the game's tables by `tools/make-vendor-buys.py`; a pedlar buys trinkets), at a
- * share of what the game says they are worth, out of a purse of 500 coins as the game shows them (user, 2026-10-17). A purse comes back
- * full a day after it was last filled, restarts or not (`playerdata/vendor-purses.json`). They cannot be hurt, and one
+ * share of what the game says they are worth, out of a purse of 300 coins as the game shows them (user, 2026-10-18 night). A purse
+ * comes back full a day after it was last filled, restarts or not (`playerdata/vendor-purses.json`). They cannot be hurt, and one
  * somehow brought down is back a moment later.
  *
  * The framework forgets NPCs and vendors at every restart, so both are made again from this file a little after the
@@ -21,16 +21,24 @@
  * decidirem o que fazem"). A server NPC has none of the game's own life in it -- the framework gives it none -- so this is
  * the little that stands for one: a walk to some spot of walkable ground near their place, a while there, another spot;
  * whoever comes near is looked at and greeted, and the vendor stands for them; at bedtime they walk to their house and go
- * in, and they come out of its door in the morning. No stall animations: the game's seller stances lean on a counter and
- * left them sitting in the air. A pedlar and a bath attendant have no house: they keep to their place, day and night. No name and no health bar
- * float over them, like the level's own townsfolk.
+ * in, and they come out of its door in the morning: the door's outside step both ways, never the house's own spot, which could lie
+ * behind a locked door (2026-10-25, user: "se trancam em casa e não saem mais"). No stall animations: the game's seller stances lean
+ * on a counter and left them sitting in the air. A pedlar keeps to the fire, day and night. A bath attendant has no house: at night she
+ * goes in by the nearest door of a building, or where she stands once nobody sees, as everybody but the pedlars does since the same day
+ * ("uns NPC dormem na rua"). A body that fell into a river, strayed or is shut in is made again at its place (`npc-keeper.ts`). No name
+ * and no health bar float over them, like the level's own townsfolk.
  */
 
 import { BOOKS_BY_ID, bookGuid } from "./books.js";
+import { FARM_CROPS } from "./craft-data.js";
+import { craftItemGuid } from "./craft-items.js";
+import { maybeGesture } from "./idle-gestures.js";
+import { SKILLBOOKS } from "./skillbook-data.js";
 import { listProperties, releaseNpcHomes, reserveForNpc } from "./properties.js";
 import type { PropertyInfo } from "./properties.js";
 import { ensureDir, read, write } from "./store.js";
-import { placeOf, townsperson } from "./townsfolk.js";
+import { keeperNote, npcKeeper } from "./npc-keeper.js";
+import { doorStepFor, placeOf, townsperson } from "./townsfolk.js";
 
 declare function require(id: string): unknown;
 declare const __dirname: string | undefined;
@@ -52,8 +60,13 @@ const MARKUP = 1.2;
 /** What a vendor pays for a player's goods: this share of what the game says they are worth. */
 export const BUY_SHARE = 0.35;
 
-/** A vendor's purse, in units of the money item. The game shows a tenth of it, so this reads 500 (it read 5.000 until 2026-10-17). */
-export const PURSE = 5_000;
+/**
+ * A vendor's purse, in units of the money item (the game shows a tenth of it): 300 coins a day to buy players' goods with (user,
+ * 2026-10-18 night: "vamos colocar 300 moedas nos npcs"). It read 500 coins until that morning, then nothing ("zerar o dinheiro
+ * dos NPC, fixo sempre"). It only goes down: what a player pays for a purchase is taken back out after every deal (`traded`), so a
+ * vendor buys at most this much a day, and selling to it and buying back cannot make it richer.
+ */
+export const PURSE = 3_000;
 
 /** A purse comes back full this long after it was last filled. */
 export const PURSE_REFILL_MS = 24 * 60 * 60_000;
@@ -90,7 +103,7 @@ interface VendorDef {
     readonly home: Position;
     /** A pedlar's camp fire, which the server lights. */
     readonly fire?: { readonly x: number; readonly y: number; readonly z: number };
-    /** Keeps to their place day and night, with no house: a pedlar (by the fire) and a bath attendant (at the baths). */
+    /** Has no house and keeps near their place: a pedlar (by the fire, day and night) and a bath attendant (at the baths by day, in for the night by the nearest door). */
     readonly stays?: true;
     /** What a pedlar sells, out of the trinkets (the trade's own list for the others). */
     readonly wares?: readonly StockLine[];
@@ -103,7 +116,12 @@ export interface Position {
     readonly yaw: number;
 }
 
-const books = (...ids: string[]): StockLine[] => ids.map((id) => ({ item: `kcdc:book:${id}`, amount: 5 }));
+/**
+ * The game's skill books of some tracks ("livros de aprendizado"), two of each: what the vendors sell instead of the recipe books
+ * since 2026-10-18 (user: "NPCs não precisam vender receitas mais, só livros de aprendizado e ingredientes gerais para as guildas"),
+ * the recipes being learnt now by the trade's own level (`craft.ts`).
+ */
+const skillBooks = (...tracks: string[]): StockLine[] => SKILLBOOKS.filter((book) => tracks.includes(book.track)).map((book) => ({ item: book.guid, amount: 2 }));
 
 /** What each trade sells. A pedlar's wares are their own (`TRINKETS`, a few of each kind per camp). */
 export const STOCK: Readonly<Record<Exclude<Trade, "mascate">, readonly StockLine[]>> = {
@@ -112,8 +130,6 @@ export const STOCK: Readonly<Record<Exclude<Trade, "mascate">, readonly StockLin
         { item: "soap_kcd", amount: 20 },
         ...["perfume_longWeak", "perfume_longWeak_medium", "perfume_longWeak_high", "perfume_shortStrong", "perfume_shortStrong_medium", "perfume_shortStrong_high"].map((item) => ({ item, amount: 6 })),
         { item: "bandage_classic", amount: 40 },
-        // O sabão e os perfumes dos banhos, para quem quer fazer os seus (2026-10-17).
-        ...books("alquimia-perfumaria"),
     ],
     ferreiro: [
         { item: "bsmt_ironBad", amount: 200 },
@@ -130,22 +146,74 @@ export const STOCK: Readonly<Record<Exclude<Trade, "mascate">, readonly StockLin
         { item: "bsmt_pommelPear", amount: 20 },
         { item: "bsmt_pommelEight", amount: 15 },
         { item: "bsmt_pommelDecorated", amount: 10 },
-        ...books("ferreiro-machados", "ferreiro-ferraduras", "ferreiro-cacadores", "ferreiro-curtas", "ferreiro-sabres", "ferreiro-longas", "ferreiro-nobres", "ferreiro-raras"),
+        // The forge burns charcoal (craft.ts, 2026-10-18).
+        { item: "special_charcoal", amount: 100 },
+        // Repair kits (user, 2026-10-18: "o ferreiro precisa vender kit reparos"): for armour, for blades, for firearms and for bows.
+        { item: "repairKit_armourSmall", amount: 60 },
+        { item: "repairKit_weaponSmall", amount: 60 },
+        { item: "repairKit_rifleSmall", amount: 20 },
+        { item: "repairKit_bowyerSmall", amount: 30 },
+        // The rest of what the forge's recipes take.
+        { item: "bsmt_guardSpecial", amount: 10 },
+        { item: "bsmt_woodExotic", amount: 15 },
+        { item: "special_attire", amount: 20 },
+        // The Agricultores' shovel (2026-10-22), the game's own, for the bed they dig.
+        { item: "player_shovel", amount: 20 },
+        // Bows and arrows (craft-data.ts, 2026-10-19): seasoned wood for the bows and the shafts, our own item, and feathers for the fletching.
+        { item: "kcdc-craft:madeira", amount: 100 },
+        // The jasper and the enamel powder of the silver rings and brooch (2026-10-21), whose silver the Coletores bring.
+        { item: "bsmt_jaspis", amount: 10 },
+        { item: "bsmt_emailPowder", amount: 10 },
+        { item: "special_featherRooster", amount: 100 },
+        ...skillBooks("craftsmanship", "weapon_sword", "heavy_weapons", "weapon_large", "strength"),
     ],
     alquimista: [
         ...["belladona", "chamomile", "comfrey", "dandelion", "eyewort", "feverfew", "ginger", "hypericum", "marigold", "mint", "nightshade", "paris", "poppy", "salvia", "thistle", "urticaria", "valerian", "wormwood", "elderberrry"].map((herb) => ({ item: `herb_${herb}`, amount: 80 })),
         { item: "special_charcoal", amount: 60 },
         { item: "special_cobweb", amount: 30 },
         { item: "special_teethBoar", amount: 20 },
-        ...books("alquimia-tonicos", "alquimia-vigor", "alquimia-cacador", "alquimia-medicina", "alquimia-perfumaria", "alquimia-venenos", "alquimia-astucia", "alquimia-polvora"),
+        // The rest of what the alchemy table and the rack take: water and wine for the bases (user, 2026-10-18 night: "onde pego
+        // água para as poções"; only the tavern keeper had it), the powder's salts, the rare roots and pearls.
+        { item: "water", amount: 100 },
+        { item: "wine", amount: 40 },
+        { item: "special_sulfur", amount: 30 },
+        { item: "special_saltpeter", amount: 30 },
+        { item: "special_charcoalImproved", amount: 20 },
+        { item: "herb_dried_poppy", amount: 20 },
+        { item: "special_mushroomAmanita", amount: 15 },
+        { item: "maliruvLek_mandrakeRoot", amount: 4 },
+        { item: "maliruvLek_freshwaterPearl", amount: 3 },
+        // The seeds of the garden herbs (2026-10-22): what the Agricultores sow for the apothecary, who buys the harvest.
+        ...FARM_CROPS.filter((crop) => crop.category === "Ervas").map((crop) => ({ item: crop.seed, amount: 60 })),
+        ...skillBooks("alchemy", "scholarship", "vitality"),
     ],
     taberneiro: [
         { item: "beef", amount: 60 },
         { item: "pigMeat", amount: 60 },
         { item: "lambMeat", amount: 60 },
         { item: "chicken", amount: 60 },
-        // O que o jogo ensina de bebida e de remédio de ressaca (2026-10-17): o taberneiro vende esses receituários.
-        ...books("alquimia-tonicos", "alquimia-medicina"),
+        // What the kitchen's recipes take (craft.ts, 2026-10-18): flour, malt and hops are our own items, the rest the game's.
+        { item: "kcdc-craft:farinha", amount: 80 },
+        { item: "kcdc-craft:malte", amount: 60 },
+        { item: "kcdc-craft:lupulo", amount: 60 },
+        ...["egg", "water"].map((item) => ({ item, amount: 100 })),
+        ...["milk", "loot_salt"].map((item) => ({ item, amount: 60 })),
+        ...["honey", "special_lard", "cabbage", "garlic", "plums", "pear"].map((item) => ({ item, amount: 40 })),
+        { item: "walnuts", amount: 30 },
+        { item: "driedPepperSpice", amount: 20 },
+        // The rest of what the kitchen's recipes take (2026-10-18): wine, the better cuts, cheese and salami, fish, offal, roots and mushrooms.
+        { item: "wine", amount: 40 },
+        ...["pigTenderloin", "beefTenderloin", "salami", "cheeseQuarter", "curdCheese", "perch", "trout"].map((item) => ({ item, amount: 20 })),
+        ...["onion", "carrot", "beet", "apple", "boletus", "lepiota"].map((item) => ({ item, amount: 25 })),
+        ...["horseradish", "crayfish", "cowKidney", "cowTongue", "pigLiver", "lambStomach"].map((item) => ({ item, amount: 10 })),
+        { item: "crayfishBlue", amount: 4 },
+        // What the soups take (2026-10-20): the roots, the peas and nettles, and the bread, bacon, cream and beer that go into a bowl.
+        ...["parsnip", "turnip", "leek", "roastedPeas", "herb_urticaria"].map((item) => ({ item, amount: 25 })),
+        ...["bread", "bacon", "cream", "beer"].map((item) => ({ item, amount: 20 })),
+        // The seeds of the garden vegetables (2026-10-22): what the Agricultores sow for the kitchen, whose keeper buys the harvest; and the saplings,
+        // seeds and pepper of the fruit and the spice (2026-10-24), which the kitchen takes as well.
+        ...FARM_CROPS.filter((crop) => crop.category === "Legumes" || crop.category === "Frutas" || crop.category === "Especiarias").map((crop) => ({ item: crop.seed, amount: 60 })),
+        ...skillBooks("drinking", "speech"),
     ],
     cacador: [
         { item: "bow_b", amount: 6 },
@@ -155,8 +223,15 @@ export const STOCK: Readonly<Record<Exclude<Trade, "mascate">, readonly StockLin
         { item: "arrow_normal", amount: 200 },
         { item: "arrow_hunting", amount: 150 },
         { item: "arrow_enh_hunting", amount: 60 },
-        // As poções do caçador, e o vigor para a mata (2026-10-17).
-        ...books("alquimia-cacador", "alquimia-vigor"),
+        // What the smokehouse's sausages take (craft.ts, 2026-10-18).
+        { item: "loot_salt", amount: 40 },
+        { item: "garlic", amount: 30 },
+        { item: "driedPepperSpice", amount: 20 },
+        // Game for the kitchen and the smokehouse (2026-10-18): what a hunter brings home, for whoever does not hunt.
+        ...["roeDeerMeat", "deerMeat", "boarMeat", "rabbitMeat"].map((item) => ({ item, amount: 15 })),
+        ...["roeDeerLoin", "deerFlank", "deerRump", "boarRump", "boarTenderloin", "wolfMeat", "horseMeat", "dogMeat"].map((item) => ({ item, amount: 10 })),
+        ...["deerHeart", "rabbitLiver", "wolfHeart", "roeKidney", "boarKidney"].map((item) => ({ item, amount: 5 })),
+        ...skillBooks("survival", "marksmanship", "houndmaster", "stealth"),
     ],
     alfaiate: [
         // Men's and everyday clothes, one colour each; the plain ones cost a few groschen, the good ones more.
@@ -168,8 +243,31 @@ export const STOCK: Readonly<Record<Exclude<Trade, "mascate">, readonly StockLin
         // Women's.
         ...["F_SimpleDress01_m01_D", "F_SimpleDress03_m01_C", "F_SimpleDress04_m01_C", "F_SimpleDress05_m01_C"].map((item) => ({ item, amount: 8 })),
         ...["F_Shoes02_m01_B", "F_Hood01_m01_C", "F_Veil05_m01_D", "Cap16_m01_E"].map((item) => ({ item, amount: 8 })),
+        // What sewing takes (craft.ts, 2026-10-18): thread is our own item, linen and hides the game's.
+        { item: "kcdc-craft:linha", amount: 100 },
+        { item: "loot_cloth", amount: 60 },
+        ...["special_cowSkin", "special_pigSkin"].map((item) => ({ item, amount: 30 })),
+        ...["special_deerSkin", "skin_sheep"].map((item) => ({ item, amount: 15 })),
+        ...skillBooks("agility", "horse_riding"),
     ],
 };
+
+/**
+ * What the guilds' recipes take, for the roads: each camp's pedlar carries a different few of them besides the trinkets, so a
+ * crafter far from town still finds something (user, 2026-10-18: "todos os recursos das guildas nas receitas precisam estar com
+ * vendedores NPC e com vendedores de estrada dos acampamentos").
+ */
+export const ROAD_GOODS: readonly string[] = [
+    "kcdc-craft:linha", "kcdc-craft:madeira", "special_featherRooster", "loot_cloth", "skin_sheep", "special_cowSkin", "special_pigSkin", "special_deerSkin",
+    "special_charcoal", "bsmt_hardware", "bsmt_ironBad", "bsmt_ironGood", "bsmt_steelBad", "bsmt_steelNormal", "bsmt_copper",
+    "kcdc-craft:farinha", "kcdc-craft:malte", "kcdc-craft:lupulo", "loot_salt", "egg", "milk", "honey", "wine", "garlic", "driedPepperSpice",
+    "onion", "carrot", "cabbage", "special_lard", "turnip", "leek", "parsnip", "bacon",
+    "herb_valerian", "herb_salvia", "herb_belladona", "herb_urticaria", "herb_hypericum", "herb_mint", "herb_chamomile", "herb_marigold",
+    "herb_wormwood", "herb_ginger", "herb_paris", "herb_nightshade", "herb_feverfew", "special_sulfur", "special_saltpeter", "special_cobweb",
+];
+
+/** How many of the guilds' goods a camp's pedlar carries. */
+const ROAD_GOODS_PER_CAMP = 8;
 
 /**
  * What the pedlars carry, from the game's own tables: dice and the badges of the dice game, things to wear on the face or
@@ -188,6 +286,13 @@ const WARES_PER_CAMP = { dice: 3, badges: 2, wear: 3, odds: 2 } as const;
 /** The wares of the camp numbered `index`: plain dice always, then a turn of each list starting where the last camp's left off. */
 export function waresOf(index: number): StockLine[] {
     const lines: StockLine[] = [{ item: "dieNormal", amount: 12 }];
+    for (let step = 0; step < ROAD_GOODS_PER_CAMP; step += 1) {
+        lines.push({ item: ROAD_GOODS[(index * ROAD_GOODS_PER_CAMP + step) % ROAD_GOODS.length]!, amount: 10 });
+    }
+    // A book or two of the road's skills: picking pockets, fists and riding.
+    for (const book of SKILLBOOKS.filter((one) => ["thievery", "weapon_unarmed", "horse_riding"].includes(one.track)).filter((_one, at) => at % CAMPS.length === index % CAMPS.length || (at + 7) % CAMPS.length === index % CAMPS.length)) {
+        lines.push({ item: book.guid, amount: 1 });
+    }
     for (const [kind, count] of Object.entries(WARES_PER_CAMP) as Array<[keyof typeof TRINKETS, number]>) {
         const list = TRINKETS[kind];
         for (let step = 0; step < count; step += 1) {
@@ -299,8 +404,8 @@ const BATHS: ReadonlyArray<{ readonly village: string; readonly name: string; re
     { village: "Suchdol", name: "Dona dos Banhos", x: 740.83, y: 3347.75, z: 142.12 },
     { village: "Zikmundovo", name: "Dona dos Banhos", x: 1739.89, y: 2805.59, z: 173.4 },
     { village: "Zikmundovo", name: "Banhista", x: 1738.97, y: 2804.82, z: 173.5 },
-    { village: "Grunta", name: "Banhista", x: 3207.82, y: 2167.72, z: 94.55 },
-    { village: "Grunta", name: "Banhista", x: 3210.27, y: 2166.73, z: 94.48 },
+    { village: "Minas", name: "Banhista", x: 3207.82, y: 2167.72, z: 94.55 },
+    { village: "Minas", name: "Banhista", x: 3210.27, y: 2166.73, z: 94.48 },
     { village: "Kuttenberg", name: "Administradora dos Banhos", x: 3083.38, y: 465.48, z: 35.58 },
     { village: "Kuttenberg", name: "Banhista", x: 3082.1, y: 465.73, z: 35.49 },
     { village: "Malešov", name: "Banhista", x: 564.33, y: 255.81, z: 109.7 },
@@ -344,6 +449,9 @@ const VILLAGE_TRADES: readonly Trade[] = ["ferreiro", "alquimista", "taberneiro"
 
 /** Houses a village's tavern keeper is known to keep, by the level's own innkeeper (Malešov's `kmal_innkeeper` stands at its tavern by 601, 279). */
 const TAVERN_HINTS: Readonly<Record<string, string>> = { "Malešov": "malesov-casa-06" };
+
+/** How long after the start the villages the census has just filed are looked at again (it maps a new region 20 s in, and a big town takes a moment). */
+export const NEW_VILLAGES_AFTER_MS = 50_000;
 
 /** How many census houses make a village. */
 export const VILLAGE_MIN_HOUSES = 3;
@@ -425,6 +533,35 @@ export function villageVendors(catalog: readonly PropertyInfo[], standAt: (prope
         });
     }
     return made;
+}
+
+/**
+ * The villages the census filed after the first look: a region mapped for the first time is filed 20 s after the start (`properties.ts`),
+ * and the village vendors are made 12 s after it, so a village mapped by this very start had its vendors only at the next restart
+ * (2026-10-20: "vamos mapear o resto inteiro e já ir colocando os NPC de venda nas cidades"). Looked at again, a moment after the
+ * census: the vendors of a village new to the list are made now, and the ones already out are left as they are. How many were made.
+ */
+export function addNewVillages(): number {
+    const before = new Set(VENDORS.map((def) => def.id));
+    addVillageVendors();
+    const fresh = VENDORS.filter((def) => !before.has(def.id));
+    if (fresh.length === 0) {
+        return 0;
+    }
+    for (const def of fresh) {
+        days.set(def.id, days.get(def.id) ?? newDay());
+    }
+    findHomes();
+    for (const def of fresh) {
+        try {
+            spawnOne(def);
+        } catch (error: unknown) {
+            console.error(`vendors: não consegui criar ${def.id}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    const villages = [...new Set(fresh.map((def) => def.village))];
+    console.log(`vendors: ${fresh.length} vendedor(es) de vilas novas, mapeadas neste início: ${villages.join(", ")}`);
+    return fresh.length;
 }
 
 /** Puts the village vendors of the catalog into the list, in place of those a former call put there. */
@@ -511,12 +648,14 @@ function stockFor(def: VendorDef): VendorStockRow[] {
             }
             continue;
         }
-        const worth = Inventory.getItemPrice(line.item);
+        // Our own ingredients (flour, malt, hops, thread) go by the GUID the game gave them.
+        const item = craftItemGuid(line.item) ?? line.item;
+        const worth = Inventory.getItemPrice(item);
         if (worth === null) {
             console.log(`vendors: ${def.id}: o item '${line.item}' não existe neste servidor; ficou fora da loja`);
             continue;
         }
-        rows.push({ item: line.item, amount: line.amount, price: Math.max(1, Math.round(worth.pristine * MARKUP)) });
+        rows.push({ item, amount: line.amount, price: Math.max(1, Math.round(worth.pristine * MARKUP)) });
     }
     return rows;
 }
@@ -556,10 +695,25 @@ function loadBuyLists(): Partial<Record<Trade, readonly string[]>> {
     return buyLists;
 }
 
+/**
+ * What the smith buys of the Coletores' finds and of what the forge makes of them (2026-10-21), ahead of the rest of the trade's goods: the
+ * game keeps a vendor's first 128 kinds.
+ */
+const EXTRA_BUYS: Partial<Record<Trade, readonly string[]>> = {
+    ferreiro: ["kcdc-craft:lenha", "kcdc-craft:minerio-prata", "kcdc-craft:barra-prata", "loot_silverCup", "loot_silverChalice", "ring_silver_engraved", "ring_silver_gem", "brooch_silver_enamel"],
+};
+
 /** What a vendor pays for each of its trade's goods: a share of the game's own worth, the item's first 128 kinds. */
 export function buyRowsFor(trade: Trade): VendorBuyRow[] {
     const rows: VendorBuyRow[] = [];
-    for (const item of loadBuyLists()[trade] ?? []) {
+    const listed = loadBuyLists()[trade];
+    if (listed === undefined) {
+        return rows;
+    }
+    const extra = EXTRA_BUYS[trade] ?? [];
+    for (const name of [...extra, ...listed.filter((one) => !extra.includes(one))]) {
+        // Our own items go by the GUID the game gave them.
+        const item = craftItemGuid(name) ?? name;
         const worth = Inventory.getItemPrice(item);
         if (worth === null) {
             continue;
@@ -575,6 +729,8 @@ export function buyRowsFor(trade: Trade): VendorBuyRow[] {
 interface PurseState {
     purse: number;
     refilledAt: number;
+    /** The `PURSE` it was filled to: a purse saved under another size starts full under the new one. */
+    size?: number;
 }
 
 let purses: Record<VendorId, PurseState> = {};
@@ -586,9 +742,9 @@ function loadPurses(): void {
         return;
     }
     for (const [id, state] of Object.entries(loaded.value)) {
-        if (state && typeof state.purse === "number" && Number.isFinite(state.purse) && typeof state.refilledAt === "number") {
-            // A purse saved when the purse was bigger comes down to the new one.
-            purses[id] = { purse: Math.min(PURSE, Math.max(0, Math.round(state.purse))), refilledAt: state.refilledAt };
+        // A purse saved under another size is left out, so it starts full under this one.
+        if (state && state.size === PURSE && typeof state.purse === "number" && Number.isFinite(state.purse) && typeof state.refilledAt === "number") {
+            purses[id] = { purse: Math.min(PURSE, Math.max(0, Math.round(state.purse))), refilledAt: state.refilledAt, size: PURSE };
         }
     }
 }
@@ -614,7 +770,7 @@ function purseFor(id: VendorId, now: number): number {
     if (state !== undefined && now - state.refilledAt < PURSE_REFILL_MS) {
         return state.purse;
     }
-    purses[id] = { purse: PURSE, refilledAt: now };
+    purses[id] = { purse: PURSE, refilledAt: now, size: PURSE };
     savePursesSoon();
     return PURSE;
 }
@@ -628,7 +784,7 @@ export function refillPurses(now: number = Date.now()): number {
         if (entry === undefined || state === undefined || now - state.refilledAt < PURSE_REFILL_MS) {
             continue;
         }
-        purses[def.id] = { purse: PURSE, refilledAt: now };
+        purses[def.id] = { purse: PURSE, refilledAt: now, size: PURSE };
         Vendor.setPurse(entry.vendor, PURSE);
         refilled += 1;
     }
@@ -646,7 +802,12 @@ function traded(vendor: number): void {
     if (state === undefined || purse === null) {
         return;
     }
-    state.purse = purse;
+    // What the vendor paid out stays paid; what a player paid does not stay with the vendor, so the purse only goes down.
+    const kept = Math.max(0, Math.min(purse, state.purse));
+    if (purse !== kept) {
+        Vendor.setPurse(vendor, kept);
+    }
+    state.purse = kept;
     savePursesSoon();
 }
 
@@ -692,6 +853,8 @@ export const vendorLife = {
     unseenM: 80,
     /** A body that somehow falls is back after this. */
     reviveMs: 10_000,
+    /** A bath attendant goes in at night by a door of a building this near her place. */
+    doorM: 70,
 };
 
 /** The emote wheel's greetings (docs: Resources/animation-props.md). */
@@ -728,6 +891,10 @@ interface Day {
     lookedAt: number;
     readonly greeted: Map<number, number>;
     house: PropertyInfo | null;
+    /** The step outside the door of `house`, worked out once for that house; and for one with no house, the step outside the nearest door, or null for none. */
+    door?: { readonly of: string; readonly at: Vector3 | null };
+    /** Their place on the walkable ground, worked out once for that place. */
+    place?: { readonly of: Position; readonly at: Vector3 };
 }
 
 const days = new Map<VendorId, Day>();
@@ -832,8 +999,31 @@ function findHomes(): void {
     }
 }
 
-function playersNear(point: { x: number; y: number }, radius: number): Player[] {
-    return Player.all().filter((player) => player.ready && player.virtualWorld === 0 && flat(player.position, point) < radius);
+/** A player as one round of the vendors' day saw them: who, and where. */
+interface Customer {
+    readonly player: Player;
+    readonly x: number;
+    readonly y: number;
+}
+
+/**
+ * The players a vendor can see, looked at once for the whole round. Every read of a player's place is a call into the engine, and the round used to ask
+ * every vendor (some fifty) about every player: a fifteenth of a second of the server's thread each time (2026-10-25, perf-watch: 15 ms of every 2 s).
+ * The world everybody plays in is the global one (4294967295); a test against 0 alone left every real player out.
+ */
+function customersNow(): Customer[] {
+    const found: Customer[] = [];
+    for (const player of Player.all()) {
+        if (player.ready && (player.virtualWorld === 0 || player.virtualWorld === 0xffffffff)) {
+            const at = player.position;
+            found.push({ player, x: at.x, y: at.y });
+        }
+    }
+    return found;
+}
+
+function anyoneNear(crowd: readonly Customer[], point: { x: number; y: number }, radius: number): boolean {
+    return crowd.some((one) => Math.hypot(one.x - point.x, one.y - point.y) < radius);
 }
 
 /** Walks the vendor there along a route the server plans around walls and houses. */
@@ -881,11 +1071,11 @@ function attend(def: VendorDef, npc: Npc, day: Day, customer: Player, now: numbe
 }
 
 /** Whether a walk home is over by time: long enough, or long enough with nobody near to see it finish. */
-function overdue(npc: Npc, day: Day, now: number): boolean {
+function overdue(npc: Npc, day: Day, now: number, crowd: readonly Customer[]): boolean {
     if (day.target === null || now - day.started >= vendorLife.walkTimeoutMs) {
         return true;
     }
-    return now - day.started >= vendorLife.unseenAfterMs && playersNear(npc.position, vendorLife.unseenM).length === 0 && playersNear(day.target, vendorLife.unseenM).length === 0;
+    return now - day.started >= vendorLife.unseenAfterMs && !anyoneNear(crowd, npc.position, vendorLife.unseenM) && !anyoneNear(crowd, day.target, vendorLife.unseenM);
 }
 
 /** At the door: in, to bed. */
@@ -922,20 +1112,59 @@ export function intentDone(npcId: number, status: string, now: number = Date.now
     goIn(def, day);
 }
 
+/**
+ * Where a vendor goes in at night and comes out in the morning: the step outside their house's door, or for one with no house (a bath attendant)
+ * the step outside the nearest door of a building, null for none; worked out once for each house.
+ */
+function nightDoor(def: VendorDef, day: Day): Vector3 | null {
+    const of = day.house?.id ?? "";
+    if (day.door === undefined || day.door.of !== of) {
+        let at: Vector3 | null = null;
+        if (day.house !== null) {
+            const step = outsideDoor(day.house);
+            at = placeOf(step);
+        } else {
+            try {
+                at = doorStepFor(homeOf(def), Door.all(), vendorLife.doorM);
+            } catch {
+                at = null;
+            }
+        }
+        day.door = { of, at };
+    }
+    return day.door.at;
+}
+
+/** A vendor's place on the walkable ground, worked out once for each place (an administrator can move it). */
+function placeFor(def: VendorDef, day: Day): Vector3 {
+    const home = homeOf(def);
+    if (day.place === undefined || day.place.of !== home) {
+        const at = placeOf(home);
+        if (!Navigation.ready) {
+            return at;
+        }
+        day.place = { of: home, at };
+    }
+    return day.place.at;
+}
+
 /** One step of every vendor's day. */
 export function liveDay(now: number = Date.now()): void {
+    // The hour and the players are looked at once for the round, not for each vendor.
+    const hour = World.hour;
+    const crowd = customersNow();
     for (const def of VENDORS) {
         const entry = live.get(def.id);
         const day = days.get(def.id);
         if (entry === undefined || day === undefined) {
             continue;
         }
-        const phase = phaseAt(hoursOf(def), World.hour);
+        const phase = phaseAt(hoursOf(def), hour);
 
         if (day.mode === "asleep") {
-            if (phase === "day" || day.house === null) {
-                // Morning: out of the door, or at their place when they have no house.
-                const body = giveBody(def, day.house === null ? placeOf(homeOf(def)) : placeOf(day.house), homeOf(def).yaw);
+            if (phase === "day" || def.fire !== undefined) {
+                // Morning: out of the door they went in by, or at their place when there was none.
+                const body = giveBody(def, nightDoor(def, day) ?? placeOf(homeOf(def)), homeOf(def).yaw);
                 if (body !== null) {
                     day.mode = "about";
                     day.next = now + between(2_000, 4_000);
@@ -948,19 +1177,54 @@ export function liveDay(now: number = Date.now()): void {
             continue;
         }
 
+        // Fallen into a river, strayed or shut in a house: made again at their place by day, in for the night on the way home (`npc-keeper.ts`).
+        const here = npc.position;
+        const place = placeFor(def, day);
+        // They walk about their place, and in the morning from their door back to it.
+        const door = day.door?.at ?? null;
+        const walks = Math.max(def.stays === true ? vendorLife.campRoamM : vendorLife.roamM, door === null ? 0 : flat(door, place));
+        const stray = npcKeeper.look(`vendors:${def.id}`, here, place, walks, now, day.mode === "home");
+        if (stray !== null) {
+            console.log(keeperNote("vendors", `${def.npcName} (${def.village})`, here, place, stray, npcKeeper.rescued(`vendors:${def.id}`, now)));
+            if (day.mode === "home" || phase === "night") {
+                goIn(def, day);
+            } else if (giveBody(def, place, homeOf(def).yaw) !== null) {
+                day.mode = "about";
+                standAround(day, now);
+            }
+            continue;
+        }
+
         if (day.mode === "home") {
-            if (overdue(npc, day, now)) {
+            if (overdue(npc, day, now, crowd)) {
                 goIn(def, day);
             }
             continue;
         }
-        if (phase === "night" && day.house !== null) {
+        if (phase === "night" && def.fire === undefined) {
             day.mode = "home";
-            walkTo(npc, day, placeOf(day.house), now);
+            const door = nightDoor(def, day);
+            if (door !== null) {
+                walkTo(npc, day, door, now);
+            } else {
+                // No door near: in where they stand, once nobody sees it (`overdue`).
+                npc.hold();
+                day.target = new Vector3(here.x, here.y, here.z);
+                day.started = now;
+                day.tries = 0;
+            }
             continue;
         }
 
-        const customer = playersNear(npc.position, vendorLife.greetM).sort((a, b) => flat(a.position, npc.position) - flat(b.position, npc.position))[0];
+        let customer: Player | undefined;
+        let nearest = vendorLife.greetM;
+        for (const one of crowd) {
+            const distance = Math.hypot(one.x - here.x, one.y - here.y);
+            if (distance < nearest) {
+                nearest = distance;
+                customer = one.player;
+            }
+        }
         if (customer !== undefined) {
             attend(def, npc, day, customer, now);
             continue;
@@ -970,12 +1234,17 @@ export function liveDay(now: number = Date.now()): void {
             standAround(day, now);
         }
         if (day.target === null && now >= day.next) {
+            // Now and then a stretch, a scratch, a look round, before the next walk.
+            if (maybeGesture(npc, now)) {
+                day.next = now + 5_000 + between(0, 4_000);
+                continue;
+            }
             stroll(def, npc, day, now);
         }
     }
 }
 
-/** A vendor and their shop, made again: at their place by day (a pedlar, always), at home (not in the world) at night. */
+/** A vendor and their shop, made again: at their place by day (a pedlar, always), in (not in the world) at night. */
 function spawnOne(def: VendorDef): void {
     const old = live.get(def.id);
     if (old !== undefined) {
@@ -996,7 +1265,7 @@ function spawnOne(def: VendorDef): void {
 
     const day = days.get(def.id) ?? newDay();
     days.set(def.id, day);
-    if (phaseAt(hoursOf(def), World.hour) === "night" && day.house !== null) {
+    if (phaseAt(hoursOf(def), World.hour) === "night" && def.fire === undefined) {
         day.mode = "asleep";
         return;
     }
@@ -1170,6 +1439,14 @@ export function installVendors(): void {
     // once the census has filed a new village's houses (`properties.ts` maps them 20 s after the start).
     const homesTimer = setInterval(findHomes, 5 * 60_000);
     const homesSoon = setTimeout(findHomes, 45_000);
+    // A village the census files at this start (it maps a new region 20 s in) gets its vendors now, not at the next restart.
+    const villagesSoon = setTimeout(() => {
+        try {
+            addNewVillages();
+        } catch (error: unknown) {
+            console.error(`vendors: as vilas novas não ganharam vendedores: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }, NEW_VILLAGES_AFTER_MS);
 
     Events.on("resourceStop", (name) => {
         if (name !== RESOURCE) {
@@ -1181,6 +1458,7 @@ export function installVendors(): void {
         clearInterval(dayTimer);
         clearInterval(homesTimer);
         clearTimeout(homesSoon);
+        clearTimeout(villagesSoon);
         if (purseSave !== null) {
             clearTimeout(purseSave);
             purseSave = null;
@@ -1191,7 +1469,7 @@ export function installVendors(): void {
             const purse = entry === undefined ? null : Vendor.getPurse(entry.vendor);
             const state = purses[def.id];
             if (state !== undefined && purse !== null) {
-                state.purse = purse;
+                state.purse = Math.max(0, Math.min(purse, state.purse));
             }
         }
         try {

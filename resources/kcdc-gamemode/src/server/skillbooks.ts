@@ -148,6 +148,16 @@ export class SkillReading {
         return scale > 0 ? scale : FALLBACK_SCALE;
     }
 
+    /** What a deleted character had read goes with it (2026-10-25). True when it had read any. */
+    forget(steamId: string): boolean {
+        if (this.progress[steamId] === undefined) {
+            return false;
+        }
+        delete this.progress[steamId];
+        this.deps.persist({ factor: this.factor, readers: this.progress });
+        return true;
+    }
+
     private hoursOf(player: Reader, guid: string): number {
         return this.progress[player.steamId]?.[guid] ?? 0;
     }
@@ -361,6 +371,11 @@ export class SkillReading {
 let installed: SkillReading | null = null;
 
 /** The reading in use on the server (for the command), once installed. */
+/** A deleted character's reading of the skill books, forgotten (2026-10-25). */
+export function forgetReader(steamId: string): boolean {
+    return installed?.forget(steamId) === true;
+}
+
 export function skillReading(): SkillReading | null {
     return installed;
 }

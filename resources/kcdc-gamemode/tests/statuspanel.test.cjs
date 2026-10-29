@@ -5,6 +5,9 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 /** `refuse`: key names the fake Key.bind throws on, the way the mod does for a name it does not know. */
+/** What the server last told the client of the player's thirst (`thirst.ts`): "—" until it has. */
+const thirst = { gauge: [0, 0] };
+
 function load({ refuse = [] } = {}) {
     const log = [];
     const state = {
@@ -33,6 +36,10 @@ function load({ refuse = [] } = {}) {
     const events = new Map();
     const locals = new Map();
     const keys = new Map();
+    // The real restraint flag (src/client/restraint.ts), which the client's arrest.ts raises while the player is handcuffed.
+    const restraintBox = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/restraint.js"), "utf8"), restraintBox);
+    const restraint = restraintBox.exports;
 
     const context = {
         exports: {},
@@ -83,6 +90,8 @@ function load({ refuse = [] } = {}) {
             isViewVisible: () => state.visible,
         },
     };
+    // Events too big for one message come in pieces (big-events.ts); here they come whole, on the same event.
+    context.require = (id) => (id === "./big-events.js" ? { onLarge: (name, fn) => context.Events.on(`kcdc-gamemode:${name}`, fn) } : id === "./thirst.js" ? { thirstGauge: () => thirst.gauge } : id === "./ui-scale.js" ? { scaleView() {}, onUiScale() {}, uiFactor: () => 1, installUiScale() {} } : id === "./restraint.js" ? restraint : assert.fail(`unexpected require ${id}`));
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/status.js"), "utf8"), context);
     context.exports.installStatus();
 
@@ -112,7 +121,7 @@ function load({ refuse = [] } = {}) {
     const social = (payload) => events.get("kcdc-gamemode:status.social")(payload);
     const page = (name, payload) => state.pageHandlers.get(name)(payload);
     const localNames = () => state.localEvents.map((entry) => entry.name);
-    return { state, log, events, locals, localNames, press, pressAdmin, release, social, tick, flush, page, pageReady: () => page("status:ready") };
+    return { state, log, events, locals, localNames, restraint, press, pressAdmin, release, social, tick, flush, page, pageReady: () => page("status:ready") };
 }
 
 test("the first press makes a hidden full-screen view and shows it only when the page has drawn", () => {
@@ -160,6 +169,22 @@ test("the panel's own name is the one the player gave the character, and the acc
     assert.equal(selfNames().at(-1), "Mauro", "an answer without it changes nothing");
     social({ role: "player", characterName: 42 });
     assert.equal(selfNames().at(-1), "Mauro");
+});
+
+test("the panel's own bars carry the server's thirst beside the game's hunger and energy, and a thirst not said yet is a bar with nothing", () => {
+    const { state, press, pageReady } = load();
+    state.local = { ready: true, nickname: "Mauro", health: 70, maxHealth: 100, stamina: 50, maxStamina: 100, hunger: 60, maxHunger: 100, exhaust: 20, maxExhaust: 100 };
+    thirst.gauge = [0, 0];
+    press();
+    pageReady();
+    const selves = () => state.payloads.filter((entry) => entry.channel === "status:self").map((entry) => entry.payload);
+    assert.deepEqual(Array.from(selves().at(-1).thirst), [0, 0], "not said yet");
+    assert.deepEqual(Array.from(selves().at(-1).hunger), [60, 100]);
+    thirst.gauge = [58, 100];
+    press();
+    press();
+    pageReady();
+    assert.ok(selves().some((one) => Array.isArray(one.thirst) && one.thirst[0] === 58 && one.thirst[1] === 100), JSON.stringify(selves().at(-1)));
 });
 
 test("nothing is made before the first press, however long the player has been in the world", () => {
@@ -320,6 +345,48 @@ test("a new page gets the server's last answers, then its door, then the section
     assert.ok(!state.emitted.includes("status:notice"), "a notice is of its moment and is not replayed");
 });
 
+test("every picture the server sent is kept by its name, and a page gets one only when it asks for it, from the client's own copy (2026-10-21)", () => {
+    const { state, events, press, page, flush, pageReady } = load();
+    press();
+    pageReady();
+    events.get("kcdc-gamemode:status.image")({ name: "supporter", img: "data:image/webp;base64,AAAA" });
+    events.get("kcdc-gamemode:status.image")(JSON.stringify({ name: "town-kuttenberg", img: "data:image/webp;base64,BBBB" }));
+    events.get("kcdc-gamemode:status.image")({ name: "town-kuttenberg", img: "data:image/webp;base64,CCCC" });
+
+    press();
+    flush();
+    press();
+    state.emitted.length = 0;
+    state.payloads.length = 0;
+    state.sent.length = 0;
+    pageReady();
+    assert.ok(!state.emitted.includes("status:image"), "the pictures are not replayed all at once: the panel is lighter to open");
+
+    // A picture it holds is answered at once and never goes to the server; one it does not hold is asked of the server.
+    page("status:image", { name: "town-kuttenberg" });
+    page("status:image", { name: "guild-ferreiro" });
+    const images = state.payloads.filter((entry) => entry.channel === "status:image").map((entry) => (typeof entry.payload === "string" ? JSON.parse(entry.payload) : { ...entry.payload }));
+    assert.deepEqual(images.map((image) => [image.name, image.img]), [["town-kuttenberg", "data:image/webp;base64,CCCC"]], "the newest of its name, on the channel the page listens to");
+    assert.deepEqual(state.sent.filter((sent) => sent.name.endsWith("status.image")), [{ name: "kcdc-gamemode:status.image", payload: JSON.stringify({ name: "guild-ferreiro" }) }]);
+});
+
+test("a picture the page asked for before it was ready is given to it the moment it is", () => {
+    const { state, events, press, page, flush, pageReady } = load();
+    press();
+    pageReady();
+    events.get("kcdc-gamemode:status.image")({ name: "title-guildas", img: "data:image/webp;base64,DDDD" });
+    press();
+    flush();
+    press();
+    state.emitted.length = 0;
+    state.payloads.length = 0;
+    page("status:image", { name: "title-guildas" });
+    assert.ok(!state.emitted.includes("status:image"), "not before the page can hear it");
+    pageReady();
+    const images = state.payloads.filter((entry) => entry.channel === "status:image");
+    assert.equal(images.length, 1);
+});
+
 test("a section name that is not a plain word is not remembered", () => {
     const { state, press, page, flush, pageReady } = load();
     press();
@@ -436,6 +503,7 @@ test("the nominations, the doors, a property given on and a region ceded reach t
     page("status:propGive", { id: "casa-03", targetId: 6 });
     page("status:regionCede", { region: "Suchdol", targetId: 3, confirm: 1 });
     page("status:regionCede", { region: "Wysoka" });
+    page("status:regionCede", { region: "Suchdol", remove: 1, confirm: 1 });
 
     const byName = (name) => state.sent.filter((entry) => entry.name === name).map((entry) => JSON.parse(entry.payload));
     assert.deepEqual(byName("kcdc-gamemode:status.nominate"), [{ targetId: 4, title: "cavaleiro" }]);
@@ -444,7 +512,7 @@ test("the nominations, the doors, a property given on and a region ceded reach t
     assert.deepEqual(byName("kcdc-gamemode:status.hierarchy"), [{}]);
     assert.deepEqual(byName("kcdc-gamemode:status.doorLock"), [{ id: "casa-03", index: 2, locked: 1 }]);
     assert.deepEqual(byName("kcdc-gamemode:status.propGive"), [{ id: "casa-03", targetId: 6 }]);
-    assert.deepEqual(byName("kcdc-gamemode:status.regionCede"), [{ region: "Suchdol", targetId: 3, confirm: 1 }, { region: "Wysoka" }]);
+    assert.deepEqual(byName("kcdc-gamemode:status.regionCede"), [{ region: "Suchdol", targetId: 3, confirm: 1 }, { region: "Wysoka" }, { region: "Suchdol", remove: 1, confirm: 1 }]);
 });
 
 test("a nomination, a door or a cession with a field of the wrong kind never leaves the client", () => {
@@ -463,6 +531,7 @@ test("a nomination, a door or a cession with a field of the wrong kind never lea
     page("status:propGive", { id: "casa" });
     page("status:regionCede", { region: 3 });
     page("status:regionCede", { region: "Suchdol", targetId: "x" });
+    page("status:regionCede", { region: "Suchdol", remove: "sim" });
     page("status:nominate", null);
     assert.deepEqual(state.sent, []);
 });
@@ -555,6 +624,39 @@ test("a camera choice from the Opções section goes to the camera, never straig
     assert.deepEqual(state.localEvents.map((entry) => entry.name), ["camera.choose"]);
     assert.deepEqual({ ...state.localEvents[0].payload }, { thirdPerson: 1, view: "longe" });
     assert.deepEqual(state.sent, [], "the camera keeps the choice through the server itself");
+});
+
+test("a microphone choice from the Opções section goes to the voice, never straight to the server, and only with the fields it knows", () => {
+    const { state, press, page, pageReady } = load();
+    press();
+    pageReady();
+    state.localEvents.length = 0;
+    state.sent.length = 0;
+
+    page("status:voice", { mic: "apertar" });
+    page("status:voice", { sensitivity: "baixa" });
+    page("status:voice", { mic: "aberto", sensitivity: "alta" });
+    page("status:voice", { mic: "turbo", sensitivity: "enorme" });
+    page("status:voice", { mic: 1, sensitivity: ["alta"] });
+    page("status:voice", {});
+    page("status:voice");
+
+    assert.deepEqual(state.localEvents.map((entry) => entry.name), ["voice.choose", "voice.choose", "voice.choose"]);
+    assert.deepEqual({ ...state.localEvents[0].payload }, { mic: "apertar" });
+    assert.deepEqual({ ...state.localEvents[1].payload }, { sensitivity: "baixa" });
+    assert.deepEqual({ ...state.localEvents[2].payload }, { mic: "aberto", sensitivity: "alta" });
+    assert.deepEqual(state.sent, [], "the voice keeps the choice through the server itself");
+});
+
+test("the microphone's state is kept for the next page, and a page that comes up asks for a fresh one", () => {
+    const { state, locals, localNames, press, pageReady } = load();
+    locals.get("voice.state")({ mic: "apertar", sensitivity: "alta", ranges: [3, 15, 25] });
+
+    press();
+    pageReady();
+    const sent = state.payloads.find((entry) => entry.channel === "status:voice");
+    assert.deepEqual({ ...sent.payload, ranges: [...sent.payload.ranges] }, { mic: "apertar", sensitivity: "alta", ranges: [3, 15, 25] });
+    assert.ok(localNames().includes("voice.ask"));
 });
 
 test("the free camera button closes the panel first, and the flight starts a moment later", () => {
@@ -752,4 +854,23 @@ test("an English player's page is sent its dictionary, once, in the pieces the s
     state.sent.length = 0;
     events.get("kcdc-gamemode:status.social")({ lang: "en" });
     assert.equal(state.sent.length, 1, "after a change of language the dictionary is asked for again");
+});
+
+test("in handcuffs or in the pillory neither door opens the panel; one that was up when the cuffs went on can still be put away (arrest.ts, 2026-10-29)", () => {
+    const { state, restraint, press, pressAdmin, pageReady, locals, log } = load();
+    restraint.setRestrained(true);
+    press();
+    pressAdmin();
+    assert.equal(state.created.length, 0, "no page is made for a held player");
+    locals.get("status.open")?.({ mode: "common" });
+    assert.equal(state.created.length, 0, "nor when the free camera asks for it");
+
+    restraint.setRestrained(false);
+    press();
+    pageReady();
+    assert.equal(state.visible, true);
+    restraint.setRestrained(true);
+    press();
+    assert.equal(state.visible, false, "the key still closes a panel that was open");
+    assert.ok(log);
 });

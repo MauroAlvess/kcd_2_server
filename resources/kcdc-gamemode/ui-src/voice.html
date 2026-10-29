@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdom RP BRASIL - Voz</title>
+<style>
+    /* The voice indicator, drawn by us (user, 2026-10-23: "vamos criar um retângulo no nosso padrão de cor, ícone do voip com a cor do alcance,
+       sussurro, fala e grito, e aquele efeito de ruído do voip mostrando se falando alto ou baixo, acima da barra de vida, na parte inferior no
+       centro da tela"; and 2026-10-24: "vamos deixar menor, tá muito grande, e vamos colocar border radius, além de deixar no nosso padrão de
+       layout"; and the same evening: "pode deixar quadrada mesmo", so the corners are square again). A small plate of paper at the bottom centre of
+       the screen, in the realm's own look like the panel, the trades' page and the chat; it is on show only while the player speaks, and for a moment after the range was changed with Y. The colour of the
+       microphone, of the name and of the bars is the range's (whisper steel blue, speech amber, shout red); the bars are the microphone's level. */
+    @font-face {
+        font-family: "Cinzel";
+        src: url("fonts/cinzel.woff2") format("woff2");
+        font-weight: 400 900;
+        font-display: block;
+    }
+
+    :root {
+        --ink: rgba(32, 27, 23, 0.99);
+        --ink-2: rgba(32, 27, 23, .62);
+        --rule: rgba(32, 27, 23, .34);
+        --whisper: #2f6d8f;
+        --speech: #b0791c;
+        --shout: #a3141a;
+        --tint: var(--speech);
+        --lvl: 0;
+        --display: "Cinzel", "Palatino Linotype", Georgia, serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: clamp(10px, 1.3vh, 14px); }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { font: 1rem/1.15 var(--display); color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
+
+    .voice { position: fixed; inset: 0; display: flex; align-items: center; gap: .6rem; padding: 0 .85rem 0 .5rem; border-radius: 0; background: linear-gradient(180deg, rgba(224, 195, 156, .97), rgba(203, 170, 128, .97)); border: 1px solid var(--rule); box-shadow: 0 .3rem .9rem rgba(20, 12, 4, .5), inset 0 0 0 1px rgba(255, 244, 214, .4), inset 0 -.18rem 0 var(--tint); opacity: 0; transform: translateY(.3rem); transition: opacity .4s ease, transform .4s ease, box-shadow .2s ease; }
+    .voice.on { opacity: 1; transform: none; }
+    /* The glow of the plate follows how loud the player is. */
+    .voice::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: 0 0 1rem .1rem var(--tint); opacity: calc(var(--lvl) * .5); transition: opacity .1s linear; }
+    .voice.pop { animation: pop .45s ease-out; }
+    @keyframes pop { 0% { transform: scale(1.06); } 100% { transform: none; } }
+
+    .mic { position: relative; flex: none; width: 1.95rem; height: 1.95rem; display: grid; place-items: center; border: 1px solid var(--tint); border-radius: 50%; background: rgba(255, 247, 226, .45); transition: border-color .2s ease, box-shadow .15s ease; }
+    .voice.talking .mic { box-shadow: 0 0 .5rem var(--tint); }
+    .mic svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: var(--tint); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; transition: stroke .2s ease; }
+    .voice:not(.talking) .mic svg { opacity: .7; }
+
+    .words { flex: none; display: flex; flex-direction: column; justify-content: center; gap: .12rem; min-width: 4.4rem; }
+    .name { font-weight: 700; font-size: .78rem; letter-spacing: .15em; text-transform: uppercase; color: var(--tint); transition: color .2s ease; }
+    .range { font-weight: 600; font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+
+    /* The microphone's level: bars from the middle, taller and darker the louder; flat dots when nobody speaks. */
+    .meter { flex: 1; min-width: 0; height: 64%; display: flex; align-items: center; gap: .1rem; }
+    .meter span { flex: 1; height: 100%; max-width: .26rem; border-radius: .1rem; background: var(--tint); transform-origin: 50% 50%; transform: scaleY(.08); opacity: .4; transition: transform .075s linear, opacity .12s ease; }
+
+    /* How far the voice carries, as the bars of a signal: one lit for a whisper, two for speech, three for a shout. */
+    .reach { flex: none; display: flex; align-items: flex-end; gap: .13rem; height: 1rem; }
+    .reach i { width: .2rem; border-radius: .05rem; background: rgba(32, 27, 23, .2); transition: background .2s ease; }
+    .reach i:nth-child(1) { height: 36%; }
+    .reach i:nth-child(2) { height: 68%; }
+    .reach i:nth-child(3) { height: 100%; }
+    .reach i.lit { background: var(--tint); }
+
+    .voice[data-tier="0"] { --tint: var(--whisper); }
+    .voice[data-tier="1"] { --tint: var(--speech); }
+    .voice[data-tier="2"] { --tint: var(--shout); }
+</style>
+</head>
+<body>
+<div class="voice" id="voice" data-tier="1">
+    <div class="mic">
+        <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.6 11.2 A6.4 6.4 0 0 0 18.4 11.2"/><path d="M12 17.6 V21"/><path d="M8.6 21 H15.4"/></svg>
+    </div>
+    <div class="words">
+        <b class="name" id="name">Fala</b>
+        <span class="range" id="range"></span>
+    </div>
+    <div class="meter" id="meter"></div>
+    <div class="reach" id="reach"><i></i><i></i><i></i></div>
+</div>
+
+<script>
+"use strict";
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+
+const voice = document.getElementById("voice");
+const nameText = document.getElementById("name");
+const rangeText = document.getElementById("range");
+const meter = document.getElementById("meter");
+const reach = Array.from(document.getElementById("reach").children);
+
+const NAMES = ["Sussurro", "Fala", "Grito"];
+const BARS = 16;
+const bars = [];
+for (let i = 0; i < BARS; i += 1) {
+    const bar = document.createElement("span");
+    meter.appendChild(bar);
+    bars.push(bar);
+}
+
+/* The bars of the middle are the tallest: a voice is drawn as a swelling, not as a comb. */
+const envelope = (i) => 1 - (Math.abs(i - (BARS - 1) / 2) / ((BARS - 1) / 2)) * 0.58;
+
+/* A small deterministic noise, so that every bar moves on its own and the same level never looks like a fixed picture. */
+let seed = 12345;
+const noise = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+};
+
+const paint = (talking, level) => {
+    for (let i = 0; i < BARS; i += 1) {
+        const bar = bars[i];
+        if (!talking || level <= 0.01) {
+            bar.style.transform = "scaleY(0.08)";
+            bar.style.opacity = "0.4";
+            continue;
+        }
+        const swing = 0.5 + 0.5 * noise();
+        const height = Math.max(0.12, Math.min(1, level * envelope(i) * (0.55 + swing * 0.75)));
+        bar.style.transform = "scaleY(" + height.toFixed(3) + ")";
+        bar.style.opacity = (0.6 + level * 0.4).toFixed(2);
+    }
+};
+
+let tier = -1;
+
+const show = (state) => {
+    if (typeof state !== "object" || state === null) {
+        return;
+    }
+    const next = state.tier === 0 || state.tier === 1 || state.tier === 2 ? state.tier : 1;
+    const changed = next !== tier;
+    tier = next;
+    voice.dataset.tier = String(next);
+    nameText.textContent = NAMES[next];
+    const ranges = Array.isArray(state.ranges) ? state.ranges : [];
+    const metres = typeof ranges[next] === "number" ? ranges[next] : 0;
+    rangeText.textContent = metres > 0 ? Math.round(metres) + " m" : "";
+    for (let i = 0; i < reach.length; i += 1) {
+        reach[i].classList.toggle("lit", i <= next);
+    }
+    const level = typeof state.level === "number" && state.level > 0 ? Math.min(1, state.level) : 0;
+    voice.style.setProperty("--lvl", state.talking ? level.toFixed(2) : "0");
+    voice.classList.toggle("talking", state.talking === true);
+    voice.classList.toggle("on", state.on === true);
+    if (state.flash === true && changed) {
+        voice.classList.remove("pop");
+        void voice.offsetWidth;
+        voice.classList.add("pop");
+    }
+    paint(state.talking === true && state.on === true, level);
+};
+
+window.addEventListener("voice:state", (event) => show(event.detail));
+
+paint(false, 0);
+send("voice:ready");
+</script>
+</body>
+</html>

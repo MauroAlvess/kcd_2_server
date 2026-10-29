@@ -1,6 +1,7 @@
 import { readNumber } from "../args.js";
 import type { Command, CommandContext } from "../command.js";
 import { npcInReach } from "../place.js";
+import { lowerTorch } from "../torch-down.js";
 
 /** How many rows `/anim list` and `/anim props` print. */
 const LIST_LIMIT = 15;
@@ -41,6 +42,9 @@ function describe(row: AnimationInfo): string {
 
 /** Plays one catalog row on whoever the caller named, with the props its hands call for. */
 function playRow(target: Player | Npc, row: AnimationInfo, loop: boolean): boolean {
+    if ("steamId" in target) {
+        lowerTorch(target);
+    }
     return target.playAnimation(row.fragment, { tags: row.tags, loop, props: propsFor(row) });
 }
 
@@ -104,6 +108,7 @@ export const animCommand: Command = {
             // load at all -- and the prop is what it carries.
             const tag = `r_${prop.hand}`;
             const tags = Animations.list(tag).some((row) => row.tags.split("+").includes(tag)) ? tag : "";
+            lowerTorch(player);
             const ok = player.playAnimation("", { tags, props: { item: prop.name } });
             reply.line(ok ? `Holding ${prop.name}.` : "Refused.");
             return;
@@ -153,6 +158,9 @@ export const animCommand: Command = {
                 watchers.players.add(player.id);
             }
             try {
+                if (target === player) {
+                    lowerTorch(player);
+                }
                 const ok = target.playAnimation(fragment, { tags, loop, props });
                 reply.line(`${ok ? "Playing" : "Refused"} ${fragment}${tags ? ` [${tags}]` : ""}${loop ? " on a loop" : ""}${props.length > 0 ? ` holding ${props.map((prop) => prop.item).join(", ")}` : ""}${row ? "" : " (not a catalog row)"}.`);
             } catch (error) {

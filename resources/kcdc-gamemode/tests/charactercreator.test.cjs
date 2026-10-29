@@ -34,11 +34,25 @@ const appearances = {
 
 const HENRY = { gender: "male", head: "", hair: "", beard: "", body: "" };
 
+const CLOTHES = {
+    male: { top: [{ item: "TunicLong01_m01_C", name: "Túnica", icon: "data:image/webp;base64,AA" }], legs: [{ item: "HoseSeparate01_m01_E", name: "Calças simples", icon: "data:image/webp;base64,AB" }], feet: [{ item: "BootsAnkle01_m01_C", name: "Botas de trabalho", icon: "data:image/webp;base64,AC" }] },
+    female: { top: [{ item: "F_SimpleDress01_m01_D", name: "Vestido de trabalho", icon: "data:image/webp;base64,AD" }], legs: [], feet: [{ item: "F_Shoes02_m01_B", name: "Sapatos", icon: "data:image/webp;base64,AE" }] },
+};
+
+/** The game's item list as `Inventory.classes()` gives it: a GUID per table name, and the category. */
+const CLASS_LIST = [
+    ...["TunicLong01_m01_C", "HoseSeparate01_m01_E", "BootsAnkle01_m01_C", "F_SimpleDress01_m01_D", "F_Shoes02_m01_B", "TunicShort02_m03_A", "HoseLoose01_m02_C", "Gloves01_m01_A"].map((name) => ({ id: `guid-${name}`, name, category: "Armor" })),
+    { id: "guid-Hood01_m01_A", name: "Hood01_m01_A", category: "Hood" },
+    { id: "guid-swordLong", name: "swordLong", category: "MeleeWeapon" },
+    { id: "guid-bread", name: "bread", category: "Food" },
+];
+const guid = (name) => `guid-${name}`;
+
 function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
     const clientHandlers = new Map();
     const serverHandlers = new Map();
     const timers = new Map();
-    const state = { now: 1_000_000, nextTimer: 1, chat: [], logs: [], starter: [], saves: [], players: new Map(), failed: [] };
+    const state = { now: 1_000_000, nextTimer: 1, chat: [], logs: [], starter: [], saves: [], players: new Map(), failed: [], large: [], dressed: [], outfits: [] };
     const characters = {
         saved: { ...saved },
         allCharacters: () => Object.entries(characters.saved).map(([steamId, c]) => ({ steamId, name: c.name ?? c.nickname, epithet: c.epithet ?? "", nickname: c.nickname, named: Boolean(c.name) })),
@@ -46,7 +60,12 @@ function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
         getIdentity: (steamId) => (characters.saved[steamId]?.name ? { name: characters.saved[steamId].name, epithet: characters.saved[steamId].epithet ?? "" } : null),
         saveCharacter: (steamId, appearance, nickname, identity) => {
             state.saves.push({ steamId, appearance, nickname, identity });
-            characters.saved[steamId] = { appearance, nickname, ...(identity ?? {}) };
+            const given = characters.saved[steamId]?.clothesGiven;
+            characters.saved[steamId] = { appearance, nickname, ...(identity ?? {}), ...(given ? { clothesGiven: given } : {}) };
+        },
+        clothesGivenTo: (steamId) => characters.saved[steamId]?.clothesGiven ?? [],
+        noteClothesGiven: (steamId, items) => {
+            if (characters.saved[steamId] && items.length > 0) characters.saved[steamId].clothesGiven = [...new Set([...(characters.saved[steamId].clothesGiven ?? []), ...items])];
         },
     };
     const modules = {
@@ -55,13 +74,26 @@ function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
         "./creator-catalog.js": real("creator-catalog.js"),
         "./creator-space.js": real("creator-space.js"),
         "./characters.js": characters,
-        "./kits.js": { ensureStarter: (player) => state.starter.push(player.id) },
+        "./kits.js": { ensureStarter: (player) => state.starter.push(player.id), markStarterOutfit: (player) => state.outfits.push(player.id) },
+        "./big-emit.js": { emitLarge: (player, name, json) => { state.large.push({ player: player.id, name, value: JSON.parse(json) }); return 1; } },
+        "./creator-clothes.js": {
+            CLOTHES_PARTS: ["top", "legs", "feet"],
+            hasClothes: () => true,
+            pageClothes: (given = new Set()) => ({ male: { top: [{ name: "Túnica", icon: "x", ...(given.has("TunicLong01_m01_C") ? { got: true } : {}) }] }, female: {} }),
+            piecesFor: (gender, picks) => ["top", "legs", "feet"].map((part) => CLOTHES[gender][part][picks[part]]).filter(Boolean).map((piece) => piece.item),
+        },
     };
     const context = {
         exports: {},
         require: (id) => modules[id] ?? assert.fail(`unexpected require ${id}`),
         console: { log: (line) => state.logs.push(line) },
         Date: { now: () => state.now },
+        Inventory: {
+            classes: () => CLASS_LIST,
+            get: () => state.inventory ?? null,
+            set: (player, request) => { state.dressed.push({ player: player.id, items: request.items, quickslots: request.quickslots }); return { ok: true, code: "" }; },
+            add: (player, request) => { (state.added ??= []).push({ player: player.id, item: request.item, amount: request.amount }); return { ok: state.addRefused !== request.item, code: "" }; },
+        },
         Appearances: broken ? { options: () => { throw new Error("the game has no catalog yet"); }, beards: () => [] } : appearances,
         Chat: { sendToPlayer: (player, text) => state.chat.push({ player: player.id, text }) },
         Events: { onClient: (name, fn) => clientHandlers.set(name, fn), on: (name, fn) => serverHandlers.set(name, fn) },
@@ -653,4 +685,116 @@ test("a creator whose place was taken meanwhile stays where they are, and one wh
     sut.fire("cancel", calm, {});
     sut.advance(5_000);
     assert.deepEqual(calm.teleports, []);
+});
+
+test("a character asked to be made again (/creator refazer) cannot leave the creator, and may keep or change the name", () => {
+    const named = { appearance: { gender: "male", head: "m_head_000", hair: "m_hair_001_black", beard: "", body: "m_body_pale_01" }, nickname: "Garcia", name: "Vavřinec", epithet: "", redo: true };
+    const sut = load({ saved: { 765: named } });
+    const garcia = sut.player(1, "Garcia", "765", named.appearance);
+    sut.api.openCreatorFor(garcia);
+    const open = lastOf(garcia, "begin");
+    assert.equal(open.mandatory, true, "no way out until it is done");
+    assert.deepEqual(open.identity, { name: "Vavřinec", epithet: "", locked: false, suggestion: "" }, "the old name is offered and may be changed");
+    sut.fire("cancel", garcia);
+    assert.match(sut.state.logs.join("\n"), /tentou sair do criador/);
+    sut.fire("accept", garcia, { look: LOOK, name: "Vavřinec", epithet: "ii" });
+    assert.deepEqual(plain(sut.state.saves[0].identity), { name: "Vavřinec", epithet: "ii" });
+    assert.equal(sut.characters.saved["765"].redo, undefined, "saving the character drops the request");
+});
+
+test("a newcomer is sent clothes to choose, is dressed in each pick, and keeps them: the starter outfit is not put over them", () => {
+    const sut = load();
+    const hans = sut.player(1, "Hans");
+    sut.api.openCreatorFor(hans);
+    assert.equal(sut.state.large.length, 1, "the clothes, with their icons, in pieces");
+    assert.equal(sut.state.large[0].name, "creator.clothes");
+
+    sut.fire("dress", hans, { gender: "male", top: 0, legs: 0, feet: 0 });
+    // By GUID: the table names were refused by the game, and no newcomer was ever dressed by the tab until 2026-10-25.
+    assert.deepEqual(plain(sut.state.dressed.at(-1).items), [
+        { item: guid("TunicLong01_m01_C"), amount: 1, equipped: 1 },
+        { item: guid("HoseSeparate01_m01_E"), amount: 1, equipped: 1 },
+        { item: guid("BootsAnkle01_m01_C"), amount: 1, equipped: 1 },
+    ]);
+    sut.fire("dress", hans, { gender: "male", top: 0, legs: 7, feet: 0 });
+    assert.equal(sut.state.dressed.at(-1).items.length, 2, "a number out of range is no piece");
+    sut.fire("accept", hans, { look: LOOK, name: "Hans" });
+    assert.deepEqual(sut.state.outfits, [1], "dressed for this body's gender: the starter outfit is left off");
+    assert.deepEqual(sut.state.starter, [1]);
+});
+
+const kept = (id, name, equipped) => ({ id, item: guid(name), name, amount: 1, quality: 1, health: 10, condition: 1, equipped, metadata: { quality: 1 } });
+
+test("a character already made tries the pieces on: what it wore in those parts and its hood come off, the rest stays, and all of it comes back when it leaves (2026-10-25)", () => {
+    const sut = load({ saved: { 765: RETURNING } });
+    const back = sut.player(2, "Back", "765", RETURNING.appearance);
+    sut.state.inventory = {
+        ready: true,
+        revision: 3,
+        quickslots: { slots: ["r-sword"] },
+        items: [kept("r-tunic", "TunicShort02_m03_A", 1), kept("r-hose", "HoseLoose01_m02_C", 1), kept("r-hood", "Hood01_m01_A", 1), kept("r-gloves", "Gloves01_m01_A", 1), kept("r-sword", "swordLong", 1), kept("r-bread", "bread", 0)],
+    };
+    sut.api.openCreatorFor(back);
+    assert.equal(sut.state.large.length, 1, "the tab is there for somebody with a character too");
+    assert.equal(sut.state.large[0].value.mode, "give");
+    sut.fire("dress", back, { gender: "male", top: 0, legs: -1, feet: -1 });
+    const tried = plain(sut.state.dressed.at(-1));
+    const wearing = Object.fromEntries(tried.items.map((row) => [row.id ?? row.item, row.equipped]));
+    assert.deepEqual(wearing, { "r-tunic": 0, "r-hose": 1, "r-hood": 0, "r-gloves": 1, "r-sword": 1, "r-bread": 0, [guid("TunicLong01_m01_C")]: 1 }, "the tunic tried on in place of the one worn, the hood off for the face; the hose, the gloves and the sword stay");
+    assert.deepEqual(tried.quickslots, { slots: ["r-sword"] }, "the quick slots as they were");
+
+    sut.fire("cancel", back);
+    const back_ = plain(sut.state.dressed.at(-1));
+    assert.deepEqual(back_.items.map((row) => [row.id, row.equipped]), [["r-tunic", 1], ["r-hose", 1], ["r-hood", 1], ["r-gloves", 1], ["r-sword", 1], ["r-bread", 0]], "everything back as it was, the piece tried on gone");
+    assert.deepEqual(back_.quickslots, { slots: ["r-sword"] });
+
+    const eva = sut.player(3, "Eva");
+    sut.api.openCreatorFor(eva);
+    sut.fire("dress", eva, { gender: "female", top: 0, feet: 0 });
+    sut.fire("accept", eva, { look: LOOK, name: "Evald" });
+    assert.deepEqual(sut.state.outfits, [], "dressed as a woman, accepted as a man: the outfit kit decides");
+});
+
+test("a piece is told by the part it covers: the torso's layers, the legs, the feet, the head; anything else is none", () => {
+    const sut = load();
+    assert.deepEqual(["TunicLong04_m02_D", "F_SimpleDress01_m01_D", "Gambeson03_m01_A", "HoseLoose01_m02_C", "LegsPlate07_m01", "BootsAnkle02_m01_B", "F_Shoes02_m01_B", "Hood01_m01_A", "Bascinet02_m01", "Gloves01_m01_A", "Caparison01"].map((name) => sut.api.partWorn(name)), ["top", "top", "top", "legs", "legs", "feet", "feet", "head", "head", null, null]);
+});
+
+test("a remake of the look (\"Refazer aparência\") lets the name change, may be left, and is spent only by saving (2026-10-25)", () => {
+    const sut = load({ saved: { 765: RETURNING } });
+    const back = sut.player(2, "Back", "765", RETURNING.appearance);
+    const spent = [];
+    sut.api.openCreatorFor(back, "male", { remake: (player) => spent.push(player.id) });
+    const open = lastOf(back, "begin");
+    assert.equal(open.mandatory, false, "it may be left");
+    assert.deepEqual(open.identity, { name: "Hans", epithet: "", locked: false, suggestion: "" }, "the name is free to change");
+    sut.fire("cancel", back);
+    assert.deepEqual(spent, [], "left without saving: not spent");
+
+    sut.api.openCreatorFor(back, "male", { remake: (player) => spent.push(player.id) });
+    sut.fire("accept", back, { look: LOOK, name: "Henrique", epithet: "" });
+    assert.deepEqual(spent, [2]);
+    assert.deepEqual(plain(sut.state.saves.at(-1).identity), { name: "Henrique", epithet: "" });
+    assert.ok(sut.state.chat.some((entry) => entry.player === 2 && /^Aparência refeita: agora você é Henrique\./.test(entry.text)));
+});
+
+test("the pieces a character already made marks go to its inventory when it saves, each piece once, and the tab says which it has", () => {
+    const sut = load({ saved: { 765: RETURNING } });
+    const back = sut.player(2, "Back", "765", RETURNING.appearance);
+    sut.api.openCreatorFor(back);
+    sut.fire("accept", back, { look: LOOK, clothes: { gender: "male", top: 0, legs: -1, feet: 0 } });
+    assert.deepEqual(plain(sut.state.added), [{ player: 2, item: "TunicLong01_m01_C", amount: 1 }, { player: 2, item: "BootsAnkle01_m01_C", amount: 1 }]);
+    assert.ok(sut.state.chat.some((entry) => entry.player === 2 && /As 2 peças de roupa escolhidas foram para o seu inventário/.test(entry.text)));
+    assert.deepEqual(plain(sut.characters.saved["765"].clothesGiven), ["TunicLong01_m01_C", "BootsAnkle01_m01_C"]);
+
+    sut.api.openCreatorFor(back);
+    assert.equal(sut.state.large.at(-1).value.male.top[0].got, true, "a piece already given is marked on the page");
+    sut.fire("accept", back, { look: LOOK, clothes: { gender: "male", top: 0, legs: 0, feet: 0 } });
+    assert.deepEqual(plain(sut.state.added.slice(2)), [{ player: 2, item: "HoseSeparate01_m01_E", amount: 1 }], "only the piece never given");
+
+    sut.api.openCreatorFor(back);
+    sut.fire("accept", back, { look: LOOK, clothes: { gender: "female", top: 0 } });
+    assert.equal(sut.state.added.length, 3, "picks for the other gender than the look saved give nothing");
+    sut.state.addRefused = "HoseSeparate01_m01_E";
+    assert.deepEqual(plain(sut.api.giveClothes(back, "male", { gender: "male", top: 0, legs: 0, feet: 0 })), [], "everything given already");
 });

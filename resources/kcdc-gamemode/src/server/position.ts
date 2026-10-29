@@ -145,9 +145,19 @@ export function placeBack(player: Player): boolean {
     return sent;
 }
 
+let hold: (player: Player) => boolean = () => false;
+
+/**
+ * Players whose place is not kept for now: seated at a dice table (2026-10-19: a restart put Erik and Elisabeth back on the
+ * table's bench, stuck). They come back where they stood before sitting down.
+ */
+export function setPlaceHold(fn: (player: Player) => boolean): void {
+    hold = fn;
+}
+
 /** Records where the player stands now, if that is a place worth keeping and not the one already kept. */
 function remember(player: Player): boolean {
-    if (!player.steamId || !player.ready || player.virtualWorld !== GLOBAL_WORLD) {
+    if (!player.steamId || !player.ready || player.virtualWorld !== GLOBAL_WORLD || hold(player)) {
         return false;
     }
     const at = player.position;

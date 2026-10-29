@@ -7,9 +7,10 @@ const { test } = require("node:test");
 function setup() {
     const handlers = new Map(), hints = new Map(), started = [];
     let tick, nextId = 1, targets = [], active = null, pending = false, stops = 0;
+    const dicePlayers = new Set();
     const context = {
         exports: {},
-        require: () => ({ isInteractionTargetVisible: (position) => position.visible !== false }),
+        require: (name) => (name === "./dice-quiet.js" ? { playingDice: (id) => dicePlayers.has(id) } : { isInteractionTargetVisible: (position) => position.visible !== false }),
         LocalPlayer: { ready: true, alive: true, position: { x: 0, y: 0, z: 0 } },
         setInterval: (fn) => { tick = fn; return 1; }, clearInterval: () => { tick = undefined; },
         Events: { on: (name, fn) => handlers.set(name, [...(handlers.get(name) ?? []), fn]) },
@@ -28,7 +29,7 @@ function setup() {
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/follow.js"), "utf8"), context);
     context.exports.installFollow();
     return {
-        started, hints, context,
+        started, hints, context, dicePlayers,
         emit: (name, ...args) => { for (const fn of handlers.get(name) ?? []) fn(...args); },
         tick: () => tick?.(), stopped: () => !tick, stops: () => stops,
         targets: (value) => { targets = value; }, active: (value) => { active = value; pending = false; },
@@ -74,4 +75,16 @@ test("resource shutdown clears the timer and hint", () => {
     s.emit("resourceStop", "other"); assert.equal(s.stopped(), false);
     s.emit("resourceStop", "kcdc-gamemode"); assert.equal(s.stopped(), true);
     assert.equal(s.hints.size, 0);
+});
+
+test("a player in a dice match is not offered to follow; an NPC with the same id, and the other players, are", () => {
+    const s = setup();
+    s.dicePlayers.add(1);
+    s.targets([target(1, "player", 2), target(1, "npc", 3), target(2, "player", 5)]);
+    s.tick();
+    assert.equal(s.hint().text, "Follow npc1", "the nearest left is the NPC: ids of players and NPCs are different things");
+    s.targets([target(1, "player", 2)]);
+    s.press();
+    s.tick();
+    assert.equal(s.started.length, 0, "and a press on a player who has sat down to dice starts nothing");
 });

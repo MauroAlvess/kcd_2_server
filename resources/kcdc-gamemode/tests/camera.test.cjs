@@ -40,6 +40,12 @@ function load({ thirdPersonOn = false, suppressed = [], chatVisible = true } = {
         // Keys held down, as Key.isDown reads them; and the clock.
         down: new Set(),
         now: 1_000_000,
+        // What the eyes' ray meets (World.raycast), the rays asked for, the camera's look, a dialogue, the game's controls.
+        rayHit: null,
+        rays: [],
+        pose: { forward: { x: 0, y: 1, z: 0 } },
+        dialogue: false,
+        controls: true,
     };
     const events = new Map();
     const locals = new Map();
@@ -58,6 +64,15 @@ function load({ thirdPersonOn = false, suppressed = [], chatVisible = true } = {
 
     const context = {
         exports: {},
+        require: (id) => {
+            if (id === "./chat-state.js") {
+                // The real module over the test's own fake of the game's chat, so the assertions on `Chat` still read what happened.
+                const sandbox = { exports: {}, Chat: context.Chat };
+                vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/client/chat-state.js"), "utf8"), sandbox);
+                return sandbox.exports;
+            }
+            return assert.fail(`unexpected require ${id}`);
+        },
         Vector3,
         Date: { now: () => state.now },
         console: { log: (line) => state.log.push(line), error: (line) => state.log.push(line) },
@@ -91,7 +106,15 @@ function load({ thirdPersonOn = false, suppressed = [], chatVisible = true } = {
                 state.third = options !== null;
             },
             isThirdPerson: () => state.third,
+            getPose: () => state.pose,
         },
+        World: {
+            raycast: (from, to, options) => {
+                state.rays.push({ from: { x: from.x, y: from.y, z: from.z }, to: { x: to.x, y: to.y, z: to.z }, options: { ...options } });
+                return state.rayHit;
+            },
+        },
+        Controls: { isEnabled: () => state.controls },
         NoClip: {
             enable: (options) => {
                 state.enabled.push({ ...options });
@@ -112,6 +135,7 @@ function load({ thirdPersonOn = false, suppressed = [], chatVisible = true } = {
                 return true;
             },
             showNotification: (text) => { state.notified.push(text); return true; },
+            isInDialogue: () => state.dialogue,
         },
         Chat: {
             isUIVisible: () => state.chatVisible,
@@ -656,4 +680,183 @@ test("asked by the panel, the camera says what it holds", () => {
     sut.state.localEvents.length = 0;
     sut.locals.get("camera.ask")();
     assert.deepEqual(sut.lastState(), { thirdPerson: false, view: "normal", flying: false });
+});
+
+// The camera that comes in to the eyes while something is used (2026-10-27, "na câmera em terceira pessoa nenhum E ou F ou botão de
+// interação funciona"): the game finds what can be used from its camera, and the third-person camera stands past a hand's reach.
+
+/** Moves the clock by `ms`, in the beats of the assist's own timer (33 ms). */
+function run(sut, ms) {
+    const end = sut.state.now + ms;
+    while (sut.state.now < end) {
+        sut.state.now += 33;
+        sut.tick(33);
+    }
+}
+
+function thirdPersonLoad() {
+    const sut = load({ thirdPersonOn: true });
+    sut.fromServer({ thirdPerson: true, view: "normal" });
+    sut.state.thirdCalls.length = 0;
+    return sut;
+}
+
+const DOOR = { terrain: false, player: null, kind: "entity", entityClass: "AnimDoor" };
+
+test("standing still looking at a door brings the camera in to the eyes in steps, and walking away puts it back", () => {
+    const sut = thirdPersonLoad();
+    sut.state.rayHit = DOOR;
+    run(sut, 900);
+    const calls = sut.state.thirdCalls;
+    assert.equal(calls.at(-1), null, "at the eyes: the game's own camera");
+    assert.equal(sut.state.third, false);
+    const shapes = calls.filter((call) => call !== null);
+    assert.ok(shapes.length >= 3, "it glides: more than a cut");
+    assert.ok(shapes.every((shape, index) => index === 0 || shape.distance < shapes[index - 1].distance), "each step is nearer");
+    assert.ok(shapes[0].distance < 3.2 && shapes.at(-1).distance > 0.3 && shapes.at(-1).shoulder < 0.45);
+    assert.deepEqual(sut.state.rays[0].options, { mode: "anything", ignoreSelf: true });
+    assert.deepEqual(sut.state.rays[0].from, { x: 0, y: 0, z: 1.6 }, "from the eyes");
+    assert.ok(Math.abs(sut.state.rays[0].to.y - 2.8) < 1e-9 && sut.state.rays[0].to.x === 0, "2.8 m along where the camera looks");
+    assert.equal(sut.state.log.filter((line) => /camera assist: in, looking at AnimDoor/.test(line)).length, 1, "said once");
+
+    // The player walks on: the camera goes back out to the chosen view.
+    sut.state.rayHit = null;
+    for (let step = 0; step < 14; step += 1) {
+        sut.state.me.position = { x: step * 0.6, y: 0, z: 0 };
+        run(sut, 150);
+    }
+    assert.equal(sut.state.third, true);
+    assert.deepEqual(sut.state.thirdCalls.at(-1), VIEWS.normal);
+    assert.ok(sut.state.log.some((line) => /camera assist: out/.test(line)));
+});
+
+test("a wall, a tree, the ground, an empty look, or a player who is not standing still, never bring the camera in", () => {
+    const sut = thirdPersonLoad();
+    for (const hit of [null, { terrain: true, player: null, kind: "terrain", entityClass: null }, { terrain: false, player: null, kind: "brush", entityClass: null }, { terrain: false, player: null, kind: "vegetation", entityClass: null }]) {
+        sut.state.rayHit = hit;
+        run(sut, 1_000);
+        assert.deepEqual(sut.state.thirdCalls, [], "the camera was not touched");
+    }
+    // A door ahead, but the player keeps walking: 2 m every 150 ms.
+    sut.state.rayHit = DOOR;
+    for (let step = 1; step <= 20; step += 1) {
+        sut.state.me.position = { x: step * 2, y: 0, z: 0 };
+        run(sut, 150);
+    }
+    assert.deepEqual(sut.state.thirdCalls, []);
+});
+
+test("a person ahead counts; the camera waits for the player to have stood still a moment", () => {
+    const sut = thirdPersonLoad();
+    sut.state.rayHit = { terrain: false, player: { id: 7 }, kind: "entity", entityClass: "Human" };
+    run(sut, 150);
+    assert.deepEqual(sut.state.thirdCalls, [], "not yet: the player stopped just now");
+    run(sut, 900);
+    assert.equal(sut.state.thirdCalls.at(-1), null);
+    assert.ok(sut.state.log.some((line) => /camera assist: in, looking at player/.test(line)));
+});
+
+test("E or F pressed brings the camera in for three seconds even with nothing ahead, and not while walking", () => {
+    const sut = thirdPersonLoad();
+    sut.keys.get("e")();
+    run(sut, 400);
+    assert.equal(sut.state.thirdCalls.at(-1), null);
+    assert.ok(sut.state.log.some((line) => /camera assist: in, E or F pressed/.test(line)));
+    run(sut, 2_000);
+    assert.equal(sut.state.thirdCalls.at(-1), null, "still in at two and a half seconds");
+    run(sut, 1_500);
+    assert.deepEqual(sut.state.thirdCalls.at(-1), VIEWS.normal, "and back out at the end");
+
+    const f = thirdPersonLoad();
+    f.keys.get("f")();
+    run(f, 400);
+    assert.equal(f.state.thirdCalls.at(-1), null, "F is the same");
+
+    const walker = thirdPersonLoad();
+    for (let step = 0; step < 6; step += 1) {
+        walker.state.me.position = { x: step * 2, y: 0, z: 0 };
+        run(walker, 150);
+    }
+    walker.keys.get("e")();
+    run(walker, 600);
+    assert.deepEqual(walker.state.thirdCalls, [], "pressed on the move: the camera stays where it is");
+});
+
+test("on a horse, in a dialogue, with the controls off, dead, or in first person the camera is left alone", () => {
+    const horse = thirdPersonLoad();
+    horse.state.rayHit = DOOR;
+    horse.state.me = { ready: true, alive: true, mounted: true, position: { x: 0, y: 0, z: 0 } };
+    run(horse, 1_000);
+    horse.keys.get("e")();
+    run(horse, 600);
+    assert.deepEqual(horse.state.thirdCalls, [], "on a horse");
+
+    const talk = thirdPersonLoad();
+    talk.state.rayHit = DOOR;
+    talk.state.dialogue = true;
+    run(talk, 1_000);
+    assert.deepEqual(talk.state.thirdCalls, [], "in a dialogue the game has its own camera");
+
+    const off = thirdPersonLoad();
+    off.state.rayHit = DOOR;
+    off.state.controls = false;
+    run(off, 1_000);
+    assert.deepEqual(off.state.thirdCalls, [], "with the controls off");
+
+    const dead = thirdPersonLoad();
+    dead.state.rayHit = DOOR;
+    dead.state.me = { ready: true, alive: false, mounted: false, position: { x: 0, y: 0, z: 0 } };
+    run(dead, 1_000);
+    assert.deepEqual(dead.state.thirdCalls, [], "dead");
+
+    const first = load();
+    first.fromServer({ thirdPerson: false, view: "normal" });
+    first.state.thirdCalls.length = 0;
+    first.state.rayHit = DOOR;
+    run(first, 1_000);
+    first.keys.get("e")();
+    run(first, 600);
+    assert.deepEqual(first.state.thirdCalls, [], "first person is the game's own camera already");
+});
+
+test("the camera that came in goes back out when the player looks away, after a moment, and a wavering look does not make it dance", () => {
+    const sut = thirdPersonLoad();
+    sut.state.rayHit = DOOR;
+    run(sut, 900);
+    assert.equal(sut.state.thirdCalls.at(-1), null);
+    // The look wavers off the door for a third of a second: the camera stays.
+    sut.state.rayHit = null;
+    run(sut, 300);
+    assert.equal(sut.state.third, false, "still in");
+    sut.state.rayHit = DOOR;
+    run(sut, 300);
+    assert.equal(sut.state.third, false);
+    // Looked away for good.
+    sut.state.rayHit = null;
+    run(sut, 1_500);
+    assert.equal(sut.state.third, true);
+    assert.deepEqual(sut.state.thirdCalls.at(-1), VIEWS.normal);
+});
+
+test("the free camera starts from the chosen view even when the interaction camera was in, and a distance of its own is the one drawn back to", () => {
+    const sut = thirdPersonLoad();
+    sut.state.rayHit = DOOR;
+    run(sut, 900);
+    assert.equal(sut.state.third, false, "the camera is at the eyes");
+    sut.api.startFreeCamera();
+    assert.equal(sut.state.enabled.length, 1, "the flight starts");
+    sut.api.stopFreeCamera();
+    assert.deepEqual(sut.state.thirdCalls.at(-1), VIEWS.normal, "the chosen view is back, not a half-way one");
+
+    const custom = load({ thirdPersonOn: true });
+    custom.locals.get("camera.choose")({ thirdPerson: true, view: "normal" });
+    custom.events.get("kcdc-gamemode:camera.thirdPerson")(JSON.stringify({ mode: "third", distance: 6 }));
+    custom.state.thirdCalls.length = 0;
+    custom.state.rayHit = DOOR;
+    run(custom, 900);
+    const shapes = custom.state.thirdCalls.filter((call) => call !== null);
+    assert.ok(shapes[0].distance < 6 && shapes[0].distance > 3, "it starts from the 6 m drawn back to");
+    custom.state.rayHit = null;
+    run(custom, 1_500);
+    assert.deepEqual(custom.state.thirdCalls.at(-1), { ...VIEWS.normal, distance: 6 });
 });

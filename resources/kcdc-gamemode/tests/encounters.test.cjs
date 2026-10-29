@@ -3,11 +3,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 const RESOURCE = "kcdc-gamemode";
 
-/** `tables` lists the pairs of player ids standing at one dice table; `trading` the ids already in a trade. */
-function load({ tables = [], trading = [] } = {}) {
+/** `tables` lists the pairs of player ids standing at one dice table; `trading` the ids already in a trade; `playing` those in a dice match; `rows` the officer's rows arrest.ts would add. */
+function load({ tables = [], trading = [], playing = [], rows = [] } = {}) {
     const handlers = new Map();
     const clients = new Map();
     const emit = (name, ...args) => {
@@ -19,6 +20,8 @@ function load({ tables = [], trading = [] } = {}) {
     const intervals = [];
     const clock = { now: 1_000_000 };
     const known = new Set();
+    const arrested = [];
+    const arrestChosen = [];
     const pairs = [];
     const started = [];
     const state = { pairFails: null, startFails: false, apart: null };
@@ -40,10 +43,21 @@ function load({ tables = [], trading = [] } = {}) {
                     nameOf: (player) => player.nickname,
                 };
             }
+            if (id === "./arrest.js") {
+                return {
+                    isArrested: (player) => arrested.includes(player.id),
+                    menuOptions: (speaker, target) => rows.filter((row) => (row.id === "release") === arrested.includes(target.id)).map((row) => ({ ...row })),
+                    choose: (speaker, target, option) => {
+                        arrestChosen.push([speaker.id, target.id, option]);
+                        return `feito:${option}`;
+                    },
+                };
+            }
             if (id === "./dice.js") {
                 return {
                     diceLobby: {
                         sameTable: (a, b) => tables.some(([x, y]) => (x === a.id && y === b.id) || (x === b.id && y === a.id)),
+                        playingNow: (player) => playing.includes(player.id),
                         explainApart: (a, b) => (state.apart ? `${a.nickname} e ${b.nickname}: ${state.apart}` : null),
                         pair: async (a, b) => {
                             if (state.pairFails) throw new Error(state.pairFails);
@@ -126,7 +140,7 @@ function load({ tables = [], trading = [] } = {}) {
     const choose = (player, option) => emit("dialogueChoice", sessionOf(player), player, option);
     const talk = (speaker, target) => clients.get(`${RESOURCE}:players.talk`)(speaker, JSON.stringify({ id: target.id }));
     const peek = (viewer, id) => clients.get(`${RESOURCE}:players.peek`)(viewer, { id });
-    return { api: context.exports, emit, handlers, clients, sessions, players, intervals, clock, known, pairs, started, state, logs, makePlayer, sessionOf, page, texts, choose, talk, peek };
+    return { api: context.exports, emit, handlers, clients, sessions, players, intervals, clock, known, arrested, arrestChosen, pairs, started, state, logs, makePlayer, sessionOf, page, texts, choose, talk, peek };
 }
 
 test("nobody's name floats over their head, from the start and at every spawn; they come back when the resource stops", () => {
@@ -363,4 +377,131 @@ test("a player who leaves takes their conversations and invitations with them", 
     sut.emit("playerDisconnect", hans);
     assert.equal(sut.sessionOf(kat), 0, "her list closes");
     assert.equal(sut.intervals[0].ms, 1000);
+});
+
+test("somebody in a dice match is nobody's to talk to, to invite or to look at by name; the players themselves have no talk key either (2026-10-20)", () => {
+    const sut = load({ playing: [2, 3] });
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina", { female: true });
+    const otto = sut.makePlayer(3, "Otto");
+    const eva = sut.makePlayer(4, "Eva");
+
+    sut.talk(hans, kat);
+    assert.equal(sut.sessions.size, 0, "an outsider cannot open the talk list on a player of the match");
+    assert.deepEqual(hans.chat, ["Desconhecida está jogando dados."]);
+    assert.deepEqual(hans.notices, ["Desconhecida está jogando dados."]);
+
+    sut.talk(kat, hans);
+    assert.equal(sut.sessions.size, 0, "and a player of the match has no list on anybody (the keys are the table's)");
+    assert.deepEqual(kat.chat, []);
+
+    sut.talk(kat, otto);
+    assert.equal(sut.sessions.size, 0, "not even the two of them");
+
+    sut.peek(hans, kat.id);
+    sut.peek(hans, eva.id);
+    assert.deepEqual(hans.labels, [{ id: 2, label: "" }, { id: 4, label: "Desconhecido" }], "no name for the client to show a hint on");
+
+    // After the match they are people again.
+    const after = load();
+    after.api.installEncounters();
+    const a = after.makePlayer(1, "Hans");
+    const b = after.makePlayer(2, "Katerina");
+    after.talk(a, b);
+    assert.equal(after.sessions.size, 1);
+});
+
+test("an invitation to a player whose dice match began after the list was opened is refused as busy", () => {
+    const playing = [];
+    const sut = load({ tables: [[1, 2]], playing });
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina", { female: true });
+    sut.talk(hans, kat);
+    assert.equal(sut.sessions.size, 1, "the list opens while nobody plays");
+    playing.push(kat.id);
+    sut.choose(hans, "trade");
+    assert.deepEqual(hans.chat, ["Desconhecida não pode agora."]);
+    assert.equal(sut.sessions.size, 0, "no invitation was sent to her");
+    assert.equal(sut.started.length, 0);
+
+    const dice = load({ tables: [[1, 2]], playing: [] });
+    dice.api.installEncounters();
+    const a = dice.makePlayer(1, "Hans");
+    const b = dice.makePlayer(2, "Katerina");
+    dice.talk(a, b);
+    dice.choose(a, "dice");
+    assert.equal(dice.sessions.size, 1, "outside a match the invitation goes as before");
+});
+
+const OFFICER_ROWS = [{ id: "arrest", text: "Prender", enabled: true }, { id: "release", text: "Soltar", enabled: true }];
+
+test("an officer's list has Prender on someone free, between Negociar and Sair; a player with no such power sees nothing more", () => {
+    const sut = load({ rows: OFFICER_ROWS });
+    sut.api.installEncounters();
+    const guard = sut.makePlayer(1, "Guarda");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.talk(guard, kat);
+    assert.deepEqual(sut.texts(guard), ["Apresentar-se", "Jogar dados (só junto de uma mesa de dados)", "Negociar", "Prender", "Sair"]);
+
+    const bare = load();
+    bare.api.installEncounters();
+    const hans = bare.makePlayer(1, "Hans");
+    const dora = bare.makePlayer(2, "Dorota");
+    bare.talk(hans, dora);
+    assert.ok(!bare.texts(hans).includes("Prender") && !bare.texts(hans).includes("Soltar"));
+});
+
+test("choosing Prender closes the list and hands the choice to the arrest, whose answer is told to the officer", () => {
+    const sut = load({ rows: OFFICER_ROWS });
+    sut.api.installEncounters();
+    const guard = sut.makePlayer(1, "Guarda");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.talk(guard, kat);
+    sut.choose(guard, "arrest");
+    assert.equal(sut.sessionOf(guard), 0);
+    assert.deepEqual(sut.arrestChosen, [[1, 2, "arrest"]]);
+    assert.ok(guard.notices.includes("feito:arrest"));
+
+    sut.talk(guard, kat);
+    sut.choose(guard, "release");
+    assert.deepEqual(sut.arrestChosen.at(-1), [1, 2, "release"], "the arrest decides whether it holds; the list passes it on");
+});
+
+test("somebody in handcuffs is a prisoner in the list: no dice, no trade, only the officer's Soltar and the way out", () => {
+    const sut = load({ rows: OFFICER_ROWS });
+    sut.api.installEncounters();
+    const guard = sut.makePlayer(1, "Guarda");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.known.add("1>2");
+    sut.arrested.push(2);
+    sut.talk(guard, kat);
+    assert.deepEqual(sut.texts(guard), ["Apresentar-se", "Soltar", "Sair"]);
+    sut.choose(guard, "leave");
+
+    const plain = load();
+    plain.api.installEncounters();
+    const hans = plain.makePlayer(1, "Hans");
+    const dora = plain.makePlayer(2, "Dorota");
+    plain.arrested.push(2);
+    plain.talk(hans, dora);
+    assert.deepEqual(plain.texts(hans), ["Apresentar-se", "Sair"], "a bystander has nothing to offer a prisoner but a name");
+});
+
+test("a prisoner opens no list; and an invitation sent before the cuffs went on is refused when it is answered or sent", () => {
+    const sut = load({ rows: OFFICER_ROWS });
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.arrested.push(1);
+    sut.talk(hans, kat);
+    assert.equal(sut.sessionOf(hans), 0, "handcuffed hands open no list");
+    sut.arrested.length = 0;
+
+    sut.talk(hans, kat);
+    sut.arrested.push(2);
+    sut.choose(hans, "trade");
+    assert.equal(sut.sessionOf(kat), 0, "no invitation reaches somebody who was arrested meanwhile");
+    assert.ok(hans.notices.some((line) => /não pode agora/.test(line)));
 });

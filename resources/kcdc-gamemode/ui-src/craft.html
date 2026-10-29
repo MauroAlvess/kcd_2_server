@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdom RP BRASIL - Ofício</title>
+<style>
+    /* A trade's page (src/client/craft-page.ts): on the right, like the character creator's; the recipes of the trade in pages,
+       what the chosen one takes and how much of it the player has, and the work. The game's own item icons are drawn by the
+       client in the slots (src/client/craft-icons.ts): the page leaves each slot's middle see-through once it is told the icons
+       are up, and puts a sign of the recipe's kind there until then. */
+    @font-face {
+        font-family: "Cinzel";
+        src: url("fonts/cinzel.woff2") format("woff2");
+        font-weight: 400 900;
+        font-display: block;
+    }
+
+    :root {
+        --btn: rgba(124, 3, 5, 0.992);
+        --btn-hi: rgb(152, 9, 12);
+        --bg: rgba(210, 179, 140, 0.992);
+        --ink: rgba(32, 27, 23, 0.99);
+        --ink-2: rgba(32, 27, 23, .66);
+        --rule: rgba(32, 27, 23, .30);
+        --rule-soft: rgba(32, 27, 23, .15);
+        --good: #2f5a22;
+        --display: "Cinzel", "Palatino Linotype", Georgia, serif;
+        --body: "Constantia", "Sitka Text", Georgia, "Palatino Linotype", serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: 16px; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { font: 1rem/1.45 var(--body); color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
+    img { display: block; -webkit-user-drag: none; }
+    [hidden] { display: none !important; }
+    input { user-select: text; font-family: var(--body); color: var(--ink); }
+    button { font-family: var(--display); color: inherit; cursor: pointer; background: none; border: 0; }
+    button, button:focus, input:focus { outline: none; }
+
+    .stage { position: fixed; inset: 0; animation: open .3s ease both; }
+    @keyframes open { from { opacity: 0; } to { opacity: 1; } }
+
+    .panel { position: absolute; right: 1rem; top: 2.2rem; bottom: 2.2rem; width: 36rem; display: flex; flex-direction: column; padding: 1.4rem 2.2rem 1.2rem; border: 1px solid var(--rule); box-shadow: 0 0 0 .45rem rgba(210, 179, 140, .22), 0 1.4rem 3.4rem rgba(30, 18, 6, .6); }
+    /* The paper is a layer of its own, so that the slots can be cut out of it when the icons are drawn under the page. */
+    .panel > .paper { position: absolute; inset: 0; pointer-events: none; }
+    .paper > .layer { position: absolute; inset: 0; }
+    .base { background: var(--bg); }
+    .photo { background: url("img/bg-hud.webp") center / cover no-repeat; opacity: .22; mix-blend-mode: multiply; }
+    .grain { background: url("img/paper.svg"); mix-blend-mode: multiply; }
+    .sheen { background: radial-gradient(ellipse 80% 55% at 24% 12%, rgba(255, 244, 214, .5), transparent 72%); }
+    .inner { position: absolute; inset: .55rem; border: 1px solid var(--rule); pointer-events: none; }
+    .orn { position: absolute; width: 7.4rem; height: auto; pointer-events: none; z-index: 3; filter: drop-shadow(0 .3rem .5rem rgba(20, 12, 4, .4)); }
+    .orn-tl { top: -.8rem; left: -.8rem; }
+    .orn-br { right: -.8rem; bottom: -.8rem; }
+    .panel > * { position: relative; }
+    .panel > .paper, .panel > .inner, .panel > .orn { position: absolute; }
+
+    .close { position: absolute; top: 1.3rem; right: 1.4rem; z-index: 5; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; background: var(--btn); border: 1px solid rgba(0, 0, 0, .4); }
+    .close svg { width: .9rem; height: .9rem; stroke: var(--bg); stroke-width: 2.2; stroke-linecap: square; }
+    .close:hover { background: var(--btn-hi); }
+
+    .head { padding-left: 3.2rem; }
+    .head-title { height: 3.6rem; width: auto; }
+    .head h1 { font: 700 2rem/1.1 var(--display); letter-spacing: .14em; text-transform: uppercase; }
+    .head .bar { display: flex; margin-top: .5rem; }
+    .head .bar i { display: block; height: 2px; }
+    .head .bar i:first-child { width: 2.6rem; background: var(--btn-hi); }
+    .head .bar i:last-child { flex: 1; margin-left: .3rem; background: var(--rule); }
+    .head p { margin-top: .4rem; font: italic 1rem/1.3 var(--body); color: var(--ink-2); }
+
+    /* The tabs of the forge's and the needle's page (2026-10-27): the recipes, or the pieces to break apart. */
+    .modes { display: flex; gap: 1.6rem; margin-top: .75rem; padding-left: 3.2rem; border-bottom: 1px solid var(--rule); }
+    .modes[hidden] { display: none; }
+    .modes button { margin-bottom: -1px; padding: .15rem 0 .45rem; font: 600 .72rem/1 var(--display); letter-spacing: .24em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid transparent; }
+    .modes button:hover:not(:disabled) { color: var(--ink); }
+    .modes button.on { color: var(--ink); border-bottom-color: var(--btn); }
+    .modes button:disabled { cursor: default; }
+
+    .tools { display: flex; gap: .5rem; margin-top: .8rem; }
+    /* The categories: a list drawn by the page, like the panel's (2026-10-18: one list, not a wall of chips; the browser's own
+       <select> opens outside the page, in the game's blue). */
+    .dd { position: relative; flex: 1; min-width: 0; }
+    .dd-btn { display: flex; align-items: center; gap: .8rem; width: 100%; height: 1.9rem; padding: 0 .9rem 0 .7rem; font: .95rem var(--body); text-align: left; background: rgba(255, 247, 226, .3); border: 1px solid var(--rule); transition: border-color .15s, background .15s; }
+    .dd-btn:hover { border-color: rgba(32, 27, 23, .55); background: rgba(255, 247, 226, .4); }
+    .dd.open .dd-btn { border-color: var(--btn); background: rgba(255, 247, 226, .5); }
+    .dd-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dd-arrow { flex: none; width: .45rem; height: .45rem; margin-top: -.25rem; border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); transform: rotate(45deg); transition: transform .15s, margin .15s; }
+    .dd.open .dd-arrow { margin-top: .2rem; transform: rotate(-135deg); border-color: var(--btn); }
+    .dd-list { position: absolute; z-index: 20; top: calc(100% + .3rem); left: 0; right: 0; max-height: 21rem; overflow-y: auto; padding: .4rem; background: var(--bg); border: 1px solid var(--ink); box-shadow: 0 .9rem 2rem rgba(20, 12, 4, .4); animation: drop .14s ease both; overscroll-behavior: contain; }
+    @keyframes drop { from { opacity: 0; transform: translateY(-.3rem); } to { opacity: 1; transform: none; } }
+    /* The panel's gilded scroll bar, on the lists of this page too. */
+    *::-webkit-scrollbar { width: .7rem; }
+    *::-webkit-scrollbar-track { background: linear-gradient(90deg, transparent 38%, rgba(32, 27, 23, .16) 38%, rgba(32, 27, 23, .16) 62%, transparent 62%); }
+    *::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #cfa95f, #8a6a2c); background-clip: padding-box; border: 2px solid transparent; border-radius: .5rem; box-shadow: inset 0 0 0 1px rgba(70, 45, 10, .5); }
+    *::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, #e0bb73, var(--btn)); background-clip: padding-box; }
+    /* The drawing of a category (2026-10-25: "nas opções de filtro das receitas vamos usar o padrão dos ícones que usamos"): a line drawing in the ink's colour, like the panel's. */
+    .dd-ico { flex: none; display: inline-flex; width: 1.2rem; height: 1.2rem; color: var(--ink-2); }
+    .dd-ico svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .dd-btn .dd-ico { color: var(--ink); }
+    /* The option's own `span` rule (a label that takes the room) is not for the drawing. */
+    .dd-opt .dd-ico { flex: none; overflow: visible; align-self: center; }
+    .dd-opt:hover .dd-ico { color: var(--ink); }
+    .dd-opt.on .dd-ico { color: var(--btn); }
+    .dd-opt { display: flex; align-items: baseline; gap: .6rem; width: 100%; padding: .5rem .7rem .5rem .75rem; font: .97rem/1.3 var(--body); text-align: left; border-left: 3px solid transparent; transition: background .12s; }
+    .dd-opt span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dd-opt small { flex: none; font: italic .85rem var(--body); color: var(--ink-2); }
+    .dd-opt:hover { background: rgba(213, 161, 86, .24); }
+    .dd-opt.on { font-weight: 600; border-left-color: var(--btn); background: rgba(255, 247, 226, .5); }
+    .q { width: 10rem; height: 1.9rem; padding: 0 .5rem; font-size: .95rem; background: rgba(255, 247, 226, .42); border: 1px solid var(--rule); }
+    .q:focus { border-color: var(--btn); }
+
+    .list { flex: 1; min-height: 0; margin-top: .7rem; display: flex; flex-direction: column; gap: .25rem; overflow: hidden; }
+    .rrow { display: flex; align-items: center; gap: .65rem; width: 100%; min-height: 2.9rem; padding: .2rem .5rem; text-align: left; border: 1px solid transparent; font-family: var(--body); }
+    .rrow:hover { background: rgba(213, 161, 86, .16); border-color: var(--rule-soft); }
+    .rrow.on { background: rgba(124, 3, 5, .1); border-color: rgba(124, 3, 5, .45); }
+    .rrow .nm { flex: 1; min-width: 0; font: 600 1rem/1.15 var(--body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rrow .nm small { display: block; font: italic .82rem/1.1 var(--body); color: var(--ink-2); }
+    .rrow .st { flex: none; font: 600 .66rem/1 var(--display); letter-spacing: .12em; text-transform: uppercase; padding: .25rem .4rem; border: 1px solid currentColor; }
+    .st.ok { color: var(--good); }
+    .st.miss { color: var(--ink-2); }
+    .st.lock { color: var(--btn-hi); }
+    .rrow.locked .nm { opacity: .55; }
+
+    .pager { display: flex; align-items: center; justify-content: center; gap: .9rem; margin-top: .35rem; font: 600 .8rem/1 var(--display); letter-spacing: .12em; }
+    .pager button { width: 1.9rem; height: 1.6rem; border: 1px solid var(--rule); font-size: 1rem; }
+    .pager button:hover:not(:disabled) { background: var(--btn); color: var(--bg); }
+    .pager button:disabled { opacity: .3; cursor: default; }
+
+    .detail { flex: none; margin-top: .7rem; padding-top: .7rem; border-top: 1px solid var(--rule); min-height: 13.5rem; }
+    .dhead { display: flex; align-items: center; gap: .8rem; }
+    .dhead b { display: block; font: 700 1.25rem/1.15 var(--display); letter-spacing: .05em; }
+    .dhead span.sub { display: block; font: italic .92rem/1.2 var(--body); color: var(--ink-2); }
+    .k { margin: .65rem 0 .3rem; font: 600 .68rem/1.2 var(--display); letter-spacing: .26em; text-transform: uppercase; color: var(--ink-2); }
+    .ings { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .8rem; }
+    .ings li { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+    .ings .in { flex: 1; min-width: 0; font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ings .ic { flex: none; font: 600 .9rem/1 var(--display); }
+    .ic.ok { color: var(--good); }
+    .ic.bad { color: var(--btn-hi); }
+    .facts { margin-top: .55rem; font: italic .92rem/1.3 var(--body); color: var(--ink-2); }
+    .facts .lock { color: var(--btn-hi); font-style: normal; font-weight: 600; }
+    .work { display: flex; align-items: center; gap: .7rem; margin-top: .7rem; }
+    /* How many at once (2026-10-27): a small stepper before the button, from one up to what the bag allows (ten at most). */
+    .qty { display: inline-flex; align-items: stretch; height: 2.25rem; border: 1px solid var(--rule); background: rgba(255, 247, 226, .35); }
+    .qty button { min-width: 1.9rem; padding: 0 .5rem; font: 600 1.05rem/1 var(--display); }
+    .qty button:hover:not(:disabled) { background: var(--btn); color: var(--bg); }
+    .qty button:disabled { opacity: .3; cursor: default; }
+    .qty b { min-width: 2.2rem; display: grid; place-items: center; font: 600 .95rem/1 var(--display); border-left: 1px solid var(--rule-soft); border-right: 1px solid var(--rule-soft); }
+    .qty .max { border-left: 1px solid var(--rule); font-size: .64rem; letter-spacing: .14em; text-transform: uppercase; }
+    .btn { padding: .65rem 1.4rem; background: var(--btn); color: var(--bg); border: 1px solid rgba(0, 0, 0, .4); font: 600 .82rem/1 var(--display); letter-spacing: .18em; text-transform: uppercase; }
+    .btn:hover:not(:disabled) { background: var(--btn-hi); }
+    .btn:disabled { opacity: .4; cursor: default; }
+    .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+    .prog { flex: 1; position: relative; height: 1.9rem; border: 1px solid var(--rule); background: rgba(255, 247, 226, .35); overflow: hidden; }
+    .prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: rgba(124, 3, 5, .28); }
+    .prog span { position: absolute; inset: 0; display: grid; place-items: center; font: 600 .74rem/1 var(--display); letter-spacing: .16em; text-transform: uppercase; }
+    .msg { min-height: 1.3rem; margin-top: .45rem; font: italic .92rem/1.3 var(--body); color: var(--ink-2); }
+    .msg.bad { color: var(--btn-hi); font-style: normal; font-weight: 600; }
+    .msg.good { color: var(--good); font-style: normal; font-weight: 600; }
+    .empty { margin-top: 1rem; font: italic 1rem/1.4 var(--body); color: var(--ink-2); text-align: center; }
+
+    /* A slot: a framed square the client draws the game's icon in. Until it is told the icons are up, a sign of the kind. */
+    .slot { flex: none; position: relative; display: grid; place-items: center; border: 1px solid rgba(32, 27, 23, .45); background: rgba(32, 27, 23, .78); box-shadow: inset 0 0 0 1px rgba(213, 161, 86, .35); }
+    .slot svg { width: 60%; height: 60%; fill: none; stroke: rgba(243, 230, 200, .75); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+    body.icons .slot { background: transparent; border-color: rgba(32, 27, 23, .22); box-shadow: none; }
+    body.icons .slot svg { display: none; }
+    .s48 { width: 2.5rem; height: 2.5rem; }
+    .s64 { width: 3.6rem; height: 3.6rem; }
+    .s32 { width: 1.9rem; height: 1.9rem; }
+
+    /* The trade between two players (2026-10-18): both offers on the page, each item with the game's icon. */
+    .panel.trading .tools, .panel.trading .list, .panel.trading .pager, .panel.trading .detail { display: none; }
+    .trade { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: .8rem; }
+    .trade[hidden] { display: none; }
+    .offers { flex: 1; min-height: 0; overflow-y: auto; padding-right: .3rem; }
+    .offer { padding: .7rem .85rem .8rem; background: rgba(255, 247, 226, .18); border: 1px solid var(--rule); }
+    .offer + .offer { margin-top: .7rem; }
+    .offer.agreed { border-color: rgba(47, 90, 34, .7); box-shadow: inset 0 0 0 1px rgba(47, 90, 34, .45); }
+    .ohead { display: flex; align-items: baseline; justify-content: space-between; gap: .8rem; }
+    .ohead b { font: 600 .74rem/1.2 var(--display); letter-spacing: .22em; text-transform: uppercase; }
+    .ohead span { font: italic .9rem/1.2 var(--body); color: var(--ink-2); }
+    .ohead span.yes { color: var(--good); font-style: normal; font-weight: 600; }
+    .ogrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: .45rem .35rem; margin-top: .6rem; }
+    .oitem { display: flex; flex-direction: column; align-items: center; gap: .25rem; min-width: 0; text-align: center; }
+    .oitem .on { max-width: 100%; font: .78rem/1.15 var(--body); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .oitem .slot { position: relative; }
+    .oitem .cnt { font: 600 .8rem/1 var(--display); }
+    .onone { margin-top: .55rem; font: italic .95rem/1.3 var(--body); color: var(--ink-2); }
+    .tfoot { display: flex; flex-wrap: wrap; gap: .55rem; padding-top: .75rem; margin-top: .6rem; border-top: 1px solid var(--rule); }
+    .tfoot .btn { padding: .65rem .85rem; letter-spacing: .14em; }
+    .tfoot .btn.go { flex: 1; }
+</style>
+</head>
+<body>
+<div class="stage">
+    <aside class="panel" id="panel">
+        <div class="paper" id="paper"><div class="layer base"></div><div class="layer photo"></div><div class="layer grain"></div><div class="layer sheen"></div></div>
+        <div class="inner"></div>
+        <img class="orn orn-tl" src="img/frame-corner-tl.webp" alt="">
+        <img class="orn orn-br" src="img/frame-corner-br.webp" alt="">
+        <button class="close" id="close" title="Sair (Esc)"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4l16 16M20 4L4 20"/></svg></button>
+
+        <header class="head">
+            <img class="head-title" id="titleImg" alt="" hidden>
+            <h1 id="title">Ofício</h1>
+            <div class="bar"><i></i><i></i></div>
+            <p id="sub"></p>
+        </header>
+
+        <nav class="modes" id="modes" hidden></nav>
+
+        <div class="tools">
+            <div class="dd" id="cats"><button class="dd-btn" id="catBtn"><span class="dd-ico" id="catIc"></span><span class="dd-val" id="catVal">Todas as categorias</span><i class="dd-arrow"></i></button></div>
+            <input class="q" id="q" type="text" maxlength="40" spellcheck="false" autocomplete="off" placeholder="Procurar">
+        </div>
+
+        <section class="list" id="list"></section>
+        <div class="pager"><button id="prev">&lsaquo;</button><span id="pageno">1 / 1</span><button id="next">&rsaquo;</button></div>
+
+        <section class="detail" id="detail"></section>
+        <section class="trade" id="trade" hidden></section>
+    </aside>
+</div>
+
+<script>
+"use strict";
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+const $ = (id) => document.getElementById(id);
+const make = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) {
+        el.className = cls;
+    }
+    if (text !== undefined && text !== null) {
+        el.textContent = text;
+    }
+    return el;
+};
+
+const SKILLS = { survival: "Sobrevivência", alchemy: "Alquimia", craftsmanship: "Ofício", drinking: "Bebida" };
+/* The trades' title images, sent by the server with the page when it opens (they do not fit in the client package), kept per trade. */
+const titles = {};
+const SIGNS = {
+    food: '<svg viewBox="0 0 24 24"><path d="M4 13h16a8 8 0 0 1-16 0Z"/><path d="M9 9c0-2 2-2 2-4M13 9c0-2 2-2 2-4"/></svg>',
+    metal: '<svg viewBox="0 0 24 24"><path d="M4 20 15 9M14 4l6 6-3 3-6-6Z"/></svg>',
+    cloth: '<svg viewBox="0 0 24 24"><path d="M8.2 3.6 12 5.6l3.8-2 4.8 3.6-2.2 3.4-2-1.2v11H7.6v-11l-2 1.2-2.2-3.4Z"/></svg>',
+    potion: '<svg viewBox="0 0 24 24"><path d="M10 3h4M10.5 3v5L6 16a3 3 0 0 0 2.6 4.5h6.8A3 3 0 0 0 18 16l-4.5-8V3"/></svg>',
+    /* The gardens' page (2026-10-22): a sprout with two leaves. */
+    leaf: '<svg viewBox="0 0 24 24"><path d="M12 21v-9"/><path d="M12 12C12 7.5 8.6 5 4.5 5c0 4.4 3 7 7.5 7Z"/><path d="M12 14.5c0-3.6 2.8-5.8 7-5.8 0 3.8-2.6 5.8-7 5.8Z"/></svg>',
+};
+const SIGN_OF = { fogo: "food", defumador: "food", secador: "food", forja: "metal", costura: "cloth", alquimia: "potion", horta: "leaf", reparo: "metal" };
+
+let view = null;
+let cat = "";
+let query = "";
+let page = 0;
+let picked = "";
+let busy = null;
+/* How many of a row are asked for at once (2026-10-27); kept from row to row, and held to what the bag allows for the one shown. */
+let qty = 1;
+const MAX_BATCH = 10;
+/* How many of a row the bag has the ingredients for, up to ten: a tool is looked for and not used up. */
+const maxQty = (r) => {
+    let most = MAX_BATCH;
+    for (const [, need, have, tool] of r.ing) {
+        if (!tool && need > 0) most = Math.min(most, Math.floor(have / need));
+    }
+    return most;
+};
+/* The number shown and asked for: one on a row that is not made on the page or cannot be made now. */
+const quantityOf = (r) => (r.batch && r.can && !r.lock ? Math.max(1, Math.min(qty, maxQty(r))) : 1);
+let iconsOn = false;
+let progTimer = 0;
+
+/* The paper's colour under a slot, as its layers make it (the base, the photo multiplied in at .22, the grain, the sheen): the game
+   fills the back of each icon with it, so what an icon leaves see-through looks like the page around it, not a dark square. */
+const BASE = [210, 179, 140];
+const GRAIN = [0.93, 0.919, 0.902];
+const SHEEN = [255, 244, 214];
+let photo = null;
+const photoImg = new Image();
+photoImg.onload = () => {
+    try {
+        const c = document.createElement("canvas");
+        c.width = 96;
+        c.height = Math.max(1, Math.round((96 * photoImg.naturalHeight) / photoImg.naturalWidth));
+        const g = c.getContext("2d");
+        g.imageSmoothingQuality = "high";
+        g.drawImage(photoImg, 0, 0, c.width, c.height);
+        photo = { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data };
+    } catch (e) {
+        photo = null;
+    }
+    reportSlots();
+};
+photoImg.src = "img/bg-hud.webp";
+/* x, y: the slot's middle in the paper's box; size: its side. The photo is read over the whole slot. */
+const paperAt = (x, y, box, size) => {
+    let p = [255, 255, 255];
+    if (photo) {
+        const s = Math.max(box.width / photo.w, box.height / photo.h);
+        p = [0, 0, 0];
+        for (const dx of [-1, 0, 1]) {
+            for (const dy of [-1, 0, 1]) {
+                const px = Math.min(photo.w - 1, Math.max(0, Math.floor((x + (dx * size) / 3 - (box.width - photo.w * s) / 2) / s)));
+                const py = Math.min(photo.h - 1, Math.max(0, Math.floor((y + (dy * size) / 3 - (box.height - photo.h * s) / 2) / s)));
+                const i = (py * photo.w + px) * 4;
+                for (let k = 0; k < 3; k++) {
+                    p[k] += photo.d[i + k] / 9;
+                }
+            }
+        }
+    }
+    const a = 0.5 * Math.max(0, 1 - Math.hypot((x - 0.24 * box.width) / (0.8 * box.width), (y - 0.12 * box.height) / (0.55 * box.height)) / 0.72);
+    let rgb = 0;
+    for (let k = 0; k < 3; k++) {
+        const c = BASE[k] * (1 - 0.22 * (1 - p[k] / 255)) * GRAIN[k];
+        rgb = rgb * 256 + Math.round(c * (1 - a) + SHEEN[k] * a);
+    }
+    return rgb;
+};
+
+/* The page scales with the screen, times the player's own choice (Opções, Resolução da interface, told by the client as ui:scale). */
+let uiScale = 1;
+const fit = () => {
+    const scale = Math.max(0.5, Math.min(window.innerWidth / 1920, window.innerHeight / 1080)) * uiScale;
+    document.documentElement.style.fontSize = (16 * scale).toFixed(3) + "px";
+};
+window.addEventListener("ui:scale", (event) => {
+    const scale = Number(event.detail && event.detail.scale);
+    if (!(scale >= 0.5 && scale <= 2) || scale === uiScale) return;
+    uiScale = scale;
+    window.dispatchEvent(new Event("resize"));
+});
+
+const nameOf = (id) => (view && view.items[id] ? view.items[id][0] : id);
+const iconOf = (id) => (view && view.items[id] ? view.items[id][1] : "");
+
+/* A slot for an item: the client draws the game's icon in it (see reportSlots). */
+const slot = (id, size) => {
+    const el = make("span", "slot " + size);
+    el.dataset.icon = iconOf(id);
+    el.innerHTML = SIGNS[SIGN_OF[view.station]] || "";
+    return el;
+};
+
+const filtered = () => {
+    const q = query.trim().toLowerCase();
+    return view.recipes.filter((r) => (cat === "" || r.cat === cat) && (q === "" || nameOf(r.out).toLowerCase().includes(q)));
+};
+
+/* How many rows fit in the list as it is drawn now. */
+const perPage = () => {
+    const list = $("list");
+    const row = 3.05 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Math.max(3, Math.floor(list.clientHeight / row));
+};
+
+/* The drawings of the categories, one for each kind of thing the trades make, and what each category is drawn as. */
+const CAT_ICONS = {
+    all: '<rect x="4" y="4" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1"/>',
+    tag: '<path d="M3.5 12.6L11 5h8v8l-7.6 7.5z"/><circle cx="15.4" cy="8.6" r="1.3"/>',
+    // The fire
+    pot: '<path d="M5 9.5v5a5.5 5.5 0 0 0 5.5 5.5h3a5.5 5.5 0 0 0 5.5-5.5v-5"/><path d="M3.5 9.5h17"/><path d="M9 6.8c0-1.5 1.3-1.7 1.3-3.3M14 6.8c0-1.5 1.3-1.7 1.3-3.3"/>',
+    cup: '<path d="M5.5 8.5h10v8.5a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3z"/><path d="M15.5 10.5h1.7a2.3 2.3 0 0 1 0 4.6h-1.7"/><path d="M9 5.6c0-1.2 1-1.2 1-2.4M12.4 5.6c0-1.2 1-1.2 1-2.4"/>',
+    cheese: '<path d="M3.5 8l17 4.5V18h-17z"/><path d="M3.5 8l9-2.5 8 2.4"/><circle cx="8.5" cy="14.5" r="1.1"/><circle cx="13.5" cy="15.4" r=".9"/><circle cx="17.2" cy="14" r=".7"/>',
+    plate: '<circle cx="12" cy="12" r="8.2"/><circle cx="12" cy="12" r="4.6"/>',
+    bread: '<path d="M4 15c0-4.3 3.6-7.3 8-7.3s8 3 8 7.3c0 1.3-.8 2-2 2H6c-1.2 0-2-.7-2-2z"/><path d="M8.4 11.6l1.3 2.6M12 10.8l1.2 2.9M15.6 11.6l1 2.6"/><path d="M6.5 17v2.3h11V17"/>',
+    bowl: '<path d="M3.5 11.5h17a8.5 8.5 0 0 1-17 0z"/><path d="M8 8.4c0-1.4 1.2-1.4 1.2-2.8M12 8.4c0-1.4 1.2-1.4 1.2-2.8M16 8.4c0-1.4 1.2-1.4 1.2-2.8"/>',
+    // The smokehouse and the rack
+    fish: '<path d="M3.5 12c2.2-4 7-5.4 11-2.7L19.5 6.5v11l-5-2.8C10.5 17.4 5.7 16 3.5 12z"/><circle cx="7.6" cy="11.4" r=".7"/>',
+    sausage: '<rect x="3" y="9" width="18" height="6.4" rx="3.2" transform="rotate(-32 12 12)"/><path d="M10.3 9.3l3.4 5.4"/>',
+    egg: '<path d="M12 3.5c3.6 0 6 5.2 6 9.2a6 6 0 0 1-12 0c0-4 2.4-9.2 6-9.2z"/>',
+    mushroom: '<path d="M4 12.5a8 7.2 0 0 1 16 0z"/><path d="M9.6 12.5v3.6a2.4 2.4 0 0 0 4.8 0v-3.6"/><circle cx="9" cy="9.4" r=".7"/><circle cx="14.5" cy="8.6" r=".7"/>',
+    leaf: '<path d="M5 19C5 9.5 10 5 19.5 4.5 19.5 14 15 19 5 19z"/><path d="M5 19L14.5 9.5"/>',
+    apple: '<path d="M12 7.7c-2-1.5-7-1-7 4.5 0 4.5 3 8.3 5.5 8.3.8 0 1-.4 1.5-.4s.7.4 1.5.4c2.5 0 5.5-3.8 5.5-8.3 0-5.5-5-6-7-4.5z"/><path d="M12 7.7c0-1.8.8-3 2.6-3.9"/>',
+    carrot: '<path d="M4.5 19.5l6-10.7A3.4 3.4 0 0 1 15.2 13.5z"/><path d="M13.6 7.4l1.7-4M15.6 9.2l4.4-1.8M11.8 6.4L10.4 3"/>',
+    // The forge
+    dagger: '<path d="M12 4.5l1.9 8h-3.8z"/><path d="M8.6 12.5h6.8M12 12.5V18"/><circle cx="12" cy="19.4" r="1.1"/>',
+    sword: '<path d="M12 2.8l1.9 11.2h-3.8z"/><path d="M7.8 14h8.4M12 14v4.6"/><circle cx="12" cy="20" r="1.1"/>',
+    longsword: '<path d="M12 2.2l2.2 12.3H9.8z"/><path d="M6.8 14.5h10.4M12 14.5v4.8"/><circle cx="12" cy="20.6" r="1"/>',
+    axe: '<path d="M4.5 20L15.2 9.3"/><path d="M12.6 6.6c1.6-2.6 4.6-3.8 7.6-3 .8 3.2-.4 6.2-3 7.8-.9.5-1.8.7-2.6.5z"/>',
+    spear: '<path d="M4.5 19.5L16 8"/><path d="M14.3 9.7l1.4-5.9 4.5 4.5z"/><path d="M13.2 12.3l-1.5-1.5"/>',
+    mace: '<circle cx="16.2" cy="7.8" r="3.6"/><path d="M13.6 10.4L4.8 19.2"/><path d="M16.2 2.6v1.7M21.4 7.8h-1.7M19.9 4.1l-1.2 1.2M12.5 4.1l1.2 1.2"/>',
+    club: '<path d="M10.2 14V5.6a1.8 1.8 0 0 1 3.6 0V14"/><path d="M7.8 14h8.4M12 14v4.6"/><circle cx="12" cy="20" r="1.1"/>',
+    bow: '<path d="M7 3.5c10 4 10 13 0 17"/><path d="M7 3.5v17"/><path d="M7 12h12.5M17 9.5l2.5 2.5-2.5 2.5"/>',
+    arrow: '<path d="M3.5 12h15"/><path d="M14.5 8l4 4-4 4"/><path d="M3.5 12L6 9M3.5 12L6 15M7 12l2.5-3M7 12l2.5 3"/>',
+    horseshoe: '<path d="M4.8 4h4v7.6a3.2 3.2 0 0 0 6.4 0V4h4v7.6a7.2 7.2 0 0 1-14.4 0z"/><circle cx="6.8" cy="7" r=".6"/><circle cx="6.8" cy="10.4" r=".6"/><circle cx="17.2" cy="7" r=".6"/><circle cx="17.2" cy="10.4" r=".6"/>',
+    bridle: '<circle cx="12" cy="17" r="3.4"/><path d="M12 13.6V8.2M12 8.2L7.4 3.6M12 8.2l4.6-4.6"/>',
+    saddle: '<path d="M3.5 14.2L4 9.6C4.1 8.5 5 8 6 8.2l1 .5L8.2 12c2.4 1.2 5.2 1.2 7.6 0l1.2-3.3 1-.5c1-.2 1.9.3 2 1.4l.5 4.6c-5.2 2-12.8 2-17 0z"/><path d="M8.2 16.3v4.2h7.6v-4.2"/>',
+    harness: '<path d="M3.5 9.5h17v5h-17z"/><rect x="9.4" y="7.2" width="5.2" height="9.6" rx="1"/><path d="M6.5 9.5v5M17.5 9.5v5"/>',
+    gauntlet: '<path d="M7.5 17.5v-3.8L5.2 10.8a1.3 1.3 0 0 1 2-1.7l1.4 1.9V6a1.4 1.4 0 0 1 2.8 0v4V5a1.4 1.4 0 0 1 2.8 0v5V6.2a1.4 1.4 0 0 1 2.8 0V17.5"/><path d="M6.5 17.5h11V21h-11z"/>',
+    glove: '<path d="M7.5 20.5v-6.8L5.2 10.8a1.3 1.3 0 0 1 2-1.7l1.4 1.9V6a1.4 1.4 0 0 1 2.8 0v4V4.8a1.4 1.4 0 0 1 2.8 0V10V6a1.4 1.4 0 0 1 2.8 0v10c0 3-1.6 4.5-4 4.5z"/>',
+    helmet: '<path d="M4.5 18.5V12a7.5 7.5 0 0 1 15 0v6.5z"/><path d="M4.5 13.5h15M12 13.5v5M12 4.5V2.5"/>',
+    coal: '<path d="M3.8 17.5l2-5.2 4-1.4 2 3.6-2.2 4z"/><path d="M11.6 18.5l1.8-6 4.6-1 2.4 4-2 3.4z"/><path d="M8 10.2l1.4-4.2 4 1.2-.8 3.2"/>',
+    mail: '<circle cx="8.2" cy="9" r="3.7"/><circle cx="15.8" cy="9" r="3.7"/><circle cx="12" cy="15.2" r="3.7"/>',
+    shield: '<path d="M12 3.5l7.5 2.5v6c0 4.5-3.2 7.5-7.5 9-4.3-1.5-7.5-4.5-7.5-9V6z"/><path d="M12 3.5V21"/>',
+    hammer: '<path d="M5 19.5l8.6-8.6"/><rect x="10.6" y="4.4" width="9.6" height="4.6" rx="1" transform="rotate(45 15.4 6.7)"/>',
+    wrench: '<path d="M14.8 4.4a4.6 4.6 0 0 0-4 6.3L4 17.5 6.5 20l6.8-6.7a4.6 4.6 0 0 0 6.3-4l-3 3-2.6-.8-.8-2.6z"/>',
+    ingot: '<path d="M3.5 17.5l2.5-7h12l2.5 7z"/><path d="M6 10.5l1.6-3.6h8.8L18 10.5"/>',
+    breastplate: '<path d="M7.5 4l-4 3.5 1.5 4.5 2.5-1V20h9v-9l2.5 1 1.5-4.5L16.5 4c-.8 1.8-2.4 2.8-4.5 2.8S8.3 5.8 7.5 4z"/><path d="M12 6.8V20"/>',
+    legs: '<path d="M6.5 3.5h11l.4 4.5-1.2 12.5h-4l-.7-9-.7 9h-4L6.1 8z"/>',
+    // The needle
+    ring: '<circle cx="12" cy="14.5" r="5.5"/><path d="M9 6.6l1.4-2.6h3.2L15 6.6l-1.5 2h-3z"/>',
+    boot: '<path d="M7.5 3.5H14v8.6l5.2 2.5a2 2 0 0 1 .8 2.7l-.7 1.2H7.5z"/><path d="M7.5 8h6.5"/>',
+    hat: '<path d="M3.5 17.5h17"/><path d="M6.5 17.5c0-6 2.4-10 5.5-10s5.5 4 5.5 10"/><path d="M6.8 14h10.4"/>',
+    necklace: '<path d="M5 4.5c0 8 3 11 7 11s7-3 7-11"/><path d="M12 15.5l-2.2 3.2 2.2 2.8 2.2-2.8z"/>',
+    jerkin: '<path d="M8.5 3.5l-5 3 1.8 4.6 2.2-.8V20.5h9V10.3l2.2.8 1.8-4.6-5-3c-.7 1.4-2 2.2-3.5 2.2s-2.8-.8-3.5-2.2z"/><path d="M10.4 10h3.2M10.4 13h3.2M10.4 16h3.2"/>',
+    tunic: '<path d="M9 3.5l3 2.2 3-2.2 4.4 3.6-1.9 3.1-2.4-.6.9 10.9h-8l.9-10.9-2.4.6L4.6 7.1z"/>',
+    // The belts (2026-10-26): a strap round the waist with its buckle, and the coats of arms: a tunic with a shield on its breast.
+    belt: '<path d="M2.8 9.2h18.4v5.6H2.8z"/><rect x="8.6" y="6.8" width="6.8" height="10.4" rx="1.4"/><path d="M12 12h5.4"/><circle cx="5.4" cy="12" r=".6"/><circle cx="18.6" cy="12" r=".6"/>',
+    crest: '<path d="M9 3.5l3 2.2 3-2.2 4.4 3.6-1.9 3.1-2.4-.6.9 10.9h-8l.9-10.9-2.4.6L4.6 7.1z"/><path d="M12 10.4l2.5.9v2.3c0 1.5-1 2.6-2.5 3.2-1.5-.6-2.5-1.7-2.5-3.2v-2.3z"/>',
+    // The alchemy table
+    cross: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.6v8.8M7.6 12h8.8"/>',
+    flask: '<path d="M9.5 3.5h5M10.5 3.5v5.5L5 19a1.5 1.5 0 0 0 1.3 2h11.4a1.5 1.5 0 0 0 1.3-2l-5.5-10V3.5"/><path d="M7.7 15.5h8.6"/>',
+    skull: '<path d="M12 3.5a7.5 7.5 0 0 0-5 13.1V19h2v1.5h6V19h2v-2.4A7.5 7.5 0 0 0 12 3.5z"/><circle cx="9.2" cy="11.5" r="1.6"/><circle cx="14.8" cy="11.5" r="1.6"/><path d="M11 15.6h2"/>',
+    sack: '<path d="M8.5 5h7l-1 3c3 1.6 4.5 4.6 4.5 7.7 0 3-2.3 4.8-7 4.8s-7-1.8-7-4.8c0-3.1 1.5-6.1 4.5-7.7z"/><path d="M10 8h4"/>',
+    spool: '<ellipse cx="12" cy="6" rx="6" ry="2.2"/><path d="M6 6v12M18 6v12"/><path d="M6 18a6 2.2 0 0 0 12 0"/><path d="M8 9.8l8 2M8 12.3l8 2M8 14.8l8 2"/>',
+    drop: '<path d="M12 3.5c3.5 4.2 6 7.2 6 10.5a6 6 0 0 1-12 0c0-3.3 2.5-6.3 6-10.5z"/><path d="M9.2 14.6a3 3 0 0 0 2.5 2.7"/>',
+};
+
+// What each category is drawn as, by its name in the recipes (the same name in two trades may be two things: see `catIcon` in the page).
+const CAT_KEY = {
+    "": "all",
+    "Assados e cozidos": "pot", "Bebidas": "cup", "Laticínios": "cheese", "Pratos": "plate", "Pães e massas": "bread", "Sopas": "bowl",
+    "Carnes e peixes": "fish", "Embutidos": "sausage", "Laticínios e ovos": "egg", "Cogumelos": "mushroom", "Ervas": "leaf", "Frutas": "apple",
+    "Adagas": "dagger", "Arcos": "bow", "Armas de madeira": "club", "Arreios e caparazões": "harness", "Braços e manoplas": "gauntlet", "Capacetes": "helmet",
+    "Carvão": "coal", "Cotas e almofres": "mail", "Escudos": "shield", "Espadas curtas": "sword", "Ferraduras": "horseshoe", "Ferramentas": "hammer",
+    "Flechas": "arrow", "Kits de reparo": "wrench", "Lanças e machados": "spear", "Machados": "axe", "Maças e martelos": "mace", "Montantes": "longsword",
+    "Peitorais e cotas": "breastplate", "Pernas": "legs", "Prata": "ingot", "Rédeas e chanfros": "bridle", "Selas": "saddle",
+    "Anéis": "ring", "Calçados": "boot", "Calças": "legs", "Chapéus e capuzes": "hat", "Colares e broches": "necklace", "Gibões e couraças de couro": "jerkin",
+    "Luvas": "glove", "Túnicas e vestidos": "tunic", "Túnicas lisas": "tunic", "Cintos": "belt", "Bolsas": "sack",
+    "Medicina": "cross", "Poções": "flask", "Venenos": "skull", "Óleos e pomadas": "drop",
+    "Legumes": "carrot", "Especiarias": "sack",
+    // The 2026-10-27 categories: the garden's flax and grain, what is made of the harvest, the seeds; the forge's smelting and sword parts.
+    "Fibras": "spool", "Grãos": "sack", "Beneficiar": "hammer", "Sementes": "leaf", "Fundição": "ingot", "Peças de espada": "sword",
+    // The alchemists' preparations of the world's rarities (the leached charcoal, the pearl and the root).
+    "Preparos": "flask", "Raridades": "flask",
+    // The tailor's Cuman clothes (2026-10-27).
+    "Roupas cumanas": "hat",
+};
+
+/* The icon of a category: its own drawing, the tag for one that has none; the repair kits of the forge are a wrench and the tailor's a spool of thread, and a house's coats
+   of arms ("Brasão: Leipa", one category for each house) are a tunic with a shield. */
+const catIcon = (value) => {
+    const key = value === "Kits de reparo" && view.station === "costura" ? "spool" : CAT_KEY[value] || (value.indexOf("Brasão: ") === 0 ? "crest" : "tag");
+    const holder = make("span", "dd-ico");
+    holder.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + CAT_ICONS[key] + "</svg>";
+    return holder;
+};
+
+/* The categories, as one list: "Todas" and each of the trade's, with how many recipes each has. */
+let catList = null;
+const catOptions = () => {
+    const counts = {};
+    for (const r of view.recipes) {
+        counts[r.cat] = (counts[r.cat] || 0) + 1;
+    }
+    return [["", "Todas as categorias", view.recipes.length], ...Object.keys(counts).map((c) => [c, c, counts[c]])];
+};
+/* The game's browser does not always move a list that lies over the page with the wheel (2026-10-19: "o scroll no ng select das
+   listas"): the list moves itself, a line at a time, and the page behind it stays where it is. */
+function wheelScroll(list) {
+    list.addEventListener("wheel", (event) => {
+        if (list.scrollHeight <= list.clientHeight + 1) return;
+        event.preventDefault();
+        event.stopPropagation();
+        list.scrollTop += event.deltaMode === 1 ? event.deltaY * 32 : event.deltaMode === 2 ? event.deltaY * list.clientHeight : event.deltaY;
+    }, { passive: false });
+}
+
+const closeCats = () => {
+    if (!catList) {
+        return false;
+    }
+    catList.remove();
+    catList = null;
+    $("cats").classList.remove("open");
+    reportSlots();
+    return true;
+};
+const openCats = () => {
+    const host = $("cats");
+    catList = make("div", "dd-list");
+    wheelScroll(catList);
+    for (const [value, label, n] of catOptions()) {
+        const row = make("button", "dd-opt" + (cat === value ? " on" : ""));
+        row.appendChild(catIcon(value));
+        row.appendChild(make("span", null, label));
+        row.appendChild(make("small", null, String(n)));
+        row.addEventListener("click", () => {
+            closeCats();
+            if (cat !== value) {
+                cat = value;
+                page = 0;
+                drawCats();
+                drawList();
+            }
+        });
+        catList.appendChild(row);
+    }
+    host.appendChild(catList);
+    host.classList.add("open");
+    const on = catList.querySelector(".dd-opt.on");
+    if (on) {
+        catList.scrollTop = Math.max(0, on.offsetTop - (catList.clientHeight - on.offsetHeight) / 2);
+    }
+    // The open list lies over the recipes: their icons are taken away meanwhile, wherever the game draws them.
+    reportSlots();
+};
+const drawCats = () => {
+    if (!view.recipes.some((r) => r.cat === cat)) {
+        cat = "";
+    }
+    const shown = catOptions().find(([value]) => value === cat);
+    $("catVal").textContent = shown ? shown[1] : "Todas as categorias";
+    $("catIc").replaceChildren(...catIcon(shown ? shown[0] : "").childNodes);
+    /* "Receitas" -> "Plantas" on the gardens' page. */
+    $("q").placeholder = view.station === "horta" ? "Procurar planta" : view.station === "reparo" ? "Procurar arma" : view.mode === "extrair" ? "Procurar equipamento" : "Procurar";
+    if (catList) {
+        closeCats();
+    }
+};
+
+/* The grindstone's rows (2026-10-27) carry their own word and colour: "Pronto" (to repair), "Inteira" or "Sem material". */
+const stateOf = (r) => (r.badge ? r.badge : r.lock ? ["lock", "Nível " + r.lvl] : r.can ? ["ok", "Pronto"] : ["miss", "Falta"]);
+
+const drawList = () => {
+    const host = $("list");
+    host.innerHTML = "";
+    const rows = filtered();
+    const size = perPage();
+    const pages = Math.max(1, Math.ceil(rows.length / size));
+    page = Math.min(page, pages - 1);
+    $("pageno").textContent = page + 1 + " / " + pages;
+    $("prev").disabled = page === 0;
+    $("next").disabled = page >= pages - 1;
+    if (rows.length === 0) {
+        host.appendChild(make("p", "empty", view.none || (view.station === "horta" ? "Nenhuma planta aqui." : view.station === "reparo" ? "Nenhuma arma na bolsa que a pedra possa reparar." : "Nenhuma receita aqui.")));
+    }
+    for (const r of rows.slice(page * size, page * size + size)) {
+        const [kind, label] = stateOf(r);
+        const b = make("button", "rrow" + (r.id === picked ? " on" : "") + (kind === "lock" ? " locked" : ""));
+        b.appendChild(slot(r.out, "s48"));
+        const nm = make("span", "nm", nameOf(r.out) + (r.n > 1 ? " ×" + r.n : ""));
+        nm.appendChild(make("small", null, r.t || r.cat));
+        b.appendChild(nm);
+        b.appendChild(make("span", "st " + kind, label));
+        b.addEventListener("click", () => {
+            picked = r.id;
+            drawList();
+            drawDetail();
+        });
+        host.appendChild(b);
+    }
+    reportSlots();
+};
+
+const drawDetail = () => {
+    const host = $("detail");
+    host.innerHTML = "";
+    const r = view.recipes.find((x) => x.id === picked);
+    if (!r) {
+        host.appendChild(make("p", "empty", view && view.mode === "extrair" ? "Escolha um equipamento na lista." : view && view.station === "horta" ? "Escolha uma planta na lista." : view && view.station === "reparo" ? "Escolha uma arma na lista." : "Escolha uma receita na lista."));
+        reportSlots();
+        return;
+    }
+    const q = quantityOf(r);
+    const head = make("div", "dhead");
+    head.appendChild(slot(r.out, "s64"));
+    const t = make("div");
+    t.appendChild(make("b", null, nameOf(r.out) + (r.n * q > 1 ? " ×" + r.n * q : "")));
+    t.appendChild(make("span", "sub", r.cat));
+    head.appendChild(t);
+    host.appendChild(head);
+    if (view.station === "reparo") {
+        /* The grindstone (2026-10-27): no ingredients, no level; the weapon's condition and how many of its repairs are used. */
+        host.appendChild(make("div", "k", "Estado"));
+        host.appendChild(make("p", "facts", r.t.charAt(0).toUpperCase() + r.t.slice(1) + "."));
+        host.appendChild(make("p", "facts", "O reparo devolve a arma à condição plena. Cada arma aguenta 3 reparos; depois disso, falta material no objeto."));
+    } else if (view.mode === "extrair") {
+        /* The extraction (2026-10-27): what comes back, half of what the piece took to make, and the piece's condition. */
+        host.appendChild(make("div", "k", "Devolve"));
+        const back = make("ul", "ings");
+        for (const [id, give] of r.ing) {
+            const li = make("li");
+            li.appendChild(slot(id, "s32"));
+            li.appendChild(make("span", "in", nameOf(id)));
+            li.appendChild(make("span", "ic ok", "+" + give));
+            back.appendChild(li);
+        }
+        host.appendChild(back);
+        host.appendChild(make("p", "facts", r.t.charAt(0).toUpperCase() + r.t.slice(1) + "."));
+        host.appendChild(make("p", "facts", "O equipamento é quebrado e não volta. Sem XP."));
+    } else {
+    host.appendChild(make("div", "k", "Pede"));
+    const ul = make("ul", "ings");
+    /* A fourth number marks a tool: it is only looked for in the bag, and not used up (the gardens' shovel). */
+    for (const [id, need, have, tool] of r.ing) {
+        const li = make("li");
+        li.appendChild(slot(id, "s32"));
+        const total = tool ? need : need * q;
+        li.appendChild(make("span", "in", nameOf(id) + (tool ? " (ferramenta)" : "")));
+        li.appendChild(make("span", "ic " + (have >= total ? "ok" : "bad"), tool ? (have >= total ? "tem" : "falta") : Math.min(have, 999) + "/" + total));
+        ul.appendChild(li);
+    }
+    host.appendChild(ul);
+    /* What a garden's crop gives and when (the server writes it: "colheita em 30 min · rende 4 a 6"). */
+    if (r.t) {
+        host.appendChild(make("div", "k", "Colheita"));
+        host.appendChild(make("p", "facts", r.t.charAt(0).toUpperCase() + r.t.slice(1) + "."));
+    }
+    const facts = make("p", "facts");
+    if (r.lock) {
+        facts.appendChild(make("span", "lock", "Precisa de nível " + r.lvl + " de " + (SKILLS[r.trk || view.track] || "ofício") + ". "));
+    } else {
+        facts.appendChild(document.createTextNode("Nível " + r.lvl + " · "));
+    }
+    facts.appendChild(document.createTextNode("+" + r.xp * q + " XP" + (r.s > 0 ? " · " + r.s * q + " s" : "") + (q > 1 ? " · " + q + " vezes" : "")));
+    host.appendChild(facts);
+    }
+    const work = make("div", "work");
+    if (busy && busy.id === r.id) {
+        const prog = make("div", "prog");
+        const bar = make("i");
+        prog.appendChild(bar);
+        prog.appendChild(make("span", null, busy.doing + "…" + (busy.n > 1 ? " " + busy.i + " de " + busy.n : "")));
+        work.appendChild(prog);
+        const stop = make("button", "btn ghost", "Parar");
+        stop.addEventListener("click", () => send("craft:cancel"));
+        work.appendChild(stop);
+        const tick = () => {
+            const share = Math.min(1, (Date.now() - busy.at) / busy.ms);
+            bar.style.width = (share * 100).toFixed(1) + "%";
+        };
+        tick();
+        clearInterval(progTimer);
+        progTimer = setInterval(() => (busy ? tick() : clearInterval(progTimer)), 100);
+    } else {
+        const most = r.batch && r.can && !r.lock ? maxQty(r) : 1;
+        if (most > 1 && busy === null) {
+            const step = make("div", "qty");
+            const less = make("button", null, "−");
+            less.title = "Menos um";
+            less.disabled = q <= 1;
+            less.addEventListener("click", () => {
+                qty = Math.max(1, q - 1);
+                drawDetail();
+            });
+            const more = make("button", null, "+");
+            more.title = "Mais um";
+            more.disabled = q >= most;
+            more.addEventListener("click", () => {
+                qty = Math.min(most, q + 1);
+                drawDetail();
+            });
+            const top = make("button", "max", "máx");
+            top.title = "O máximo que a bolsa permite (até dez)";
+            top.disabled = q >= most;
+            top.addEventListener("click", () => {
+                qty = most;
+                drawDetail();
+            });
+            step.appendChild(less);
+            step.appendChild(make("b", null, String(q)));
+            step.appendChild(more);
+            step.appendChild(top);
+            work.appendChild(step);
+        }
+        const go = make("button", "btn", (r.v || view.verb) + (q > 1 ? " ×" + q : ""));
+        go.disabled = !r.can || busy !== null;
+        go.addEventListener("click", () => {
+            $("msg") && ($("msg").textContent = "");
+            send("craft:make", r.batch ? { id: r.id, n: q } : { id: r.id });
+        });
+        work.appendChild(go);
+    }
+    host.appendChild(work);
+    const msg = make("p", "msg");
+    msg.id = "msg";
+    host.appendChild(msg);
+    reportSlots();
+};
+
+/* The slots cut out of the paper while the icons are up, so they show whether the game draws them under the page or over it. */
+const cutSlots = (rects) => {
+    const paper = $("paper");
+    if (!iconsOn || rects.length === 0) {
+        paper.style.webkitMaskImage = "";
+        return;
+    }
+    const box = paper.getBoundingClientRect();
+    const images = [];
+    const places = [];
+    const sizes = [];
+    const ops = [];
+    for (const r of rects) {
+        images.push("linear-gradient(#000,#000)");
+        places.push((r.left - box.left + 1).toFixed(1) + "px " + (r.top - box.top + 1).toFixed(1) + "px");
+        sizes.push((r.width - 2).toFixed(1) + "px " + (r.height - 2).toFixed(1) + "px");
+        ops.push("xor");
+    }
+    images.push("linear-gradient(#000,#000)");
+    places.push("0 0");
+    sizes.push("100% 100%");
+    ops.push("source-over");
+    paper.style.webkitMaskImage = images.join(",");
+    paper.style.webkitMaskPosition = places.join(",");
+    paper.style.webkitMaskSize = sizes.join(",");
+    paper.style.webkitMaskRepeat = "no-repeat";
+    paper.style.webkitMaskComposite = ops.join(",");
+};
+
+/* Where each slot is on the screen, as shares of it, with the icon it shows: the client draws the game's icons there. Sent when
+   they change; the page can still move after it is drawn (its fonts arriving), so they are looked at again now and then. */
+let slotsFrame = 0;
+let lastSlots = "";
+const reportSlots = () => {
+    cancelAnimationFrame(slotsFrame);
+    slotsFrame = requestAnimationFrame(() => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const box = $("paper").getBoundingClientRect();
+        const slots = [];
+        const rects = [];
+        for (const el of catList ? [] : document.querySelectorAll(".slot")) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && el.dataset.icon) {
+                rects.push(r);
+                slots.push({ icon: el.dataset.icon, x: r.left / w, y: r.top / h, w: r.width / w, h: r.height / h, bg: paperAt(r.left - box.left + r.width / 2, r.top - box.top + r.height / 2, box, r.width) });
+            }
+        }
+        cutSlots(rects);
+        const said = JSON.stringify(slots);
+        if (said !== lastSlots) {
+            lastSlots = said;
+            send("craft:slots", { slots });
+        }
+    });
+};
+
+const say = (text, kind) => {
+    const msg = $("msg");
+    if (msg) {
+        msg.textContent = text;
+        msg.className = "msg " + (kind || "");
+    }
+};
+
+/* The page's title: the image the server sent for `key` (kept for the next time), else the name in text until it has loaded. The
+   trade's title and the trades' share the one image: one coming back finds the other's hidden, so an image already loaded is
+   shown again at once. */
+const showTitle = (key, sent, text) => {
+    const img = $("titleImg");
+    if (sent) {
+        titles[key] = sent;
+    }
+    const src = titles[key] || "";
+    img.alt = text;
+    $("title").textContent = text;
+    img.onerror = () => {
+        img.hidden = true;
+        $("title").hidden = false;
+    };
+    img.onload = () => {
+        img.hidden = false;
+        $("title").hidden = true;
+    };
+    if (src === "") {
+        img.hidden = true;
+        $("title").hidden = false;
+        return;
+    }
+    if (img.getAttribute("src") === src) {
+        if (img.complete && img.naturalWidth > 0) {
+            img.hidden = false;
+            $("title").hidden = true;
+        }
+        return;
+    }
+    img.hidden = true;
+    $("title").hidden = false;
+    img.src = src;
+};
+
+/* The tabs, when the view brings them: [mode, label] pairs; a click asks the server for the other list (not while a piece of work goes on). */
+const drawModes = () => {
+    const host = $("modes");
+    host.replaceChildren();
+    host.hidden = !Array.isArray(view.modes);
+    if (host.hidden) return;
+    for (const [mode, label] of view.modes) {
+        const b = make("button", mode === (view.mode || "fabricar") ? "on" : "", label);
+        b.disabled = busy !== null;
+        b.addEventListener("click", () => {
+            if (mode !== (view.mode || "fabricar") && busy === null) send("craft:mode", { mode });
+        });
+        host.appendChild(b);
+    }
+};
+
+const draw = () => {
+    showTitle(view.station, view.img, view.title);
+    drawModes();
+    $("sub").textContent = view.sub || "Nível " + view.level + " de " + (SKILLS[view.track] || "ofício") + " · " + view.recipes.filter((r) => r.can).length + " receita(s) prontas para fazer";
+    drawCats();
+    drawList();
+    drawDetail();
+};
+
+/* ---------- The trade between two players: what each puts on the table (the money is one of the things, on the game's transfer screen), accept and cancel ---------- */
+
+let trade = null;
+
+const offerBox = (title, offer, mine) => {
+    const box = make("div", "offer" + (offer.accepted ? " agreed" : ""));
+    const head = make("div", "ohead");
+    head.appendChild(make("b", null, title));
+    head.appendChild(make("span", offer.accepted ? "yes" : null, offer.accepted ? "Aceitou" : mine ? "Você ainda não aceitou" : "Ainda não aceitou"));
+    box.appendChild(head);
+    const items = Array.isArray(offer.items) ? offer.items : [];
+    if (items.length === 0) {
+        box.appendChild(make("p", "onone", mine ? "Nenhum item. Use Mudar os meus itens para pôr o que quer trocar." : "Nenhum item."));
+    } else {
+        const grid = make("div", "ogrid");
+        for (const item of items) {
+            const cell = make("div", "oitem");
+            const el = make("span", "slot s48");
+            el.dataset.icon = item.icon || "";
+            el.innerHTML = SIGNS.cloth;
+            cell.appendChild(el);
+            cell.appendChild(make("span", "cnt", "×" + item.n));
+            const nm = make("span", "on", item.name);
+            nm.title = item.name;
+            cell.appendChild(nm);
+            grid.appendChild(cell);
+        }
+        box.appendChild(grid);
+    }
+    return box;
+};
+
+const drawTrade = () => {
+    const host = $("trade");
+    host.innerHTML = "";
+    if (!trade) {
+        return;
+    }
+    showTitle("negociacao", trade.img, "Negociação");
+    $("sub").textContent = "Com " + trade.partner + ". Fiquem perto um do outro; qualquer mudança desfaz os aceites.";
+    const offers = make("div", "offers");
+    offers.appendChild(offerBox("Você oferece", trade.mine, true));
+    offers.appendChild(offerBox(trade.partner + " oferece", trade.theirs, false));
+    host.appendChild(offers);
+    const foot = make("div", "tfoot");
+    const items = make("button", "btn ghost", "Mudar os meus itens");
+    items.addEventListener("click", () => send("trade:items"));
+    foot.appendChild(items);
+    const accept = make("button", "btn go", trade.mine.accepted ? "Esperando " + trade.partner : "Aceitar a troca");
+    accept.disabled = !!trade.mine.accepted;
+    accept.addEventListener("click", () => send("trade:accept"));
+    foot.appendChild(accept);
+    const cancel = make("button", "btn ghost", "Cancelar");
+    cancel.addEventListener("click", () => send("trade:cancel"));
+    foot.appendChild(cancel);
+    host.appendChild(foot);
+    const msg = make("p", "msg");
+    msg.id = "msg";
+    host.appendChild(msg);
+    reportSlots();
+};
+
+const setTrading = (on) => {
+    $("panel").classList.toggle("trading", on);
+    $("trade").hidden = !on;
+    if (!on) {
+        trade = null;
+        $("trade").innerHTML = "";
+    }
+};
+
+window.addEventListener("trade:view", (event) => {
+    const next = event.detail;
+    if (!next || next.mode !== "trade") {
+        return;
+    }
+    trade = next;
+    setTrading(true);
+    drawTrade();
+});
+window.addEventListener("trade:end", () => {
+    setTrading(false);
+});
+
+window.addEventListener("craft:view", (event) => {
+    const next = event.detail;
+    if (!next || !Array.isArray(next.recipes)) {
+        return;
+    }
+    setTrading(false);
+    const fresh = !view || view.station !== next.station || (view.mode || "") !== (next.mode || "");
+    view = next;
+    if (!fresh && !view.recipes.some((r) => r.id === picked)) {
+        picked = (view.recipes.find((r) => r.can) || view.recipes[0] || { id: "" }).id;
+    }
+    if (fresh) {
+        cat = "";
+        query = "";
+        page = 0;
+        $("q").value = "";
+        picked = (view.recipes.find((r) => r.can) || view.recipes[0] || { id: "" }).id;
+    }
+    draw();
+});
+window.addEventListener("craft:progress", (event) => {
+    const p = event.detail || {};
+    busy = { id: p.id, ms: p.ms || 1000, doing: p.doing || "Trabalhando", at: Date.now(), i: p.i || 1, n: p.n || 1 };
+    picked = p.id || picked;
+    drawDetail();
+});
+window.addEventListener("craft:result", (event) => {
+    const r = event.detail || {};
+    busy = null;
+    drawDetail();
+    say(r.text || "", r.ok ? "good" : "bad");
+});
+window.addEventListener("craft:icons", (event) => {
+    iconsOn = !!(event.detail && event.detail.on);
+    document.body.classList.toggle("icons", iconsOn);
+    lastSlots = "";
+    reportSlots();
+});
+
+$("prev").addEventListener("click", () => {
+    page = Math.max(0, page - 1);
+    drawList();
+});
+$("next").addEventListener("click", () => {
+    page += 1;
+    drawList();
+});
+$("q").addEventListener("input", () => {
+    query = $("q").value;
+    page = 0;
+    drawList();
+});
+/* Closing the page in a trade is leaving the trade: everything goes back. */
+const leave = () => {
+    if (trade) {
+        send("trade:cancel");
+    } else {
+        send("craft:close");
+    }
+};
+$("close").addEventListener("click", leave);
+$("catBtn").addEventListener("click", () => {
+    if (!closeCats() && view) {
+        openCats();
+    }
+});
+document.addEventListener("mousedown", (event) => {
+    if (catList && !$("cats").contains(event.target)) {
+        closeCats();
+    }
+});
+document.addEventListener("keydown", (event) => {
+    if ((event.keyCode || 0) === 27 || event.key === "Escape") {
+        event.preventDefault();
+        if (!closeCats()) {
+            leave();
+        }
+    }
+});
+window.addEventListener("resize", () => {
+    fit();
+    if (trade) {
+        drawTrade();
+    } else if (view) {
+        drawList();
+        drawDetail();
+    }
+});
+
+fit();
+send("craft:ready");
+if (document.fonts) {
+    document.fonts.ready.then(reportSlots);
+}
+setInterval(() => (view || trade) && reportSlots(), 800);
+</script>
+</body>
+</html>

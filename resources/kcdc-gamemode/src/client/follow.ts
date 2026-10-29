@@ -1,3 +1,4 @@
+import { playingDice } from "./dice-quiet.js";
 import { isInteractionTargetVisible } from "./interaction.js";
 
 /** The native Follow control, including rebinding and gamepad glyphs. */
@@ -19,7 +20,7 @@ export function installFollow(): void {
         if (!nextStopping) owns = false;
         const local = LocalPlayer;
         const next = !nextStopping && local?.ready && local.alive
-            ? Follow.targets().filter(visible).sort((a, b) => {
+            ? Follow.targets().filter((target) => !(target.kind === "player" && playingDice(target.id))).filter(visible).sort((a, b) => {
                 const p = local.position;
                 return Math.hypot(a.position.x - p.x, a.position.y - p.y, a.position.z - p.z) - Math.hypot(b.position.x - p.x, b.position.y - p.y, b.position.z - p.z);
             }).find((target) => Follow.canStart(target)) : undefined;

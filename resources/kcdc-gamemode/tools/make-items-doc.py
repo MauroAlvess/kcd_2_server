@@ -351,4 +351,5 @@ def main() -> None:
     print(f"{OUT}: {len(lines)} linhas, {total_codes} códigos; cortes: " + "; ".join(f"{k} {bounds[k]}" for k in KINDS))
 
 
-main()
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,6 @@
 /**
- * Who is in a guild, for the "Ver membros" button of the Guildas page: the members in the order of the realm's hierarchy,
- * a page at a time (a guild may grow to hundreds, and the page is never sent more than one page of them).
+ * Who is in a guild, for the "Ver membros" button of the Guildas page, which only administrators have (2026-10-26): the members in the order of
+ * the realm's hierarchy, a page at a time (a guild may grow to hundreds, and the page is never sent more than one page of them).
  *
  * The order is the one the hierarchy reads in (`nobility.ts`): whoever holds the highest title first (branch, then tier),
  * then the nobles with no title, then the commoners, each group by name. Every line says what a character is known by --
@@ -16,6 +16,10 @@ import { getCharacter } from "./characters.js";
 import { getSurname } from "./family.js";
 import { known, labelOf, order } from "./nobility.js";
 import { getGuildId, getSocialStatus, GUILDS, listGuildMembers } from "./status.js";
+import type { SocialStatus } from "./status.js";
+
+/** Nobles first, then the lesser nobles, then the commoners. */
+const STANDING_RANK: Readonly<Record<SocialStatus, number>> = { nobilis: 0, minor: 1, plebeius: 2 };
 import { titlesOf } from "./titles.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -27,7 +31,7 @@ export interface MemberLine {
     readonly name: string;
     /** The titles held, highest first, "Lorde · Burgrave"; empty for none. */
     readonly titles: string;
-    readonly standing: "nobilis" | "plebeius";
+    readonly standing: SocialStatus;
     readonly you: boolean;
 }
 
@@ -45,7 +49,7 @@ export interface Ranked {
     readonly steamId: string;
     /** Where the highest title stands in the hierarchy's reading order; Infinity for none. */
     readonly top: number;
-    readonly standing: "nobilis" | "plebeius";
+    readonly standing: SocialStatus;
     readonly name: string;
 }
 
@@ -77,7 +81,7 @@ export function byHierarchy(a: Ranked, b: Ranked): number {
         return a.top < b.top ? -1 : 1;
     }
     if (a.standing !== b.standing) {
-        return a.standing === "nobilis" ? -1 : 1;
+        return STANDING_RANK[a.standing] - STANDING_RANK[b.standing];
     }
     return a.name.localeCompare(b.name, "pt", { numeric: true });
 }
@@ -107,6 +111,11 @@ export function rosterOf(viewer: Player, guildId: string, wanted: number): Guild
 export function installGuildMembers(): void {
     Events.onClient(`${RESOURCE}:status.guildMembers`, (sender, payload) => {
         const viewer = sender as Player;
+        // The list is the administrators' alone (user, 2026-10-26: "o botão ver membros só pode ficar disponível para os admins"): the page hides the button
+        // for everybody else, and the server answers nobody else who asks all the same.
+        if (!isAdmin(viewer)) {
+            return;
+        }
         let fields: Record<string, unknown> = {};
         try {
             const value = typeof payload === "string" && payload.length <= 256 ? (JSON.parse(payload) as unknown) : payload;

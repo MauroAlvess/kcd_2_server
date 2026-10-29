@@ -25,9 +25,19 @@
  * There is one view to draw through: the free camera cannot start while the third-person camera holds it, so that is
  * put down first and taken up again when the flight ends.
  *
+ * Interacting in third person (2026-10-27, "na câmera em terceira pessoa nenhum E ou F ou botão de interação funciona"):
+ * the game finds what it can be used on from its camera, and the third-person camera stands a few metres behind the
+ * head, past what a hand reaches. So while the player stands still looking at something that can be used -- an entity
+ * (a door, a person, a chest, a horse) within `ASSIST.aheadM` of the eyes -- or for `ASSIST.pressMs` after E or F is
+ * pressed, the camera glides in to the eyes (the game's own first-person view, `Camera.setThirdPerson(null)`) and glides
+ * back out once the player walks, looks away or the time is over. A press that came before the camera was in is lost
+ * (a thing that cannot be seen by a ray, such as a bed): the second one works.
+ *
  * The panel (`status.ts`) talks to this through the resource's own local events: `camera.choose`, `camera.free`,
  * `camera.stopFree` and `camera.ask` in, `camera.state` out.
  */
+
+import { chatShown, showChat } from "./chat-state.js";
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -51,6 +61,27 @@ const FREE_SPEED = 4;
 
 /** The eyes, above the feet: the middle of the sphere the free camera stays in, and where it starts. */
 const EYE_HEIGHT_M = 1.6;
+
+/**
+ * The camera that comes in to the eyes while something is used (see the top of this file). Every time is in milliseconds.
+ */
+export const ASSIST = {
+    /** What is looked at counts when it is this near the eyes, in metres: a little past a hand's reach. */
+    aheadM: 2.8,
+    /** The player must have stood still this long before the camera comes in for what they look at. */
+    stillMs: 300,
+    /** Slower than this, in metres a second, is standing still; faster is walking, and the camera goes out. */
+    walkingMps: 0.6,
+    /** The camera stays in this long after the reason is gone (a look that wavers does not make it dance). */
+    holdMs: 700,
+    /** E or F pressed: the camera comes in for this long. */
+    pressMs: 3_000,
+    /** Going in or out takes this long, drawn in steps of `tickMs`. */
+    glideMs: 180,
+    tickMs: 33,
+    /** How often the player's place is read for the speed, and the look ahead is made. */
+    senseMs: 150,
+} as const;
 
 const FREE_TICK_MS = 100;
 
@@ -87,10 +118,25 @@ const FREE_WARN_BEFORE_MS = 30_000;
 /** Everything of the HUD that would be in a picture, hidden while the free camera flies. */
 export const PHOTO_HIDDEN = ["Compass", "Stats", "QAMWeapon", "QAMFood", "Hints", "Buffs", "GameLog", "InfoText", "Subtitles", "Crime", "Wanted", "Trespassing", "Bubbles"];
 
+/** Where the camera sits when it has come all the way in: at the eyes, the nearest the third-person camera goes (0.3 m back). */
+const NEAR = { distance: 0.3, height: EYE_HEIGHT_M, shoulder: 0 } as const;
+
 let thirdPerson = false;
 let view: CameraView = "normal";
 /** A distance `/camera third <metres>` asked for, kept until another view is chosen. */
 let customDistance: number | null = null;
+/** How far the camera has come in to the eyes for an interaction: 0 is the chosen view, 1 the game's own first person. */
+let blend = 0;
+/** The camera is kept in until these times: for what is looked at, and for E or F pressed. */
+let holdUntil = 0;
+let pressedUntil = 0;
+/** The speed is read from the place at the last look; the player has been still since `stillSince` (0 when they are not). */
+let sensedAt = 0;
+let sensedPlace: { x: number; y: number } | null = null;
+let stillSince = 0;
+let walking = false;
+let assistTimer: ReturnType<typeof setInterval> | null = null;
+let assistLogged = 0;
 /** Choices sent to the server and not answered yet: an older answer must not undo a newer choice. */
 let pending = 0;
 
@@ -144,19 +190,135 @@ function announce(): void {
     void Events.emitLocal("camera.state", cameraState()).catch(() => undefined);
 }
 
+/** The camera's shape this moment: the chosen view drawn toward the eyes by `blend`, or null once it is at them (the game's own view). */
+function shapeNow(): { distance: number; height: number; shoulder: number } | null {
+    const chosen = VIEWS[view];
+    const base = customDistance === null ? { ...chosen } : { ...chosen, distance: customDistance };
+    if (blend <= 0) {
+        return base;
+    }
+    if (blend >= 1) {
+        return null;
+    }
+    const t = blend * blend * (3 - 2 * blend);
+    return {
+        distance: base.distance + (NEAR.distance - base.distance) * t,
+        height: base.height + (NEAR.height - base.height) * t,
+        shoulder: base.shoulder + (NEAR.shoulder - base.shoulder) * t,
+    };
+}
+
 /** Puts the third-person camera up, moves it, or hands the view back to the game, as chosen. Waits out a flight. */
 function applyThirdPerson(): void {
     if (flying) {
         return;
     }
     if (!thirdPerson) {
+        blend = 0;
+        holdUntil = 0;
+        pressedUntil = 0;
         if (Camera.isThirdPerson()) {
             Camera.setThirdPerson(null);
         }
         return;
     }
-    const shape = VIEWS[view];
-    Camera.setThirdPerson(customDistance === null ? { ...shape } : { ...shape, distance: customDistance });
+    const shape = shapeNow();
+    if (shape === null) {
+        // At the eyes: the game's own camera is the one looking, as in first person.
+        if (Camera.isThirdPerson()) {
+            Camera.setThirdPerson(null);
+        }
+        return;
+    }
+    Camera.setThirdPerson(shape);
+}
+
+/** What is looked at from the eyes, if it can be used: an entity (a door, a person, a chest, a horse) within reach ahead -- not a wall, a tree or the ground. Its class, or null. */
+function usableAhead(me: Player): string | null {
+    const pose = Camera.getPose();
+    if (pose === null) {
+        return null;
+    }
+    const from = new Vector3(me.position.x, me.position.y, me.position.z + EYE_HEIGHT_M);
+    const to = new Vector3(from.x + pose.forward.x * ASSIST.aheadM, from.y + pose.forward.y * ASSIST.aheadM, from.z + pose.forward.z * ASSIST.aheadM);
+    const hit = World.raycast(from, to, { mode: "anything", ignoreSelf: true });
+    if (hit === null || hit.terrain) {
+        return null;
+    }
+    if (hit.player !== null) {
+        return "player";
+    }
+    return hit.kind === "entity" ? (hit.entityClass ?? "entity") : null;
+}
+
+function assistLog(line: string): void {
+    if (assistLogged < 12) {
+        assistLogged += 1;
+        console.log(`camera assist: ${line}`);
+    }
+}
+
+/**
+ * One beat of the interaction camera: reads the player's speed and what is ahead every `senseMs`, decides whether the camera
+ * should be at the eyes, and draws it a step toward that.
+ */
+function assistTick(): void {
+    const now = Date.now();
+    const me = LocalPlayer;
+    const usable = thirdPerson && !flying && me !== null && me.ready && me.alive && !me.mounted && !Hud.isInDialogue() && Controls.isEnabled();
+    if (!usable) {
+        sensedAt = 0;
+        sensedPlace = null;
+        stillSince = 0;
+        walking = false;
+        holdUntil = 0;
+        pressedUntil = 0;
+    } else if (now - sensedAt >= ASSIST.senseMs) {
+        const place = { x: me.position.x, y: me.position.y };
+        const seconds = (now - sensedAt) / 1000;
+        const speed = sensedPlace === null ? 0 : Math.hypot(place.x - sensedPlace.x, place.y - sensedPlace.y) / seconds;
+        sensedAt = now;
+        sensedPlace = place;
+        walking = speed > ASSIST.walkingMps;
+        if (walking) {
+            stillSince = 0;
+            holdUntil = 0;
+            pressedUntil = 0;
+        } else {
+            if (stillSince === 0) {
+                stillSince = now;
+            }
+            if (now - stillSince >= ASSIST.stillMs) {
+                const looked = usableAhead(me);
+                if (looked !== null) {
+                    if (now >= holdUntil && blend < 1) {
+                        assistLog(`in, looking at ${looked}`);
+                    }
+                    holdUntil = now + ASSIST.holdMs;
+                }
+            }
+        }
+    }
+    const goal = usable && (now < holdUntil || now < pressedUntil) ? 1 : 0;
+    if (blend === goal) {
+        return;
+    }
+    const step = ASSIST.tickMs / ASSIST.glideMs;
+    blend = goal > blend ? Math.min(goal, blend + step) : Math.max(goal, blend - step);
+    if (blend === 0) {
+        assistLog("out");
+    }
+    applyThirdPerson();
+}
+
+/** E or F: the camera comes in for a while, so the second press (the first, for what a ray cannot see) finds what is in front of the eyes. */
+function interactionKeyPressed(): void {
+    if (!thirdPerson || flying || walking) {
+        return;
+    }
+    pressedUntil = Date.now() + ASSIST.pressMs;
+    assistLog("in, E or F pressed");
+    assistTick();
 }
 
 /** A choice from the panel or `/camera`: applied now, then kept by the server. Fields left out stay as they were. */
@@ -204,9 +366,9 @@ function hideForPicture(): void {
             hiddenByUs.push(element);
         }
     }
-    chatWasVisible = Chat.isUIVisible();
+    chatWasVisible = chatShown();
     if (chatWasVisible) {
-        Chat.setUIVisible(false);
+        showChat(false);
     }
 }
 
@@ -216,7 +378,7 @@ function showAfterPicture(): void {
     }
     hiddenByUs = [];
     if (chatWasVisible) {
-        Chat.setUIVisible(true);
+        showChat(true);
         chatWasVisible = false;
     }
 }
@@ -276,6 +438,9 @@ export function startFreeCamera(): void {
         Hud.showNotification("A câmera livre só funciona com o personagem vivo e no mundo.");
         return;
     }
+    blend = 0;
+    holdUntil = 0;
+    pressedUntil = 0;
     if (Camera.isThirdPerson()) {
         Camera.setThirdPerson(null);
     }
@@ -566,6 +731,16 @@ export function installCamera(): void {
         console.error(`free camera: Escape could not be bound: ${thrown instanceof Error ? thrown.message : String(thrown)}`);
     }
 
+    // The camera that comes in for what is used: its beat, and the two keys of use.
+    assistTimer = setInterval(assistTick, ASSIST.tickMs);
+    for (const key of ["e", "f"]) {
+        try {
+            Key.bind(key, "down", interactionKeyPressed);
+        } catch (thrown: unknown) {
+            console.error(`camera assist: ${key} could not be bound: ${thrown instanceof Error ? thrown.message : String(thrown)}`);
+        }
+    }
+
     // What the player chose last time, asked for once they are in the world.
     const asking = setInterval(() => {
         if (LocalPlayer?.ready) {
@@ -577,6 +752,10 @@ export function installCamera(): void {
     Events.on("resourceStop", (name) => {
         if (name === RESOURCE) {
             clearInterval(asking);
+            if (assistTimer !== null) {
+                clearInterval(assistTimer);
+                assistTimer = null;
+            }
             stopFreeCamera();
             if (Camera.isThirdPerson()) {
                 Camera.setThirdPerson(null);

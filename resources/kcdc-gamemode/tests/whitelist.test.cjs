@@ -9,19 +9,26 @@ const vm = require("node:vm");
 const ME = "76561198000000001";
 const OTHER = "76561198000000002";
 
-function load(file) {
-    const state = { file, logs: [], errors: [], handlers: new Map() };
+function load(file, gate) {
+    const state = { file, gate, logs: [], errors: [], handlers: new Map() };
+    // The Steam gate's own module (steam-gate.ts): the list asks it whether a join with no Steam account is its business or the gate's.
+    const gateModule = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/steam-gate.js"), "utf8"), gateModule);
     const context = {
         exports: {},
         require: (id) => {
+            if (id === "./steam-gate.js") {
+                return gateModule.exports;
+            }
             assert.equal(id, "node:fs");
             return {
                 readFileSync: (name) => {
-                    assert.equal(name, "secrets/whitelist.json");
-                    if (state.file === undefined) {
+                    assert.ok(name === "secrets/whitelist.json" || name === "secrets/steam-gate.json", name);
+                    const content = name === "secrets/whitelist.json" ? state.file : state.gate;
+                    if (content === undefined) {
                         throw Object.assign(new Error("no such file"), { code: "ENOENT" });
                     }
-                    return state.file;
+                    return content;
                 },
             };
         },
@@ -44,7 +51,7 @@ test("with the list on, an approved Steam account comes in and any other is turn
     const sut = load(listOf(true, ME));
     assert.equal(sut.join(ME), null);
     assert.equal(sut.join(OTHER), sut.api.NOT_LISTED);
-    assert.equal(sut.join("", "epic-account"), sut.api.NOT_LISTED, "an Epic account has no Steam id to be saved under");
+    assert.equal(sut.join("", "epic-account"), null, "an Epic account has no Steam id to be saved under: the Steam gate turns it away, with its own words");
     assert.match(sut.api.NOT_LISTED, /formulário.*discord\.gg\/p2wpuaGC3F/);
     assert.ok(sut.state.logs.some((line) => line === "whitelist: 1 conta(s) aprovada(s); quem não está na lista é recusado"));
     assert.ok(sut.state.logs.some((line) => line === `whitelist: recusei Hans (Steam ${OTHER}): não está na lista`));
@@ -72,4 +79,19 @@ test("a file that cannot be understood turns everybody away and says why", () =>
         assert.equal(sut.join(ME), sut.api.UNAVAILABLE, bad);
         assert.ok(sut.state.errors.some((line) => /ninguém entra até isso ser corrigido/.test(line)));
     }
+});
+
+test("a join that reports no Steam account is the Steam gate's to turn away, not the list's: the list stays quiet, so the words that say what to do are the ones read (2026-10-29)", () => {
+    const sut = load(listOf(true, ME));
+    assert.equal(sut.join(""), null, "no file for the gate: an account is required, and the gate answers");
+    assert.equal(sut.join("", "epic-account"), null);
+    assert.ok(!sut.state.logs.some((line) => /sem Steam/.test(line)), "and the list does not log a refusal it did not make");
+    assert.equal(sut.join(OTHER), sut.api.NOT_LISTED, "an account that reached the server and is not on the list is still turned away");
+    assert.equal(sut.join(ME), null);
+});
+
+test("with the Steam gate switched off the list answers for a join with no Steam account, as it did", () => {
+    const sut = load(listOf(true, ME), JSON.stringify({ required: false }));
+    assert.equal(sut.join(""), sut.api.NOT_LISTED);
+    assert.ok(sut.state.logs.some((line) => line === "whitelist: recusei Hans (sem Steam): não está na lista"));
 });

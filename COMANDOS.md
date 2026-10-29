@@ -5,7 +5,7 @@ São **79 comandos**, em 17/10/2026 (gamemode 1.1.0, KCDC 1.6.10). Serve como ma
 
 As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso estão em inglês.
 
-> **Perfis.** Há dois: **jogador** (roda só 26 comandos: `/admin`, `/alforje`, `/anim`, `/cachorro`, `/camera`, `/cansaco`, `/carroca`, `/cavalo`, `/chave`, `/cozinhar`, `/creator`, `/dice`, `/do`, `/face`, `/fome`, `/help`, `/idioma`, `/language`, `/leitura`, `/me`, `/mute`, `/mutes`, `/preso`, `/sujeira`, `/try`, `/unmute`) e **admin** (roda todos). Quem é o quê é decidido pelo ticket com que a pessoa entra; veja [Acesso, tickets e perfis](#acesso-tickets-e-perfis). Um comando novo é só de admin até entrar na lista.
+> **Perfis.** Há dois: **jogador** (roda só 31 comandos: `/aceitar`, `/acordar`, `/admin`, `/alforje`, `/anim`, `/cachorro`, `/camera`, `/cansaco`, `/carroca`, `/cavalo`, `/chave`, `/cozinhar`, `/dice`, `/do`, `/face`, `/fome`, `/help`, `/horta`, `/idioma`, `/language`, `/leitura`, `/me`, `/mural`, `/mute`, `/mutes`, `/paz`, `/preso`, `/sede`, `/sujeira`, `/try`, `/unmute`) e **admin** (roda todos). Quem é o quê é decidido pelo ticket com que a pessoa entra; veja [Acesso, tickets e perfis](#acesso-tickets-e-perfis). Um comando novo é só de admin até entrar na lista.
 
 ## Índice
 
@@ -47,12 +47,17 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 36. [Ofícios das guildas](#ofícios-das-guildas)
 37. [Idioma](#idioma)
 38. [NPCs](#npcs)
+39. [Viagem rápida de carroça](#viagem-rápida-de-carroça)
+40. [Móveis do World Builder](#móveis-do-world-builder)
+41. [Quadros de avisos](#quadros-de-avisos)
+42. [Boas-vindas e concordância](#boas-vindas-e-concordância)
+43. [O chat do T](#o-chat-do-t)
 
 ## Resumo de todos os comandos
 
 | Comando | Para que serve | Quem é afetado | Quem pode usar | Seção |
 | --- | --- | --- | --- | --- |
-| `/admin` | Vira administrador, até sair do servidor, apresentando um ticket de admin depois de já estar dentro | só você | jogador e admin | Ajuda e painéis |
+| `/admin` | Vira administrador, até sair do servidor, apresentando um ticket de admin depois de já estar dentro; `/admin sair` volta a ser jogador comum | só você | jogador e admin | Ajuda e painéis |
 | `/book` | Abre livros de demonstração nas suas mãos: a crônica do Kingdoms Connected, uma carta de arauto e uma versão em que a tinta aparece aos poucos | só você | só admin | Ajuda e painéis |
 | `/camera` | Alterna a sua câmera entre primeira pessoa e uma câmera atrás de você (`third [distância]`) | só você | jogador e admin | Ajuda e painéis |
 | `/help` | Lista os comandos que o servidor atende | só você | jogador e admin | Ajuda e painéis |
@@ -64,23 +69,29 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 | `/cansaco` | Diz a sua energia (a barra **Energia** do painel) e a postura que o jogo vê: deitado, sentado ou de pé, com o número da postura (para conferir que uma cama ou um banco conta como descanso) | o jogador; o admin vê o de outro | jogador e admin | Personagem |
 | `/cidadania` | (admin) Mostra as cidades e quantos cidadãos cada uma tem, ou define a cidadania de um jogador (`definir`, `limpar`, `ver`) | o jogador citado | só admin | Personagem |
 | `/cozinhar` | Junto de um fogo (cozinha), de um secador de açougueiro (seca) ou de um defumador (defuma), troca toda a comida que o lugar sabe fazer e que você leva pela comida pronta, uma por uma | o jogador | jogador e admin | Personagem |
-| `/creator` | Abre o **criador de personagem**: uma tela do mod, à direita, com o corpo do jogador filmado de frente à esquerda | o jogador (`camera` é só do admin) | jogador e admin | Personagem |
+| `/creator` | (admin) Abre o **criador de personagem**: uma tela do mod, à direita, com o corpo do jogador filmado de frente à esquerda. O jogador faz o personagem uma vez, na primeira entrada (a tela abre sozinha); depois só o admin abre | o jogador | só admin | Personagem |
 | `/do` | Descreve a **cena** ou um detalhe dela (o que o ambiente mostra, o que se ouve, como está a porta): `/do A porta range ao abrir` | quem está a 30 m | jogador e admin | Personagem |
 | `/faccao` | (admin) Mostra as facções e quantos jogadores juraram a cada uma, ou muda a facção de um jogador (`definir`, `limpar`) | o jogador citado | só admin | Personagem |
 | `/fome` | Diz como está o seu estômago (bem alimentado, com fome, faminto) e o nível da fome do servidor | o jogador; o nível vale para todos | jogador e admin | Personagem |
+| `/sede` | Diz como está a sua **sede** (a do servidor: o jogo não tem) e como matá-la; o admin liga e desliga a sede de todos e põe a sua num valor para ver o que ela faz | o jogador; o liga/desliga vale para todos | jogador e admin | Personagem |
+| `/aceitar` | Concorda com as regras e com a lore do servidor: o mesmo que o botão **Concordo** da janela de boas-vindas, para quem a janela não abre | só você | jogador e admin | Personagem |
+| `/boasvindas` | Abre para você a janela de boas-vindas, para ver como ela ficou (o botão dela só guarda a concordância de quem ainda não concordou) | só você | só admin | Personagem |
 | `/give` | Coloca itens no seu inventário, por GUID ou pelo nome exato entre aspas | só você | só admin | Personagem |
-| `/guilda` | (admin) Mostra as guildas e quantos membros cada uma tem, ou muda a guilda de um jogador | o jogador citado | só admin | Personagem |
+| `/guilda` | (admin) Mostra as guildas e quantos membros cada uma tem, muda a guilda de um jogador, ou a sua, à vontade, para testar (`entrar`, `sair`) | o jogador citado, ou você | só admin | Personagem |
 | `/leitura` | Diz o livro de habilidade que você está lendo, quanto falta e o que já começou, larga o livro (`parar`; o que você leu fica guardado) e, para o admin, ajusta o ritmo da leitura (`fator`) | o jogador; o admin ajusta o ritmo de todos | jogador e admin | Personagem |
 | `/lookalike` | Veste o mesmo visual (rosto, cabelo, barba, corpo) que outro jogador está usando | só você | só admin | Personagem |
 | `/me` | Escreve no chat o que o **seu personagem faz**, em terceira pessoa, com o nome que os outros conhecem dele (quem ainda não foi apresentado vê "Desconhecido") | quem está a 30 m | jogador e admin | Personagem |
 | `/outfit` | Veste um dos conjuntos de roupa do próprio jogo para o seu gênero (`random`, por nome, `list [filtro]`) | só você | só admin | Personagem |
 | `/posicao` | Mostra onde um jogador nasce na próxima vez que entrar, ou apaga esse lugar com `limpar` | o jogador indicado (`@jogador`) | só admin | Personagem |
 | `/preso` | **Fiquei preso**: leva você à igreja mais próxima de onde está, **uma vez a cada 60 minutos**, se o personagem ficou preso numa parede, numa pedra ou numa casa trancada | o jogador | jogador e admin | Personagem |
+| `/acordar` | **Acordar** do desmaio da bebedeira, se a tela ficou preta: vale para quem caiu de bêbado e está caído há pelo menos 20 s (o servidor acorda sozinho em 45 s) | o jogador | jogador e admin | Personagem |
+| `/paz` | Encerra o **duelo** em que você está, depois de 5 segundos sem golpes; o mapa e o inventário voltam. Um duelo também acaba sozinho 45 s depois do último golpe (15 s até o KCDC 1.7.1), e 5 s depois que um dos dois segura **U** (oferecer paz) sem golpe desde então | os seus duelos | jogador e admin | Personagem |
 | `/socialstatus` | Lê ou define o **Status Socialis** (`plebeius` ou `nobilis`) mostrado no painel | você ou outro jogador (`@jogador`) | só admin | Personagem |
 | `/sujeira` | Diz quanto o seu corpo está sujo, como o jogo o lê (a **sujeira**, o **cheiro** e o **sangue**), com a escala do próprio jogo (0,30 é um pouco, 0,60 é sujo, 0,90 é imundo) e onde se lavar | o jogador; o admin vê a de outro | jogador e admin | Personagem |
 | `/take` | Tira itens do seu inventário (mesmos formatos do `/give`) | só você | só admin | Personagem |
 | `/tp` | Leva você para o lado de outro jogador (nome ou slot, o número da lista da tecla Tab) ou para uma coordenada do mapa | só você | só admin | Personagem |
 | `/try` | **Tenta** uma ação: ela dá certo ou falha ao acaso (50%), e quem está por perto vê o resultado: `/try arrombar a porta` | quem está a 30 m | jogador e admin | Personagem |
+| `/levantar` | Levanta da cadeira ou da cama do World Builder em que você está, se as teclas de andar não levantaram | só você | jogador e admin | Personagem |
 | `/dice` | Convida um oponente próximo para jogar dados e combinar a pontuação alvo (padrão 2000, passos de 500, de 100 a 100000) | você e outro jogador, perto de uma mesa de dados | jogador e admin | Voz e jogos entre jogadores |
 | `/mute` | Silencia, só para você, a voz de outro jogador | só você | jogador e admin | Voz e jogos entre jogadores |
 | `/mutes` | Lista os jogadores que você silenciou | só você | jogador e admin | Voz e jogos entre jogadores |
@@ -90,22 +101,30 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 | `/clima` | Mostra o dia, a hora, se é dia ou noite e quanto falta para virar, e o clima | **todos os jogadores** | só admin | Mundo e ambiente |
 | `/door` | Lê (`near`, `list`), tranca, destranca, abre e fecha as portas do próprio nível, por GUID ou a mais próxima | estado compartilhado (todos veem) | só admin | Mundo e ambiente |
 | `/gate` | Abre e fecha os portões de castelo: pontes levadiças, grades e portões de fortaleza (`toggle`, `open`, `close`, `list`) | estado compartilhado (todos veem) | só admin | Mundo e ambiente |
+| `/objeto` | Tira do mundo, para todos e de vez, um objeto do próprio mapa (um portão que o jogo nunca abre, como o da frente de Malešov; uma cerca; entulho; a parede invisível de um portão de castelo), põe de volta (`esconder`, `devolver`), procura a parede invisível que ficou onde uma porta foi tirada (`portas`) e mostra o que há na frente de quem pergunta (`sondar`) | estado compartilhado (todos veem) | só admin | Mundo e ambiente |
 | `/herbs` | Controla a rebrota das ervas: `time` (em segundos reais na velocidade atual do mundo; `0 0` desliga a rebrota por tempo), `defaults`, `respawn [raio]` e `respawn-all` refazem ervas já colhidas | `time`/`defaults`: servidor inteiro; `respawn`: seu mundo virtual | só admin | Mundo e ambiente |
+| `/mural` | Abre o quadro de avisos que estiver perto de você (o mesmo que a tecla **F** no quadro); o admin lista os quadros e os cartazes, com quem os afixou, e retira cartazes | só você (retirar: o quadro) | jogador e admin (listar e retirar: só admin) | Mundo e ambiente |
 | `/tesouros` | (admin) Os **baús de tesouro** espalhados pelo mapa: `abastecer` (enche agora), `ligar`/`desligar` e `chance <n>` | o mundo | só admin | Mundo e ambiente |
 | `/world` | Lê e define o relógio e o clima compartilhados: `scale` (velocidade do tempo, 0 a 200), `hour`, `day`, `weather` (predefinição e duração em segundos, até 21600), `rain` e `wind` (m/s, até 50) | **todos os jogadores** | só admin | Mundo e ambiente |
 | `/blip` | Cria um ponto na bússola e no mapa de todos (ou só no seu, com `me`) | todos no mundo virtual (ou só você com `me`) | só admin | Objetos, marcadores e efeitos |
 | `/build` | Como o `/prop`, mas o objeto é colocado onde você mira, com pré-visualização ao vivo | todos veem | só admin | Objetos, marcadores e efeitos |
 | `/builder` | Liga ou desliga o seu acesso ao World Builder, o editor de mapas (tecla F7) | só você | só admin | Objetos, marcadores e efeitos |
 | `/carry` | Faz você carregar um item nos braços (cesta, lenha, saco) ou deixa um no chão para ser pego pelo prompt do jogo (`prop`) | você | só admin | Objetos, marcadores e efeitos |
-| `/chave` | Tranca ou destranca a porta, ou o baú, à sua frente se você tiver a chave dele no inventário | a porta ou o baú à sua frente | jogador e admin | Objetos, marcadores e efeitos |
+| `/chave` | Tranca ou destranca a porta, ou o baú, à sua frente se você tiver a chave dele no inventário ou o dono lhe tiver dado acesso | a porta ou o baú à sua frente | jogador e admin | Objetos, marcadores e efeitos |
 | `/drop` | Deixa uma pilha de um item no chão, para qualquer um pegar | todos veem | só admin | Objetos, marcadores e efeitos |
 | `/marker` | Coloca marcadores no mundo: um decalque projetado no chão ou uma forma (cilindro, esfera, seta, cubo, plano) com cor, tamanho, giro, flutuação e gatilho | todos veem | só admin | Objetos, marcadores e efeitos |
 | `/prop` | Coloca no mundo uma peça do catálogo de objetos do jogo, construída em todos os clientes | todos veem | só admin | Objetos, marcadores e efeitos |
 | `/propriedade` | Mapeia e administra as **propriedades**: casas, oficinas, tavernas e baús, cada uma com um nome, uma região, uma descrição, um dono e uma chave própria (um item novo, `kcdc-property:<id>`) | as portas e baús da propriedade; quem tem a chave destranca | só admin | Objetos, marcadores e efeitos |
+| `/ladrao` | (admin) A **marca de ladrão**: quem está marcado, até quando e por quê; marcar ou perdoar alguém. Quem rouba **mais de 3 baús** de outros jogadores **em uma hora** é marcado sozinho **por 1 dia**; baú de parente não conta | o jogador citado | só admin | Objetos, marcadores e efeitos |
+| `/mortes` | (admin) Os **baús de morte**: o que caiu, quem levou, o que o dono perdeu; `devolver <n>` dá ao dono o que ele perdeu (na hora, ou na próxima entrada) | o dono do baú | só admin | Objetos, marcadores e efeitos |
+| `/presos` | (admin) Quem está **algemado ou no pelourinho**, quem prendeu e quanto falta; `soltar <nome>` solta quem tiver o nome | o preso | só admin | Objetos, marcadores e efeitos |
+| `/curar` | (admin) Estanca o **sangramento** (e fecha os ferimentos) de um jogador, ou cura **tudo**; quem não está no servidor é curado na próxima entrada | o jogador citado | só admin | Objetos, marcadores e efeitos |
+| `/nivel` | (admin) Os níveis de um personagem (quem não está no servidor: os do arquivo) e a devolução do nível de uma trilha perdido: só sobe, sem pontos de talento | o personagem citado | só admin | Objetos, marcadores e efeitos |
 | `/stash` | Baús: abre um estoque virtual só seu (`virtual`), cria contêineres e lê, tranca e destranca os baús do próprio nível (`near`, `lock`, `unlock`, `pick`, `key`, `goto`) | você / baús do mundo | só admin | Objetos, marcadores e efeitos |
 | `/vfx` | Coloca efeitos de partículas das bibliotecas do jogo, fixos (`/vfx <efeito>`) ou de um disparo só (`burst`) | todos veem | só admin | Objetos, marcadores e efeitos |
+| `/mobilia` | (admin) As **cadeiras e camas** das exportações do World Builder que aceitam o jogador, as mais perto de você, e o **ajuste** de onde o corpo fica nelas (`ajustar <campo> <valor>`) | todos que sentam e deitam nelas | só admin | Objetos, marcadores e efeitos |
 | `/alforje` | Abre as **alforjes** do seu cavalo, para guardar e pegar coisas, estando a até 8 m dele (parado e sem cavaleiro) | o seu cavalo | jogador e admin | Montarias, cães e carroças |
-| `/cachorro` | O cão de quem apoia o servidor: chama o seu cão para perto (se ele sumiu, vem de novo), dá um nome (`nome <nome>`, até 24 letras; sem nome ele volta ao nome do jogo) e manda seguir ou esperar (`seguir`, `esperar`) | o seu cão | jogador e admin | Montarias, cães e carroças |
+| `/cachorro` | O cão de quem apoia o servidor: chama o seu cão para perto (se ele sumiu, vem de novo), dá um nome (`nome <nome>`, até 24 letras; sem nome ele volta ao nome do jogo) e dá ordens: `seguir`, `sentar` (ou `esperar`: senta e fica onde está até você chamar) e `solto`. O **E** diante do cão abre o menu *Fazer carinho*, *Mandar ficar* (ou *Mandar seguir*) e *Sair* | o seu cão | jogador e admin | Montarias, cães e carroças |
 | `/carroca` | As suas **carroças**: onde estão, `trazer` (a vazia vem para a sua frente, a cada 2 minutos), `nome` (dar nome) | as suas carroças | jogador e admin | Montarias, cães e carroças |
 | `/cart` | Cria carroças e carroções do jogo, cavalos incluídos, na sua frente (`list` mostra os modelos) | todos veem | só admin | Montarias, cães e carroças |
 | `/cavalo` | Diz onde estão os seus cavalos (a quantos metros e em que direção) e chama o mais perto para vir correndo até você, se estiver a até 300 m | o seu cavalo | jogador e admin | Montarias, cães e carroças |
@@ -116,6 +135,7 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 | `/dialogue` | Abre uma conversa de exemplo na lista de diálogo do próprio jogo | só você | só admin | NPCs, animações e conversas |
 | `/emboscada` | Mostra se os salteadores das estradas estão ligados, quantas gangues estão na rua e o chão que o servidor leu sob os jogadores; liga e desliga (`liga`, `desliga`, salvo em `playerdata/ambush.json`) e manda uma gangue atrás de um jogador para testar (`agora [jogador]`) | salteadores nas estradas; todos veem | só admin | NPCs, animações e conversas |
 | `/face` | Define uma expressão facial e faz a boca falar (`talk`, `quiet`) em você ou no NPC mais próximo (`npc ...`) | você ou o NPC mais próximo | jogador e admin | NPCs, animações e conversas |
+| `/gesto` | Lista os gestos da roda do **G** e liga ou desliga um deles, sem reiniciar (`lista`, `desligar <número>`, `ligar <número>`) | todos os jogadores | só admin | NPCs, animações e conversas |
 | `/mestres` | Lista os **barbeiros** e os **mestres que ensinam habilidades** (esgrima, caça, luta, alquimia e outras), onde cada um fica e o que ensina, e leva você até um deles (`ir <id>`) | os barbeiros e os mestres; só admin lista e visita | só admin | NPCs, animações e conversas |
 | `/npc` | Cria NPCs do servidor por papel (`roles`) ou alma e dá ordens: seguir, patrulhar, vir, esperar (`hold`), falar (`say`), trocar a locomoção (`native` é a do jogo, `kinematic` é movida pelo servidor), `kill\|revive`, `pin\|unpin`, `remove\|clear` | servidor (todos veem) | só admin | NPCs, animações e conversas |
 | `/npcdemo` | Arranjos prontos de NPCs: caçador experimental, posto de guarda, patrulha em quadrado, escolta, multidão, cena roteirizada e teste de locomoção nativa | servidor (todos veem) | só admin | NPCs, animações e conversas |
@@ -123,7 +143,14 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 | `/quest` | Escreve uma missão no diário do jogo e a faz avançar: `give <chave> "<título>" [tipo]`, `desc`, `step` (objetivo), `done <chave> <índice>`, `state` (active, done, failed), `list`, `show`, `remove`, `clear` | só você | só admin | NPCs, animações e conversas |
 | `/vendedor` | Mostra e posiciona os NPCs vendedores do servidor: cinco ofícios (ferreiro, boticário, taberneiro, caçador e alfaiate) em Suchdol, e 13 mascates, um em cada fogueira de beira de estrada do nível | os NPCs vendedores; todos veem | só admin | NPCs, animações e conversas |
 | `/vendor` | Abre a tela de comércio do próprio jogo com preços definidos pelo servidor | só você | só admin | NPCs, animações e conversas |
+| `/viagem` | (admin) As **paradas da viagem rápida de carroça**: onde estão as carroças e os cocheiros, o **preço** (`preco <base> <por km>`), e para mudar de lugar (`aqui`, `cocheiro`, `procurar`, `malha`), visitar (`ir`), criar (`nova`) e tirar (`remover`) | as paradas e quem viaja | só admin | NPCs, animações e conversas |
 | `/crafttest` | Teste das bancadas de ofício: confere a posição das estações de alquimia e ferraria (`alchemy`, `smithing`), dá ingredientes de teste e ensina as receitas | só você | só admin | Ofícios e itens |
+| `/oficios` | (admin) Usar só as ferramentas da sua guilda, como um jogador (`guilda`), ou as de todos os ofícios (`livre`) | só você | só admin | Ofícios e itens |
+| `/coleta` | (admin) A guilda dos **Coletores**: as regras do machado e da picareta, o que o jogo diz que está para onde você olha (árvore, pedra), um machado e uma picareta para testar, e toda árvore e pedra dando de novo | só você, ou o jogador citado (`kit`) | só admin | Ofícios e itens |
+| `/horta` | As hortas dos Agricultores: o que você plantou e quando fica pronto, as cinco hortas mais perto; (admin) toda plantação pronta na hora, os canteiros esvaziados, e canteiros marcados à mão onde o nível não tem fileira | só você (`crescer` e `limpar`, todos) | jogador e admin (`crescer` e `limpar`, só admin) | Ofícios e itens |
+| `/selvagens` | (admin) Os cavalos selvagens dos campos abertos: quantos há, os mais perto com a confiança deles em você, a confiança posta para testar a doma, e os campos repovoados | só você | só admin | Ofícios e itens |
+| `/oficinas` | (admin) As forjas e mesas de alquimia que o nível tem, com a distância e quem está nelas | só você | só admin | Ofícios e itens |
+| `/conjunto` | (admin) Os **conjuntos de armadura** do jogo por vila, cidade ou senhor e os **pacotes de brasão** de cada casa, com o casaco com o brasão, o escudo e a espada do cavaleiro (`ARMADURAS.md`): lista, mostra um, entrega as peças ou veste o conjunto | o jogador citado | só admin | Ofícios e itens |
 | `/customitems` | Prepara itens personalizados para teste | só você | só admin | Ofícios e itens |
 | `/pot` | Panelões de comida: inspeciona (`/pot`), lista receitas, reabastece gastando comida do inventário (`refill porridge\|vegetable\|meat`), lista os seus venenos e envenena (`poison <linha>`) | panelão próximo | só admin | Ofícios e itens |
 | `/siege` | Constrói, carrega e dispara trabucos e canhões (`trebuchet`, `cannon`) | servidor (todos veem) | só admin | Cerco |
@@ -136,7 +163,7 @@ As formas de uso abaixo são copiadas do próprio `/help` do jogo, por isso est�
 
 ### `/admin`
 
-Vira administrador, até sair do servidor, apresentando um ticket de admin depois de já estar dentro. É o caminho para quem entra pelo menu do jogo, que não tem campo para o ticket. O ticket é conferido como na entrada, com o mesmo limite de 8 erros por endereço em 10 minutos.
+Vira administrador, até sair do servidor, apresentando um ticket de admin depois de já estar dentro. É o caminho para quem entra pelo menu do jogo, que não tem campo para o ticket. O ticket é conferido como na entrada, com o mesmo limite de 8 erros por endereço em 10 minutos. **`/admin sair` faz o caminho de volta:** você vira jogador comum até sair do servidor (para testar como um jogador vê o servidor); o ticket devolve o admin.
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** só você
@@ -146,6 +173,7 @@ Vira administrador, até sair do servidor, apresentando um ticket de admin depoi
 
 ```text
 /admin <ticket>  -- o ticket de admin, inteiro, no formato nome.segredo
+/admin sair  -- volta a ser jogador comum até sair do servidor (o ticket devolve o admin)
 ```
 
 ### `/book`
@@ -319,20 +347,20 @@ Diz a sua energia (a barra **Energia** do painel) e a postura que o jogo vê: de
 
 - **Quem pode usar:** só admin
 - **Quem é afetado:** o jogador citado
-- **Nota:** Cidades: Suchdol, Raborsch e Malešov. Quem é cidadão acorda na sua cidade quando morre; sem cidadania, acorda nas igrejas. A escolha é definitiva: só o senhor das terras (o jogador a quem a região foi cedida) a depõe, na mesma seção.
+- **Nota:** Cinco cidades, a sede de cada casa (Suchdol, Raborsch, Malešov, Kuttenberg e Pschitoky), e as terras que cada uma manda, que também são cidadania: Wysoka (de Suchdol), Bohunowitz e Horschan (de Raborsch), Bylany (de Malešov), Stará Kutná (de Kuttenberg) e Miskowitz (de Pschitoky); a terra usa o brasão da sede, marcada como Terra, e quem manda na sede manda nas terras. Quem é cidadão acorda na sua cidade ou terra quando morre (na igreja, onde há: Suchdol, Raborsch, São Tiago em Kuttenberg, Wysoka e Stará Kutná; senão na praça ou junto das lojas da vila); sem cidadania, acorda nas igrejas. A primeira troca de cidadania (e a de guilda) é grátis; cada troca depois custa 100 moedas, tiradas da bolsa. O senhor das terras (o jogador a quem a região foi cedida) também depõe a cidadania, na mesma seção.
 - **Código:** `src/server/commands/cidadania.ts`, com apoio em `src/server/acquaintances.ts`, `src/server/citizenship.ts`, `src/server/players.ts`
 - **No jogador:** `player.steamId`
 
 ```text
 /cidadania  -- as cidades e quantos cidadãos cada uma tem
 /cidadania ver <jogador>  -- a cidade dele
-/cidadania definir <jogador> <cidade>  -- faz dele cidadão da cidade (suchdol, raborsch, malesov)
+/cidadania definir <jogador> <cidade>  -- faz dele cidadão da cidade ou terra (sedes: suchdol, raborsch, malesov, kuttenberg, pschitoky; terras: wysoka, bohunowitz, horschan, bylany, stara-kutna, miskowitz)
 /cidadania limpar <jogador>  -- tira a cidadania, para que ele escolha de novo
 ```
 
 ### `/cozinhar`
 
-Junto de um fogo (cozinha), de um secador de açougueiro (seca) ou de um defumador (defuma), troca toda a comida que o lugar sabe fazer e que você leva pela comida pronta, uma por uma. O **Usar** do inventário numa carne ou peixe crus faz o mesmo para o monte em que você apertou. Junto do lugar também aparece a dica **Cozinhar / Secar / Defumar** na tecla de interação, que abre um menu **Cozinhar ou Sair** e, em **Cozinhar**, a lista do que você leva que o lugar sabe fazer (uma escolha para cada comida e uma para tudo).
+Junto de um fogo (cozinha), de um secador de açougueiro (seca) ou de um defumador (defuma), troca toda a comida que o lugar sabe fazer e que você leva pela comida pronta, uma por uma. O **Usar** do inventário numa carne ou peixe crus faz o mesmo para o monte em que você apertou. Junto do lugar também aparece a dica **Cozinhar / Secar / Defumar** na tecla de interação (no fogo é o **F**; o E do fogo é do jogo), que abre um menu **Cozinhar ou Sair** e, em **Cozinhar**, a lista do que você leva que o lugar sabe fazer (uma escolha para cada comida e uma para tudo).
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** o jogador
@@ -348,9 +376,9 @@ Junto de um fogo (cozinha), de um secador de açougueiro (seca) ou de um defumad
 
 Abre o **criador de personagem**: uma tela do mod, à direita, com o corpo do jogador filmado de frente à esquerda. Escolhe-se o sexo (**Vir** ou **Femina**), o cabelo e a cor (círculos), o rosto, a barba, a pele, o **primeiro nome** e, se quiser, uma **alcunha**; **Salvar e criar** guarda tudo por Steam ID em `playerdata/characters.json`. `nativo` abre o criador do próprio jogo, que não tem nome nem alcunha; `stop` fecha o criador aberto; `camera` (admin) ajusta o enquadramento sem novo deploy.
 
-- **Quem pode usar:** jogador e admin
-- **Quem é afetado:** o jogador (`camera` é só do admin)
-- **Nota:** **Quem entra pela primeira vez é obrigado a criar o personagem e dar um nome**: a tela abre sozinha (`src/server/first-join.ts`), sem botão de fechar e sem Esc, e o `stop` é recusado. Quem já tem personagem abre pelo `/creator` e sai quando quiser: o visual volta ao que era. Veja a seção [Criação de personagem](#criação-de-personagem).
+- **Quem pode usar:** só admin (desde 20/10/2026: *"/creator é só admin que pode usar"*; antes era de todos)
+- **Quem é afetado:** o jogador
+- **Nota:** **Quem entra pela primeira vez é obrigado a criar o personagem e dar um nome**: a tela abre sozinha (`src/server/first-join.ts`), sem botão de fechar e sem Esc, e o `stop` é recusado; isso não depende do comando. Depois, só um admin abre o `/creator` e sai quando quiser: o visual volta ao que era. O que um jogador ainda muda sozinho é no barbeiro e no alfaiate. Veja a seção [Criação de personagem](#criação-de-personagem).
 - **Código:** `src/server/commands/creator.ts`, com apoio em `src/server/characters.ts`, `src/server/creator.ts`, `src/server/auth.ts`, `src/server/kits.ts`
 - **No jogador:** `player.emit`, `player.steamId`, `player.setAppearance`
 - **Para ler mais** (pasta `docs/guides`): `User interface/character-creator.md`, `User interface/web-views.md`, `Client scripting/camera-shots.md`, `Players/appearance.md`
@@ -361,7 +389,10 @@ Abre o **criador de personagem**: uma tela do mod, à direita, com o corpo do jo
 /creator stop
 /creator camera [distancia] [figura] [fov] [altura] [luz]  (admin)
 /creator camera padrao  (admin)
+/creator refazer [jogador]  (admin) -- o jogador refaz o personagem: agora, se estiver no servidor, ou na próxima entrada; sem nome, lista quem está esperando
 ```
+
+- **Refazer (admin).** `/creator refazer <jogador>` (pelo nome do personagem, o apelido ou o Steam id) marca o personagem para ser feito de novo: o criador abre **obrigatório** (sem fechar) na próxima entrada, com o nome atual já escrito e **livre para mudar**. O inventário, a progressão, a família e o resto ficam como estão; só o visual, o nome e a alcunha são escolhidos de novo. Usado em 18/10/2026 para o Vavřinec (conta Garcia).
 
 ### `/do`
 
@@ -411,6 +442,47 @@ Diz como está o seu estômago (bem alimentado, com fome, faminto) e o nível da
 /fome pausa <ligar|desligar>  -- (admin) a pausa mantém a saciedade de todos em 100%; desligá-la faz a fome valer de novo
 ```
 
+### `/aceitar`
+
+O jeito de **concordar com as regras e com a lore** quando a janela de boas-vindas (`ui/welcome.html`) não abre na máquina do jogador: faz o mesmo que o botão **Concordo** dela. Veja [Boas-vindas e concordância](#boas-vindas-e-concordância).
+
+- **Quem pode usar:** jogador e admin
+- **Quem é afetado:** só você
+- **Nota:** Só concorda quem já criou o personagem (antes disso o servidor diz para criá-lo primeiro). A concordância fica guardada pelo Steam ID e pelo personagem (`playerdata/welcome.json`); quem recomeça do zero e faz um personagem novo concorda de novo.
+- **Código:** `src/server/commands/aceitar.ts`, com apoio em `src/server/welcome.ts`
+
+```text
+/aceitar  -- diz que você leu as regras e está ciente da lore do servidor
+```
+
+### `/boasvindas`
+
+(admin) Abre para você a **janela de boas-vindas**, para ver como ela ficou, tenha você concordado ou não. Quem já concordou pode fechá-la com o botão sem que nada seja gravado de novo.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** só você
+- **Código:** `src/server/commands/aceitar.ts`, com apoio em `src/server/welcome.ts` e, no cliente, `src/client/welcome.ts`
+
+```text
+/boasvindas  -- abre a janela de boas-vindas para você
+```
+
+### `/sede`
+
+Diz como está a sua **sede**. O jogo não tem sede; o servidor tem (20/10/2026: *"ativar sede e beber água no rio, e a sede no painel Personagem e nas outras telas que mostram dados de players"*). Um corpo saciado leva **2 h 30 de jogo** para ficar seco, e a água, o leite, a cerveja, o vinho e o hidromel matam a sede; ou se bebe **no rio**: perto da água, mirando nela, aparece **[F] Beber água** (o F, não o E, que é do cavalo, das portas e dos fogos). O admin liga e desliga a sede de todos e pode pôr a sua num valor, para ver o que ela faz em cada passo. Veja a seção [Sede](#sede).
+
+- **Quem pode usar:** jogador e admin
+- **Quem é afetado:** o jogador; o liga/desliga vale para todos
+- **Nota:** A sede é guardada por Steam ID (`playerdata/thirst.json`): quem sai e volta não volta saciado, e quem morre volta com um gole (60%).
+- **Código:** `src/server/commands/sede.ts`, com apoio em `src/server/thirst.ts`, `src/server/drink-data.ts` (feito por `tools/make-drinks.py` das tabelas do jogo) e, no cliente, `src/client/thirst.ts`
+- **No jogador:** `player.addBuff`, `player.removeBuff`, `player.setHealth`, `player.playAnimation`, o evento `playerConsumed`, `Buffs.register`
+
+```text
+/sede  -- como está a sua sede e como matá-la
+/sede <ligar|desligar>  -- (admin) liga ou desliga a sede de todos
+/sede definir <0 a 100>  -- (admin) põe a sua própria sede nesse valor, para ver o que ela faz em cada passo
+```
+
 ### `/give`
 
 Coloca itens no seu inventário, por GUID ou pelo nome exato entre aspas. Quantidade de 1 a 10000, qualidade de 1 a 4.
@@ -428,7 +500,7 @@ Coloca itens no seu inventário, por GUID ou pelo nome exato entre aspas. Quanti
 
 ### `/guilda`
 
-(admin) Mostra as guildas e quantos membros cada uma tem, ou muda a guilda de um jogador. **A escolha da guilda é definitiva** para o jogador: só um administrador desfaz (`limpar`).
+(admin) Mostra as guildas e quantos membros cada uma tem, ou muda a guilda de um jogador. A primeira troca de guilda é grátis para o jogador, no painel; cada troca depois custa 100 moedas, tiradas da bolsa (um administrador também desfaz a escolha, `limpar`). O botão **Ver membros** da seção Guildas é só dos administradores. **O administrador troca a própria guilda quantas vezes quiser**, para testar os ofícios: `/guilda entrar <guilda>` (e `sair`), ou o botão **Trocar (admin)** na seção Guildas do painel (F2). Com guilda, o admin obedece às ferramentas dela, como um jogador; `/oficios livre` libera todas.
 
 - **Quem pode usar:** só admin
 - **Quem é afetado:** o jogador citado
@@ -438,6 +510,8 @@ Coloca itens no seu inventário, por GUID ou pelo nome exato entre aspas. Quanti
 
 ```text
 /guilda  -- as guildas e quantos membros cada uma tem
+/guilda entrar <guilda>  -- você entra na guilda na hora, e troca de uma para outra quantas vezes quiser (para testar)
+/guilda sair  -- você sai da sua guilda
 /guilda ver <jogador>  -- a guilda dele
 /guilda definir <jogador> <guilda>  -- põe o jogador na guilda (id, ofício ou nome latino)
 /guilda limpar <jogador>  -- tira o jogador da guilda, para que ele escolha de novo
@@ -523,6 +597,19 @@ Mostra onde um jogador nasce na próxima vez que entrar, ou apaga esse lugar com
 /posicao limpar [@jogador]  -- ele volta a nascer no ponto inicial do mapa; serve para quem ficou preso
 ```
 
+### `/paz`
+
+Encerra o duelo em que você está, se já passaram **5 segundos sem golpes** (no meio de uma troca de golpes ele recusa). Pedido de 19/10/2026: depois de um duelo, Radovan não conseguia abrir o mapa nem o inventário, "mesmo encerrando o duelo".
+
+- **Quem pode usar:** jogador e admin
+- **Quem é afetado:** os seus duelos
+- **Nota:** Segurar **U** oferece paz; o outro segura **U** para aceitar. Desde 19/10/2026 a oferta já basta: 5 segundos sem golpes depois dela e o duelo acaba. Sem oferta, acaba 45 segundos depois do último golpe (eram 15 até o KCDC 1.7.1, que passou o padrão para 45 para segurar a guarda, rodear e fintar sem encerrar o duelo). Qualquer golpe (mesmo um que erre) retira a oferta. O começo, as ofertas, os aceites atrasados e o fim de cada duelo aparecem no registro do servidor (`combat:`).
+- **Código:** `src/server/commands/paz.ts`, com apoio em `src/server/combat.ts`
+
+```text
+/paz  -- encerra os seus duelos parados (sem golpes há 5 segundos)
+```
+
 ### `/preso`
 
 **Fiquei preso**: leva você à igreja mais próxima de onde está, **uma vez a cada 60 minutos**, se o personagem ficou preso numa parede, numa pedra ou numa casa trancada. O mesmo botão está na seção **Opções** do painel, com o aviso de quando volta a estar disponível.
@@ -535,6 +622,19 @@ Mostra onde um jogador nasce na próxima vez que entrar, ou apaga esse lugar com
 
 ```text
 /preso  -- se você ficou preso no cenário ou numa casa trancada: vai para a igreja mais próxima (uma vez por hora)
+```
+
+### `/acordar`
+
+**Acordar do desmaio** (25/10/2026: *quando um jogador fica bêbado e desmaia, ele fica preso na tela preta e só volta depois de sair e voltar do jogo*). Os efeitos do jogo correm pelo relógio de cada cliente e a cena que o desmaio tocaria é cortada no multijogador, então nada encerrava o desmaio: o corpo ficava caído e a tela preta até o jogador sair. Agora o servidor olha a consciência de cada jogador a cada 2 s (`player.consciousness`, 0 é desmaiado): quem está caído **de bêbado** há **45 s** é acordado (o servidor tira as famílias de efeito `unconscious` e `alcohol_drunk`, senão a bebida derruba de novo); quem caiu por **outro motivo** (um golpe, uma queda) só é acordado se ficar caído **150 s**, porque um nocaute de luta é da luta. Se continuar caído, tenta de novo a cada 15 s, e da terceira vez dá também a cura do próprio jogo. O `/acordar` faz o mesmo na hora, para quem caiu **de bêbado** há pelo menos **20 s**; quem foi derrubado não acorda por comando.
+
+- **Quem pode usar:** jogador e admin
+- **Quem é afetado:** o jogador
+- **Nota:** O log diz `faint: Fulano caiu de bêbado; embriaguez 0,92, efeitos: ...` quando alguém cai (com os efeitos que o jogo dele tinha, para sabermos qual segura o corpo), `faint: ... acordando, tentativa N` e `faint: Fulano voltou a si depois de N s`. Não grava nada nos dados do jogador. **Ainda não testado no jogo:** se a tela preta é mesmo o desmaio que o servidor vê (consciência 0); se o log não mostrar `caiu de bêbado` quando acontecer, a tela preta é outra coisa, e os efeitos que o log escrever dizem qual.
+- **Código:** `src/server/commands/acordar.ts`, com apoio em `src/server/faint.ts`
+
+```text
+/acordar  -- se você desmaiou de bêbado e a tela não volta: acorda você, depois de 20 s caído (sozinho, o servidor acorda em 45 s)
 ```
 
 ### `/socialstatus`
@@ -612,6 +712,18 @@ Leva você para o lado de outro jogador (nome ou slot, o número da lista da tec
 /try <ação>  -- ex.: /try arrombar a porta
 ```
 
+### `/levantar`
+
+Levanta da cadeira ou da cama do World Builder em que você está sentado ou deitado, se as teclas de andar (`W` `A` `S` `D`, `Espaço`) não levantaram. Veja [Móveis do World Builder](#móveis-do-world-builder).
+
+- **Quem pode usar:** jogador e admin
+- **Quem é afetado:** só você
+- **Código:** `src/server/commands/mobilia.ts`, com apoio em `src/server/furniture.ts`
+
+```text
+/levantar
+```
+
 ## Voz e jogos entre jogadores
 
 ### `/dice`
@@ -683,7 +795,7 @@ Controla as populações de animais dos pontos de spawn do nível. `list` mostra
 - **Quem pode usar:** só admin
 - **Quem é afetado:** seu mundo virtual
 - **Nota:** No mundo 0 elas já ligam sozinhas quando a malha de navegação está pronta, e na VPS está.
-- **Código:** `src/server/commands/animals.ts`, com apoio em `src/server/animals.ts`, `src/server/place.ts`, `src/server/village-pets.ts`
+- **Código:** `src/server/commands/animals.ts`, com apoio em `src/server/animals.ts`, `src/server/place.ts`
 - **API do motor que usa:** `Npc.animalSpawnpoints`, `Navigation.ready`
 - **No jogador:** `player.position`, `player.virtualWorld`
 - **Para ler mais** (pasta `docs/guides`): `NPCs and animals/animals.md`, `NPCs and animals/navigation.md`
@@ -694,7 +806,7 @@ Controla as populações de animais dos pontos de spawn do nível. `list` mostra
 /animals stop
 /animals status
 /animals max <0-2000>
-/animals vila [ligar|desligar]  -- os cães e gatos das vilas: quantos há e onde, ou ligar e desligar
+/animals carne [0.1-1]  -- quanto da carne de um animal abatido o caçador fica (metade, no mínimo uma de cada)
 ```
 
 ### `/area`
@@ -767,6 +879,51 @@ Abre e fecha os portões de castelo: pontes levadiças, grades e portões de for
 /gate list
 ```
 
+### `/objeto`
+
+Tira do mundo, para todos e de vez, um objeto do próprio mapa: um portão que o jogo nunca abre, uma cerca, entulho. O objeto some com a colisão, para todo jogador, mesmo quem entra depois; a lista fica salva e volta a valer a cada início do servidor. **O portão da frente de Malešov** (duas folhas de vigas que o jogo deixa fechadas para sempre) já sai assim: a folha esquerda vai sozinha, num servidor novo, da posição que o próprio guia do KCDC dá; a folha direita precisa da posição exata, que o World Builder mostra (`/builder on`, F7, clique na folha, **Copy selection as API calls**) e que pode ser colada inteira depois de `/objeto esconder`.
+
+**A parede invisível dos portões de castelo** (20/10/2026: *"o fechar e abrir portão de castelo deve remover a parede invisível também"*): um portão de folhas (o de Raborsch) tem, além das folhas, um volume de colisão do nível (`brush/clipvolume_381.cgf`, sem desenho) que o jogo liga com as folhas fechadas e liga de novo por cima das folhas abertas. Uma folha fechada já barra a passagem sozinha, então a parede só atrapalha quem a encontra com o portão aberto: o servidor a tira em todo início, depois de carregar os mundos exportados (se um mundo exportado já a tira, ele fica com ela: dois recursos no mesmo objeto param o servidor). O nome e a posição vêm dos dados da camada `gateBarrier` do portão em `level.pak`; o motor pode chamar a malha pelo caminho curto ou pelo longo, e o servidor pede os dois. **`/objeto sondar`** mostra, para o admin, o que o jogo dele acha à frente (até 8 m): tipo, nome, guid, material e posição de cada coisa sólida, para achar a parede de outro portão e tirá-la com `esconder`.
+
+**A parede invisível que não tem nome** (27/10/2026: *"na entrada do castelo de Malešov há uma parede invisível"*): `/objeto parede` é para quem está encostado nela. O jogo do próprio administrador lança uma volta de raios (doze direções, na altura dos joelhos e do peito) e pergunta ao motor que entidades de geometria há por perto; o que é só colisão (uma caixa de designer `.../Brush/designer_<guid>.cgf`, um volume `brush/clipvolume_<n>.cgf`, uma entidade com nome de bloqueio) sai do mapa para todos e fica na lista (`/objeto devolver <n>` desfaz); parede, árvore ou porta com desenho nunca são tocadas. O que o motor não registra com nome (geometria estática sem fonte) é só listado, com a posição. Um objeto que um mundo exportado já tira não é pedido de novo: dois recursos no mesmo objeto param o servidor.
+
+**A parede invisível que fica onde uma porta foi tirada** (27/10/2026: *"mesmo removendo essas portas estáticas fica uma parede invisível, preciso que retire"*): o mundo exportado `portas-removidas` (o projeto do World Builder do usuário) esconde 22 objetos estáticos (portões, portas de celeiro, um carro de boi, uma cerca) na área das fortalezas de Kuttenberg, e onde uma porta ficava o nível costuma ter uma caixa de colisão do designer (material `mat_level_barrier`, sem desenho) que continua barrando a abertura. Cada lugar de onde um desses objetos saiu é um **ponto** (uma porta e o vão dela no mesmo lugar são um ponto só). A primeira vez que um jogador com o jogo respondendo chega a 40 m de um ponto, o jogo dele lança 36 raios que atravessam o lugar da porta (três alturas, doze direções, 4 m para cada lado) e pergunta que entidades de geometria há ali; o que é só colisão, a até uns 4 m da porta (a mesma regra do `/objeto parede`: uma caixa `designer_<guid>`, um volume de colisão, ou qualquer coisa feita de `mat_level_barrier`, `mat_nodraw_designer` ou de um material `nodraw`), sai do mapa para todos e fica na lista do `/objeto`. O que tem desenho nunca é tocado; mais de seis coisas só de colisão num ponto é sinal de que algo está errado e nada é tirado. Cada ponto é olhado **uma vez** (guardado em `playerdata/wall-sites.json`); um olhar em que o jogo não respondeu ou não tinha nada para traçar vale por nada e é repetido depois de um minuto. O servidor escreve cada olhar no log (`wall-sites: ...`, com o que tirou, o que viu e deixou, e a geometria sem nome). **`/objeto portas [metros]`** (admin) olha de novo, agora mesmo, os pontos a até tantos metros do administrador (40 por padrão, no máximo seis, o mais perto primeiro) e responde linha a linha; **`/objeto portas lista`** mostra quais pontos já foram olhados. Os pontos vêm dos mundos exportados listados em `SITE_WORLDS` (`src/server/wall-sites.ts`).
+
+**Tudo o que sai do mapa vai para baixo da terra** (27/10/2026, o usuário: *"deu certo agora a remoção ... essa ideia de jogar embaixo da terra foi top ... faça o mesmo em Malešov e Raborsch"*): um objeto estático só *escondido* continuava com a colisão no jogo (os raios dos jogadores ainda acertavam as portas que o World Builder escondeu, e a Ludmilla bateu numa parede invisível ali). Posto 300 m abaixo do lugar e encolhido a um centésimo (`hidden` + `position` + `scale 0.01`, a mesma edição repetida por cima da que o esconde, sem criar outra), o objeto deixou de ser acertado. Por isso: (1) a cada início do servidor, na primeira varredura, **todo objeto que qualquer mundo exportado esconde** é posto embaixo da terra (as 22 portas, os 43 objetos do `raborsch.world.json`: barris, fogão, tampas de caixão, arbustos, as quatro argolas de Malešov); (2) tudo o que a **lista do `/objeto`** tira (as duas folhas e os dois bloqueios de designer do portão de Malešov, o que o `esconder` e o `parede` acrescentam) entra já assim, em `level-edits.ts` (`sunkBrush`); entidades continuam só escondidas. **Os portões de Raborsch e de Malešov** são mais dois pontos para olhar (`EXTRA_SPOTS`, o jogo de quem chega perto procura ali a caixa de designer, `mat_level_barrier`, que nenhum mundo exportado nomeia) e entram em `/objeto portas lista`.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** estado compartilhado (todos veem)
+- **Nota:** De longe, o desenho distante do mapa ainda pode mostrar o objeto até a pessoa chegar perto. A posição precisa estar certa em 5 cm: é ela que identifica o objeto.
+- **Código:** `src/server/commands/objeto.ts`, com apoio em `src/server/level-edits.ts` (salvo em `playerdata/level-edits.json`) e `src/server/wall-sites.ts` (`playerdata/wall-sites.json`)
+- **API do motor que usa:** `LevelEdit.apply`, `LevelEdit.restore`
+- **Para ler mais** (pasta `docs/guides`): `World/level-edits.md`
+
+```text
+/objeto  -- o que já foi tirado do mapa, numerado
+/objeto esconder <malha.cgf> <x> <y> <z>  -- tira o objeto (a linha que o World Builder copia pode ser colada inteira)
+/objeto devolver <n>  -- põe de volta o objeto nº n
+/objeto portas [metros]  -- olha de novo a parede invisível que ficou onde uma porta foi tirada do mapa (as portas a até tantos metros, 40 por padrão) e tira o que é só colisão; /objeto portas lista mostra quais já foram olhadas
+/objeto sondar  -- o que há para onde você olha e na sua frente (na altura do peito e dos joelhos), a até 8 m (o que o seu jogo vê): o nome, o guid e a posição de uma parede invisível, para tirá-la com 'esconder'; uma árvore ou pedra vem marcada /tree ou /rock
+/objeto parede [metros]  -- encoste na parede invisível e use: o seu jogo procura ao redor (3 m, até 8) e o servidor tira de vez o que é só colisão (caixa de designer, volume de colisão, entidade bloqueadora); o que tem desenho não é tocado; /objeto devolver <n> desfaz
+```
+
+### `/mural`
+
+Os **quadros de avisos** das vilas e cidades (veja [Quadros de avisos](#quadros-de-avisos)). Sozinho, abre o quadro que estiver ao alcance, como a tecla **F** diante dele (um caminho para quem o aviso da tela não aparece). O administrador lista os quadros que o servidor conhece e os cartazes de cada um, com **quem os afixou, até os anônimos**, e retira cartazes.
+
+- **Quem pode usar:** jogador e admin (as outras formas, só admin)
+- **Quem é afetado:** só você (retirar cartazes muda o quadro de todos)
+- **Nota:** Um cartaz custa **10 moedas** e fica **7 dias**. O registro do servidor diz quem afixou e quem retirou cada cartaz (`mural:`).
+- **Código:** `src/server/commands/mural.ts`, com apoio em `src/server/mural.ts` e `src/server/mural-places.ts`
+
+```text
+/mural  -- abre o quadro de avisos perto de você
+/mural quadros  -- (admin) os quadros que o servidor conhece, onde estão e quantos cartazes têm
+/mural lista [quadro]  -- (admin) os cartazes de um quadro, ou de todos, com quem os afixou
+/mural remover <id>  -- (admin) retira um cartaz
+/mural limpar <quadro>  -- (admin) retira todos os cartazes de um quadro
+```
+
 ### `/herbs`
 
 Controla a rebrota das ervas: `time` (em segundos reais na velocidade atual do mundo; `0 0` desliga a rebrota por tempo), `defaults`, `respawn [raio]` e `respawn-all` refazem ervas já colhidas.
@@ -788,11 +945,11 @@ Controla a rebrota das ervas: `time` (em segundos reais na velocidade atual do m
 
 ### `/tesouros`
 
-(admin) Os **baús de tesouro** espalhados pelo mapa: `abastecer` (enche agora), `ligar`/`desligar` e `chance <n>`. Cerca de 40% dos baús do nível passam a ter saque de verdade (comida, minérios, receitas, armas e armaduras), melhor quanto mais longe das vilas e mais difícil a tranca.
+(admin) Os **baús de tesouro** espalhados pelo mapa: `abastecer` (enche agora), `ligar`/`desligar` e `chance <n>`. Cerca de 40% dos baús do nível passam a ter saque de verdade (comida, minérios, receitas, roupas e, raramente, armas e armaduras simples), melhor quanto mais longe das vilas e mais difícil a tranca.
 
 - **Quem pode usar:** só admin
 - **Quem é afetado:** o mundo
-- **Nota:** Um baú esvaziado volta a encher depois de 1 hora. Os baús de casas e de acampamentos de bandidos não entram.
+- **Nota:** Um baú esvaziado volta a encher depois de 1 hora. Os baús de casas e de acampamentos de bandidos não entram. **Armas e armaduras são raras e pobres** (pedido de 20/10/2026: *os itens dos baús avulsos não podem ter armadura e espada muito boas, têm que ser mais raros; coisas de cavalo; senão tira o sentido das profissões*): não aparecem nos baús perto de gente (a menos de 150 m de uma vila, igreja ou acampamento de estrada); nos outros são peças **simples e gastas**, e só nos baús mais longe e nos trancados, uma vez em três, uma peça **comum**; nunca uma boa ou excelente, e **nunca arreios de cavalo** (sela, rédea, testeira, manta, ferraduras), que se fazem e se compram. Saem com um terço da chance de antes. As roupas podem chegar a boas, só nos baús de longe. As peças boas são o ofício do ferreiro e do alfaiate.
 - **Código:** `src/server/commands/tesouros.ts`, com apoio em `src/server/treasure.ts`
 - **Para ler mais** (pasta `docs/guides`): `World/stashes.md`
 
@@ -897,7 +1054,7 @@ Faz você carregar um item nos braços (cesta, lenha, saco) ou deixa um no chão
 
 ### `/chave`
 
-Tranca ou destranca a porta, ou o baú, à sua frente se você tiver a chave dele no inventário. Numa casa com mais de uma porta (a entrada e o depósito), todas mudam juntas. É o que dá serventia à chave que o admin entrega.
+Tranca ou destranca a porta, ou o baú, à sua frente se você tiver a chave dele no inventário ou se o dono lhe deu acesso (o **Dar acesso** do painel, em Propriedades, que vale como a chave). Numa casa com mais de uma porta (a entrada e o depósito), todas mudam juntas. É o que dá serventia à chave que o admin entrega.
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** a porta ou o baú à sua frente
@@ -971,13 +1128,87 @@ Coloca no mundo uma peça do catálogo de objetos do jogo, construída em todos 
 /prop clear
 ```
 
+### `/ladrao`
+
+A **marca de ladrão**: o título **Ladrão** (ou **Ladra**), em vermelho, sobre a cabeça, no lugar de qualquer outro título. Vem sozinha para quem rouba **mais de 3 baús diferentes de outros jogadores em menos de uma hora** e dura **1 dia** (pedido de 18/10/2026). O comando lista quem está marcado, marca à mão ou perdoa.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** o jogador citado
+- **Nota:** Conta como roubo tirar coisas de um baú que é de outro jogador, por qualquer caminho (a tela do jogo num baú destrancado, a gazua). Cada baú conta uma vez. **Baú de parente não conta**: quem está ligado ao dono na árvore da família (o vínculo aceito na seção Família) abre o baú como se fosse dele. Baús de NPC e baús sem dono também não contam. A contagem fica na memória (um reinício zera); as marcas ficam em `playerdata/thieves.json`. Veja [Baús de outro jogador: o roubo e a marca de ladrão](#baús-de-outro-jogador-o-roubo-e-a-marca-de-ladrão).
+- **Código:** `src/server/commands/ladrao.ts`, com apoio em `src/server/thieves.ts`, `src/server/property-menu.ts`, `src/server/family.ts`, `src/server/titles.ts`
+
+```text
+/ladrao  -- quem está marcado, até quando e por quê
+/ladrao marcar <jogador> [dias]  -- marca (1 dia se não disser)
+/ladrao perdoar <jogador>  -- tira a marca
+```
+
+### `/mortes`
+
+Os **baús de morte**. Ao cair, o que o jogador não tinha vestido ou equipado vai para um baú junto ao corpo, **marcado no mapa e na bússola do dono** (um túmulo), por **30 minutos**. **O dono pode abrir e pegar tudo de volta** (pedido de 18/10/2026, à noite; antes disso o dono era recusado), e quem passar antes também pode levar. Faltando 5 minutos o dono é avisado. Um reinício não apaga mais o baú: ele volta ao mesmo lugar com o que tinha, com pelo menos 10 minutos. O comando lista os baús (no mundo e os que já acabaram, por 7 dias), mostra o que caiu, quem levou quanto e o que o dono perdeu, e devolve ao dono o que ele perdeu.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** o dono do baú
+- **Nota:** As horas aparecem no horário de Brasília. `devolver` entrega o que outros levaram e o que sobrou quando o tempo acabou; num baú ainda no mundo, entrega tudo o que está nele e o baú some. Quem não está no servidor recebe uns segundos depois da próxima entrada. Fica em `playerdata/death-drops.json` (os baús no mundo) e `playerdata/death-drops-past.json` (os que acabaram e as devoluções esperando). Os baús de antes de 18/10/2026, 23:49 UTC, não foram registrados.
+- **Código:** `src/server/commands/mortes.ts`, com apoio em `src/server/death-drop.ts`, `src/server/characters.ts`
+
+```text
+/mortes  -- os últimos baús de morte, no mundo e passados (hora de Brasília)
+/mortes <jogador>  -- os de um jogador (nome do personagem, apelido ou Steam id)
+/mortes ver <n>  -- o que caiu no baú #n, quem levou e o que o dono perdeu
+/mortes devolver <n>  -- devolve ao dono o que ele perdeu no baú #n (na hora, ou na próxima entrada)
+```
+
+### `/presos`
+
+As **prisões** do reino (pedido de 29/10/2026): um jogador de cargo que faça sentido (soldado, guarda, capitão, juiz, cavaleiro, lorde...) aperta E diante de alguém **abaixo dele na hierarquia** e escolhe **Prender** na lista; o preso fica de **mãos algemadas** (só anda: não corre, não abre menu algum além do Esc, não age; fala no chat e na voz) e pode ser solto por quem o prendeu ou por quem está acima. As algemas se soltam sozinhas em 30 minutos; a morte também solta. Diante de um **pelourinho** (os das vilas do nível) o oficial aperta E, escolhe quem será posto e a pena (15 min, 30 min, 1 h ou 2 h): o preso fica no pelourinho até o tempo acabar, **mesmo que saia do jogo e volte** (conta pelo relógio). O comando lista os presos e solta quem a administração mandar.
+
+- **Quem pode usar:** só admin (os oficiais prendem pela lista do E, não por comando)
+- **Quem é afetado:** o preso
+- **Nota:** Não confundir com `/preso`, o "Fiquei preso" dos jogadores. Um preso só consegue falar: os comandos que movem, chamam animais ou levam a uma igreja ficam recusados enquanto ele estiver preso (um administrador mantém todos os comandos, mesmo preso). Fica em `playerdata/arrests.json`.
+- **Código:** `src/server/commands/presos.ts`, com apoio em `src/server/arrest.ts`, `src/client/arrest.ts`, `src/server/encounters.ts`
+
+```text
+/presos  -- quem está preso agora, quem prendeu e quanto falta
+/presos soltar <nome>  -- solta quem tiver esse nome (ou parte dele), algemado ou no pelourinho
+```
+
+### `/curar`
+
+Um médico da administração: estanca o **sangramento** e fecha os ferimentos de um jogador, ou cura **tudo** (vida, ferimentos, venenos e sangramento). Quem não está no servidor é tratado uns segundos depois da próxima entrada.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** o jogador citado
+- **Nota:** Quem cai ferido acorda com 30% da vida e é mandado procurar um médico alquimista; as ataduras são feitas pelos alquimistas (pano + confrei ou calêndula, 2 ataduras). As curas esperando ficam em `playerdata/heal-on-join.json`.
+- **Código:** `src/server/commands/curar.ts`, com apoio em `src/server/heal.ts`, `src/server/characters.ts`, `src/server/players.ts`
+
+```text
+/curar <jogador>  -- estanca o sangramento e fecha os ferimentos
+/curar <jogador> tudo  -- cura tudo: vida, ferimentos, venenos e sangramento
+```
+
+### `/nivel`
+
+Os **níveis** de um personagem, e o jeito de devolver um nível que se perdeu (23/10/2026: *"o Luance falou que perdeu os níveis"*; no arquivo dele todas as trilhas estavam no 5 do começo, e o registro do servidor tinha a alquimia no 20 e a esgrima de espada no 10). Sem trilha, lista as trilhas **acima do 5**; com trilha e nível, põe a trilha **exatamente** nesse nível (`restoreProgression`: sem janelinha de nível novo e **sem pontos de talento**, porque os talentos que o personagem já tinha continuam com ele), e **só para cima**. Para quem **não está no servidor** o nível vai para o **arquivo** do personagem e ele o tem na próxima entrada.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** o personagem citado (o nome pode ter espaços: `/nivel Patrik Ondřej`; fora do servidor vale o nome, o apelido ou o Steam ID)
+- **As trilhas:** `stealth`, `horse_riding`, `fencing`, `thievery`, `alchemy`, `craftsmanship`, `drinking`, `survival`, `weapon_sword`, `heavy_weapons`, `marksmanship`, `weapon_large`, `weapon_unarmed`, `scholarship`, `houndmaster`, `strength`, `agility`, `vitality`, `speech`, `prestige`; níveis de 1 a 30.
+- **Os níveis só sobem no arquivo** (`character-state.ts`, `keepClimbs`): se o jogo do jogador reporta uma trilha **abaixo** da que está gravada (uma restauração que não pegou, ou um corpo que ainda não foi avisado), o que se grava continua sendo o nível salvo, e o jogo é **mandado restaurar de novo** (inteiro, com talentos e pontos, aos 5 s e aos 20 s da entrada; depois só as trilhas atrasadas, a cada olhada de 30 s, no máximo 3 vezes por sessão). O log diz `characters: X: N trilha(s) abaixo do salvo (alchemy 5 < 20, ...); restaurei de novo (5 s depois, vez 1)`. A esgrima (`fencing`) o jogo calcula sozinho e não entra na comparação; quem **recomeça do zero** tem o arquivo apagado e não é afetado.
+- **Código:** `src/server/commands/nivel.ts`, com apoio em `src/server/character-state.ts` (`savedProgression`, `raiseSavedTrack`, `keepClimbs`), `src/server/characters.ts`, `src/server/players.ts`
+
+```text
+/nivel <jogador>  -- os níveis dele (quem não está no servidor: os do arquivo)
+/nivel <jogador> <trilha> <nível>  -- põe a trilha (alchemy, survival, weapon_sword...) nesse nível, de 1 a 30; só sobe
+```
+
 ### `/propriedade`
 
-Mapeia e administra as **propriedades**: casas, oficinas, tavernas e baús, cada uma com um nome, uma região, uma descrição, um dono e uma chave própria (um item novo, `kcdc-property:<id>`). **`mapear suchdol` (ou `wysoka`, `raborsch`, ou qualquer lugar que `locais` lista) cataloga tudo sozinho** (o servidor já conhece cada porta, cada baú e quais portas são de qual edifício); isso também roda sozinho na primeira vez que o servidor sobe. `perto` lista o que há ao seu redor com a distância, `organizar` põe os baús e as portas soltos (que o mapeamento deixou fora das casas) para dentro da propriedade mais perto (até 35 m; um baú com o nome de um lugar, como (Taverna), até 75 m; só os que não têm dono, chave nem tranca própria), `ir` leva você até uma propriedade, `renomear` troca o nome, `trancar` e `destrancar` mexem na tranca, `castelo [região]` junta as portas e os baús dentro das muralhas num só imóvel (Suchdol e Raborsch; também roda sozinho a cada início). `registrar` cria uma propriedade à mão, na porta à sua frente. `regiao <id> <nome>` põe a propriedade e os baús dela numa região (é assim que as regiões nascem), `descricao <id> "<texto>"` escreve a descrição e `dono <id> [@jogador]` entrega a propriedade (o dono e as chaves da casa e dos baús; `dono <id> nenhum` tira). As propriedades aparecem na seção **Chaves** do painel (todas, para o admin) e na seção **Propriedades** (as do próprio jogador). Salvo em `playerdata/properties.json`.
+Mapeia e administra as **propriedades**: casas, oficinas, tavernas e baús, cada uma com um nome, uma região, uma descrição, um dono e uma chave própria (um item novo, `kcdc-property:<id>`). **`mapear suchdol` (ou `wysoka`, `raborsch`, ou qualquer lugar que `locais` lista) cataloga tudo sozinho** (o servidor já conhece cada porta, cada baú e quais portas são de qual edifício); isso também roda sozinho na primeira vez que o servidor sobe, nas **17 regiões** da lista (`REGIONS` em `properties.ts`): Suchdol, Wysoka, Raborsch, Malešov, Bylany e Bohunowitz e, desde 20/10/2026 (*vamos mapear o resto inteiro logo*), Kuttenberg, Miskowitz, Pschitoky, Grunta, Horschan, Stará Kutná, Stará Lhota, Danemark, Rabstein, Opatowitz e a Estalagem de Pschitoky; Devil's Den, um vale de bandidos, e o acampamento do exército, que tem tendas e nenhuma porta, ficaram de fora (um lugar que a lista não tem se mapeia com o nome que `locais` mostra). `perto` lista o que há ao seu redor com a distância, `organizar` põe os baús e as portas soltos (que o mapeamento deixou fora das casas) para dentro da propriedade mais perto: o baú até 50 m da casa ou de um baú dela (75 m com o nome do lugar, como (Taverna)), só os sem dono ou do senhor das terras e nunca para dentro da casa de outro jogador; a porta até 35 m, com a tranca que ela tinha (aberta ou fechada), na casa do mesmo dono, ou, sendo do senhor ou de ninguém, na casa mais perto, e na casa de outro jogador só a que está colada nela (até 12 m); nenhum com chave feita para ele. Isso também roda sozinho 2,5 minutos depois de cada início ("as portas que ligam propriedade são da propriedade"), `ir` leva você até uma propriedade, `renomear` troca o nome, `trancar` e `destrancar` mexem na tranca, `castelo [região]` junta as portas e os baús dentro das muralhas num só imóvel (Suchdol e Raborsch; também roda sozinho a cada início). `registrar` cria uma propriedade à mão, na porta à sua frente. `regiao <id> <nome>` põe a propriedade e os baús dela numa região (é assim que as regiões nascem), `descricao <id> "<texto>"` escreve a descrição e `dono <id> [@jogador]` entrega a propriedade (o dono e as chaves da casa e dos baús; `dono <id> nenhum` tira). As propriedades aparecem na seção **Chaves** do painel (todas, para o admin) e na seção **Propriedades** (as do próprio jogador). Salvo em `playerdata/properties.json`.
 
 - **Quem pode usar:** só admin
 - **Quem é afetado:** as portas e baús da propriedade; quem tem a chave destranca
-- **Nota:** A tranca é do **servidor**, não do jogo: toda porta e todo baú de uma propriedade fica destrancado no mundo e o jogo só oferece ali o seu **Abrir**; o que esse aperto faz é decidido pelo servidor, que abre um **menu** (Abrir, Destrancar, Trancar, a propriedade inteira, Arrombar, Sair: veja [Fechaduras](#fechaduras-e-na-porta-e-o-painel)). Uma propriedade que o mapeamento catalogou segue a tranca do próprio nível (as casas de NPCs e as do cenário são trancadas pelo jogo) até alguém a trancar **de propósito** (o menu, o painel, `/chave`, `registrar`); daí em diante o servidor a mantém assim, e ela volta trancada depois de cada reinício. **Destrancar e Trancar, no mundo, pedem a chave da propriedade** (o item) ou serem do admin; o dono não é exceção: pega as chaves no painel, uma de cada vez, porque ninguém recebe chaves junto com uma propriedade. Pelo painel, o dono e o admin trancam e destrancam sem chave. `/chave` também funciona perto do baú.
+- **Nota:** A tranca é a **do jogo**: o que alguém trancou **de propósito** (o **F**, o painel, `/chave`, `trancar`, `registrar`) fica trancado de verdade no mundo, e volta trancado depois de cada reinício; o resto segue a tranca do próprio nível (as casas de NPCs e as do cenário são trancadas pelo jogo). Na porta ou no baú, o **E** é o do jogo (abre o que está destrancado; o arrombamento é segurar E) e o **F** tranca e destranca para quem tem a chave (o item), é o dono, mora no quarto ou é admin: veja [Fechaduras](#fechaduras-e-abre-f-tranca). Pelo painel, o dono e o admin trancam e destrancam de longe. `/chave` também funciona perto do baú.
 - **Código:** `src/server/commands/properties.ts`, com apoio em `src/server/args.ts`, `src/server/players.ts`, `src/server/property-menu.ts`, `src/server/properties.ts`, `src/server/properties.ts`
 - **No jogador:** `player.position`, `player.teleport`
 - **Para ler mais** (pasta `docs/guides`): `World/doors-and-gates.md`, `Players/custom-items.md`
@@ -985,18 +1216,18 @@ Mapeia e administra as **propriedades**: casas, oficinas, tavernas e baús, cada
 ```text
 /propriedade mapear <região> [portas]  -- cataloga sozinho os edifícios e baús da região (suchdol, wysoka, raborsch, ou um lugar do mapa); 'portas' inclui portas soltas
 /propriedade locais  -- os lugares que o mapa do jogo nomeia, para mapear
-/propriedade castelo [região]  -- junta as portas e os baús dentro das muralhas num só imóvel, o castelo (suchdol, raborsch); sem região, todos
+/propriedade castelo [região]  -- junta as portas e os baús dentro das muralhas num só imóvel, o castelo (suchdol, raborsch, malesov, pschitoky); sem região, todos
+/propriedade lugar [região]  -- junta numa propriedade só cada lugar da região que é uma coisa só: a Estalagem de Pschitoky, o Haras de Malešov, a Toca do Diabo (em Minas); sem região, todas
 /propriedade organizar  -- põe os baús e as portas soltos para dentro da propriedade mais perto (até 35 m; um baú com o nome de um lugar, como (Taverna), até 75 m)
 /propriedade perto [metros]  -- o que há perto de você, com a distância
 /propriedade ir <id>  -- leva você até a propriedade
 /propriedade renomear <id> "<nome>"
 /propriedade regiao <id> <nome da região>  -- põe a propriedade (e os baús dela) numa região; é assim que as regiões nascem
 /propriedade descricao <id> "<texto>"
-/propriedade dono <id> [@jogador]  -- o jogador (você, se omitido) vira o dono e recebe as chaves da propriedade
-/propriedade dono <id> nenhum  -- tira o dono (as chaves entregues continuam com quem as tem)
+/propriedade dono <id> [@jogador]  -- o jogador (você, se omitido) vira o dono; nenhuma chave vai junto, e o acesso que o dono anterior deu acaba
+/propriedade dono <id> nenhum  -- tira o dono (o acesso que ele deu acaba; as chaves já entregues continuam com quem as tem)
 /propriedade regioes  -- as regiões que já existem
 /propriedade trancar <id>  |  /propriedade destrancar <id>
-/propriedade olhar [ligar|desligar]  -- a trava ao olhar: a porta que o menu vai abrir fica trancada no mundo enquanto o jogador olha para ela, para o boneco não abrir e fechar a porta antes do menu (desligue se alguma porta ficar estranha)
 /propriedade registrar "<nome>" [região]  -- a porta mais próxima vira essa propriedade, trancada
 /propriedade remover <id>
 /propriedade listar [região]
@@ -1047,6 +1278,19 @@ Coloca efeitos de partículas das bibliotecas do jogo, fixos (`/vfx <efeito>`) o
 /vfx clear
 ```
 
+### `/mobilia`
+
+As **cadeiras e camas** que as exportações do World Builder puseram e que aceitam o jogador (`src/server/furniture.ts`), as mais perto de você, e os números de onde o corpo fica nelas. As animações de sentar e deitar do jogo foram feitas para os assentos dele, então o primeiro a sentar pode ficar um palmo fora do assento ou deitar com a cabeça do lado errado: `/mobilia ajustar cadeira-frente -0.35` e semelhantes corrigem para todos, e os números ficam em `playerdata/furniture-tuning.json`.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** todos que sentam e deitam nesses móveis
+- **Código:** `src/server/commands/mobilia.ts`, com apoio em `src/server/furniture.ts`
+
+```text
+/mobilia  -- as mais perto de você e os números do ajuste
+/mobilia ajustar <campo> <valor>  -- muda um número (cadeira-frente, cadeira-altura, cadeira-giro, cama-altura, cama-cabeceira, cama-giro, cama-lado); metros, ou graus no giro
+```
+
 ## Montarias, cães e carroças
 
 ### `/alforje`
@@ -1067,18 +1311,19 @@ Abre as **alforjes** do seu cavalo, para guardar e pegar coisas, estando a até 
 
 ### `/cachorro`
 
-O cão de quem apoia o servidor: chama o seu cão para perto (se ele sumiu, vem de novo), dá um nome (`nome <nome>`, até 24 letras; sem nome ele volta ao nome do jogo) e manda seguir ou esperar (`seguir`, `esperar`).
+O cão de quem apoia o servidor: chama o seu cão para perto (se ele sumiu, vem de novo), dá um nome (`nome <nome>`, até 24 letras; sem nome ele volta ao nome do jogo) e manda seguir ou esperar (`seguir`, `esperar`). O **E** diante do cão (a até 2,5 m, com a mira nele) abre o menu, como o do cavalo: *Fazer carinho* (a animação de carinho do jogo, 3 s num corpo masculino; num feminino, os primeiros 7 s da animação da governanta), *Mandar ficar* (o cão senta e fica) ou *Mandar seguir*, e *Sair*. Os botões de ordem do painel foram tirados (26/10/2026: *vamos tirar o mandar ficar do cachorro da interface na seção meus animais*).
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** o seu cão
-- **Nota:** Só para apoiadores: o cão vem com os benefícios que o admin entrega na seção Jogadores do painel e volta sozinho a cada entrada. Veja [Apoiador](#apoiador).
+- **Nota:** Só para apoiadores: o cão vem com os benefícios que o admin entrega na seção Jogadores do painel e volta sozinho a cada entrada. **Cada cão é diferente** (26/10/2026: *vamos randomizar os cachorros, eles só são dados por apoiador mas tem que ser diferentes*): na primeira vez que o cão vem, o servidor sorteia a alma de um dos cães de vila do jogo (64 almas, `src/server/dog-souls.ts`, feitas por `tools/make-dog-souls.py`; ficam de fora as dos cães das vilas deste servidor), uma que nenhum outro apoiador esteja usando enquanto sobrar alguma, e a grava em `supporters.json` (`dogSoul`): o cão volta igual a cada entrada, a cada `/cachorro` e a cada nova entrega. A alma é que define como o cão parece; quem já tinha o cão genérico ganha a sua na próxima entrada. *Ainda não visto no jogo:* quanto as almas se distinguem na aparência. Veja [Apoiador](#apoiador).
 - **Código:** `src/server/commands/cachorro.ts`, com apoio em `src/server/args.ts`, `src/server/supporters.ts`
 - **Para ler mais** (pasta `docs/guides`): `NPCs and animals/dogs.md`
 
 ```text
 /cachorro  -- chama o seu cão (se ele sumiu, vem de novo)
 /cachorro nome <nome>  -- dá um nome ao cão (até 24 letras); sem nome, ele volta ao nome de antes
-/cachorro <seguir|esperar>  -- manda o cão seguir você ou esperar onde está
+/cachorro <seguir|esperar|sentar|solto>  -- manda o cão seguir você, esperar (sentar) onde está, ou andar solto
+E diante do cão  -- abre o menu: Fazer carinho, Mandar ficar (ou Mandar seguir) e Sair
 ```
 
 ### `/carroca`
@@ -1087,7 +1332,7 @@ As suas **carroças**: onde estão, `trazer` (a vazia vem para a sua frente, a c
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** as suas carroças
-- **Nota:** Trancada (o padrão), só o dono e os administradores sobem; **livre**, qualquer jogador sobe e conduz. A carroça fica onde for deixada, com o dono e o nome, e volta ao mundo depois de uma reinicialização. O comando também responde por `/carroça`.
+- **Nota:** Trancada (o padrão), só o dono e os administradores sobem; **livre**, qualquer jogador sobe e conduz. A carroça fica onde for deixada, com o dono e o nome, e volta ao mundo depois de uma reinicialização. O comando também responde por `/carroça`. O **[E] Subir na carroça** aparece a até **3,5 m do corpo** da carroça (o trecho da traseira, 5,5 m atrás do eixo da frente, até o banco do condutor, 1,5 m adiante dele: uma carroça não é um ponto), e a escolha do assento vale até 5 m (a primeira medida, de 6 m a partir de cinco pontos, alcançava 12 m do eixo: *carroças está dando para interagir de muito distante*, 21/10/2026); quem o servidor ainda tem sentado numa carroça que está a mais de 30 m dele (levado por um admin, ou solto pelo jogo sem aviso) é solto, e a dica volta (relato de 20/10/2026: *andei na carroça de um amigo como admin; depois que larguei ela, ao chegar perto o E não apareceu para entrar*).
 - **Código:** `src/server/commands/carroca.ts`, com apoio em `src/server/acquaintances.ts`, `src/server/auth.ts`, `src/server/carts.ts`, `src/server/horses.ts`, `src/server/players.ts`
 - **No jogador:** `player.steamId`, `player.record`
 - **Para ler mais** (pasta `docs/guides`): `World/carts.md`
@@ -1097,7 +1342,7 @@ As suas **carroças**: onde estão, `trazer` (a vazia vem para a sua frente, a c
 /carroca trazer [n]  -- a carroça vazia vem para a sua frente (de dois em dois minutos)
 /carroca nome [n] <nome>  -- dá nome à carroça (sem nome, volta ao comum)
 /carroca dar <jogador> [modelo]  -- (admin) uma carroça nova para o jogador
-/carroca registrar <jogador>  -- (admin) a carroça sem dono ao lado do jogador passa a ser dele
+/carroca registrar <jogador ou nº>  -- (admin) a carroça sem dono ao lado do jogador, ou uma que o admin deixou no mundo com `colocar`, passa a ser dele (o nome, ou o número da página Jogadores, como 4438)
 /carroca listar  -- (admin) todas as carroças com dono
 /carroca liberar <n>  -- (admin) a carroça n da lista deixa de ter dono
 ```
@@ -1127,7 +1372,7 @@ Diz onde estão os seus cavalos (a quantos metros e em que direção) e chama o 
 
 - **Quem pode usar:** jogador e admin
 - **Quem é afetado:** o seu cavalo
-- **Nota:** Os cavalos com dono são guardados: veja [O que é salvo e o que não é](#o-que-é-salvo-e-o-que-não-é).
+- **Nota:** Os cavalos com dono são guardados: veja [O que é salvo e o que não é](#o-que-é-salvo-e-o-que-não-é). O **E** diante do cavalo abre o menu *Montar*, *Bolsa*, *Seguir* (ou *Ficar*) e *Sair*; o **X** assobia, e quem está por perto escuta (veja [O menu do cavalo e o assobio](#o-menu-do-cavalo-e-o-assobio)).
 - **Código:** `src/server/commands/cavalo.ts`, com apoio em `src/server/auth.ts`, `src/server/horses.ts`, `src/server/horses.ts`
 - **No jogador:** `player.position`, `player.steamId`
 - **Para ler mais** (pasta `docs/guides`): `NPCs and animals/horses.md`, `NPCs and animals/horse-owners.md`
@@ -1288,6 +1533,27 @@ Lista os **barbeiros** e os **mestres que ensinam habilidades** (esgrima, caça,
 /mestres ir <id>  -- leva você até ele
 ```
 
+### `/gesto`
+
+A **roda do G** (26/10/2026: *vamos adicionar também mais emotes, exemplo usar lampião ou levantar estandarte e coisas do tipo que o jogo deve ter*) tem hoje **57 gestos em 7 grupos**, todos das animações do próprio jogo (`Animations.list`), e `/gesto` é a chave do administrador sobre eles: **`lista`** mostra os gestos de cada grupo com o número, **`desligar <número>`** tira um gesto da roda para todo mundo na hora, **sem reiniciar**, e **`ligar <número>`** põe de volta. Existe porque nenhum desses gestos pôde ser visto no jogo antes de subir: se um ficar feio, o administrador o desliga e avisa qual era. O que está desligado fica em `playerdata/emotes.json` e vale depois de um reinício; o log de início diz quais estão desligados.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** todos os jogadores, na próxima vez que abrirem o G
+- **Os grupos:** *Saudações* (acenar, saudar, assentir, respeito, reverência, apontar, chamar, siga-me, sentido, anunciar, discursar, incitar), *Emoções* (comemorar, aplaudir, aplauso triste, lamentar, susto, encolher-se, nervoso, chorar, exausto, palma na testa), *Rosto* (sorrir, sorriso largo, gargalhar, piscar, surpresa, desconfiar, dúvida, suspirar, nojo, irritação: o rosto faz o gesto e volta), *Humor* (feliz, bravo, triste, aflito, pensativo, arrogante, bêbado, olhos fechados e neutro: o rosto **fica** assim até o *Neutro* ou o *Parar*), *Festa* (dançar, conversar, flauta, flauta alegre, trompa), *Fé* (persignar, rezar, rezar muito, ouvir a missa, pregar, meditar) e *Objetos* (**lampião**, **lampião fino**, **estandarte**, curativo, aquecer as mãos).
+- **O lampião e o estandarte são carregados, não tocados:** a mão esquerda segura o objeto (`lamp_tool`, `lamp_toolFancy`, a bandeira da missão do cerco de Suchdol, `oblehaniSuchdole_flag`) com a pose da mão esquerda do próprio jogo (`HoldItemLeft`, que tem a versão andando e correndo), o corpo anda livre, e **pedir o mesmo gesto de novo guarda o objeto** (outro gesto o troca, o **Parar** o guarda).
+- **O que o jogo só tem para um corpo só é oferecido a esse corpo só:** a roda pergunta ao servidor a cada abertura (`emote.list`) e o servidor responde pelo catálogo do jogo (as linhas `male` e `female` de `Animations.list`): sentido, incitar, exausto, palma na testa, flauta, trompa, pregar, meditar e aquecer as mãos são de homem; chorar é de mulher; o resto é dos dois.
+- **A trompa** é a do vigia da cidade e se ouve a **200 m**: cada jogador só a toca de 60 em 60 segundos.
+- **Parar** (o último segmento da roda) solta o que a roda começou: o gesto do corpo, o lampião, o rosto e o humor. Um gesto dura o tempo da animação (ou o limite de cada um, de 2 a 30 s) e termina sozinho; os longos (a flauta, 66 s) se cortam com o Parar.
+- **Código:** `src/server/emotes.ts` (a tabela `GESTURES`), `src/server/commands/gesto.ts`, `src/client/emotes.ts` e a página `ui-src/emotes.html` (a roda: os grupos no centro da tela, um clique abre o anel do grupo, o meio volta, `Backspace` também, `1` a `9` e `0` escolhem)
+- **API do motor que usa:** `Animations.list`, `Animations.props`
+- **No jogador:** `player.playAnimation` (com `props` na mão), `player.stopAnimation`, `player.setFacialExpression`
+
+```text
+/gesto lista                 -- os gestos de cada grupo, com o número; os desligados vêm marcados
+/gesto desligar <número>     -- tira da roda um gesto que ficou feio no jogo
+/gesto ligar <número>        -- põe de volta
+```
+
 ### `/npc`
 
 Cria NPCs do servidor por papel (`roles`) ou alma e dá ordens: seguir, patrulhar, vir, esperar (`hold`), falar (`say`), trocar a locomoção (`native` é a do jogo, `kinematic` é movida pelo servidor), `kill|revive`, `pin|unpin`, `remove|clear`.
@@ -1416,7 +1682,49 @@ Abre a tela de comércio do próprio jogo com preços definidos pelo servidor. `
 /vendor reset
 ```
 
+### `/viagem`
+
+As **paradas da viagem rápida de carroça** (`src/server/travel.ts`): cada uma com a sua carroça, o seu cocheiro, onde estão, quem escolheu o lugar (à mão, vendo a vila de cima no World Builder; um admin; ou o jogo), se o cocheiro está acordado, e o preço. São **13 paradas**, e a carroça de cada uma foi **posta à mão** em 20/10/2026: na beira da estrada que sai da vila, **do lado de fora**, fora da pista e ao longo dela, de frente para longe da vila, com o cocheiro do lado da estrada e o ponto de chegada do outro lado da carroça. O servidor não lê chão nenhum para elas (a posição, o giro, o cocheiro e a chegada de cada uma estão em `STOPS`, no campo `fixed`). Uma que ficou num lugar estranho se corrige com `/viagem aqui <parada>`: a carroça vai para a sua frente, de lado, e o cocheiro fica do seu lado dela; `/viagem original <parada>` traz de volta o lugar escolhido à mão. Só uma parada que um admin cria com `/viagem nova` não tem lugar escolhido: `/viagem procurar <parada>` faz o jogo do admin ler o chão em volta do ponto (`World.resolveGround`: grama limpa ao lado da estrada) e `/viagem malha` deixa só a malha de navegação escolher. Veja [Viagem rápida de carroça](#viagem-rápida-de-carroça).
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** as paradas e quem viaja
+- **Código:** `src/server/commands/viagem.ts`, com apoio em `src/server/travel.ts`, `src/server/townsfolk.ts`, `src/server/carts.ts`
+- **No jogador:** `player.teleport` (`ir`)
+
+```text
+/viagem  -- as paradas, as carroças, os cocheiros e o preço
+/viagem aqui <parada>  -- a carroça da parada na sua frente, de lado, e o cocheiro do seu lado dela
+/viagem cocheiro <parada>  -- só o cocheiro, onde você está
+/viagem original <parada>  -- a carroça e o cocheiro voltam ao lugar escolhido à mão para a parada
+/viagem procurar <parada>  -- (parada nova) o chão é lido pelo SEU jogo (fique a menos de 150 m do ponto da parada) e a carroça vai para a beira da estrada
+/viagem malha <parada>  -- (parada nova) só a malha de navegação escolhe o lugar (não sabe o que é estrada: a carroça pode ficar sobre ela)
+/viagem ir <parada>  -- leva você até a parada
+/viagem preco <base> <por km>  -- o preço das viagens, em moedas
+/viagem nova <id> <nome>  -- uma parada nova onde você está
+/viagem remover <parada>  -- tira a parada (carroça e cocheiro)
+```
+
 ## Ofícios e itens
+
+### `/conjunto`
+
+Os **conjuntos de armadura** do próprio jogo (os trajes com que ele veste guardas e soldados), separados pela **vila, cidade ou senhor** de quem os usa, cada um com a **categoria** pelo preço (básica, comum, boa, excelente, nobre), o **peso** (roupa, leve, média, pesada) e o código de cada peça. A lista completa, para ler, está em `ARMADURAS.md` (ao lado de `ITENS.md`): 173 conjuntos de 19 lugares, até três por tipo de soldado (o mais barato, o do meio e o mais caro), e mais o 20º lugar, **Brasões** (`/conjunto brasoes`), com 19 pacotes; e, no fim do arquivo, os **Cavalos** (pedido de 22/10/2026: *me dê o do cavalo de Trosky e dos brasões também das casas*: os 71 conjuntos de arreio do próprio jogo, por lugar e casa, e as 45 peças de cavalo nas cores de cada casa, para o `/horse gear`) e as **Casas e cidades** (*casacos com brasões de casas e cavaleiros por região, em uma lista separada, junto ao escudo, à armadura e à roupa dos cavalos*: uma lista só para cada uma das 19 casas, cidades, ordens e reinos com brasão, com as peças que levam o brasão, o escudo e a espada, as armaduras do lugar e a roupa do cavalo, e o comando de cada coisa).
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** o jogador citado (ou você)
+- **Nota:** `vestir` troca a roupa inteira pela do conjunto (o jogo só tem esses trajes para corpo de homem); `dar` põe as peças no inventário, para quem quiser vestir aos poucos, e serve para mulher também. A qualidade vai de 1 a 4.
+- **Brasões** (pedido de 21/10/2026: *os casacos com o brasão de cada casa junto ao escudo dos cavaleiros de cada região que tem um brasão, e a espada do cavaleiro também*): um pacote por cidade, casa, ordem ou reino que tem brasão no jogo (`brasao-kuttenberg`, `brasao-praga`, `brasao-skalitz`, `brasao-bergow`, `brasao-holohlavy`, `brasao-leipa`, `brasao-nebakov`, `brasao-pisek`, `brasao-polner`, `brasao-radzig`, `brasao-ruthard`, `brasao-semine`, `brasao-suchotlesky`, `brasao-vavak`, `brasao-zavish`, `brasao-zimburg`, `brasao-ordem-teutonica`, `brasao-ordem-da-cruz`, `brasao-hungria`). Cada um traz o **sobretudo (e o casaco comum) com o brasão**, o **escudo de cavaleiro** dele e a **espada do cavaleiro** (`shortswordHeavy`); onde o jogo não tem casaco com o brasão (Skalitz, Radzig, Zimburg, Holohlavy, Zavish, Suchotlesky, Ordem da Cruz) vêm só o escudo e a espada, e onde só há o escudo triangular (Polner, Holohlavy, Zavish, Suchotlesky) é ele. São pacotes montados pela ferramenta, não trajes do jogo: só `dar` (`/conjunto dar brasao-kuttenberg Radovan`), nunca `vestir`. As outras versões do brasão de cada peça estão em `ARMADURAS.md`, na coluna *Outras cores*.
+- **Tirar** (pedido de 22/10/2026: *coloquei um set de Malešov nele sem querer, retire urgente, foram 8 itens*): `/conjunto tirar <id> [jogador]` tira do inventário do jogador **uma unidade de cada peça** do conjunto, a de qualidade 1 (a que o `dar` entrega) primeiro, e diz quantas saíram e quais não estavam; não mexe em mais nada. O jogador precisa estar online. Se o jogo recusar (peça vestida, por exemplo), nada sai e o comando avisa.
+- **Código:** `src/server/commands/conjunto.ts`, com apoio em `src/server/armor-sets.ts` e `data/armor-sets.json` (feitos por `tools/make-armor-sets.py`)
+
+```text
+/conjunto  -- os lugares, com quantos conjuntos cada um tem
+/conjunto <lugar>  -- os conjuntos de um lugar, com o id, a categoria e o peso (brasoes: os pacotes de brasão)
+/conjunto ver <id>  -- as peças de um conjunto
+/conjunto dar <id> [jogador] [qualidade]  -- as peças no inventário
+/conjunto vestir <id> [jogador]  -- veste o conjunto inteiro
+/conjunto tirar <id> [jogador]  -- tira do inventário uma de cada peça do conjunto (desfaz um dar enganado)
+```
 
 ### `/crafttest`
 
@@ -1434,6 +1742,81 @@ Teste das bancadas de ofício: confere a posição das estações de alquimia e 
 /crafttest move <alchemy|smithing> [station=1]
 /crafttest <alchemy|smithing> list
 /crafttest check
+```
+
+### `/oficios`
+
+(admin) Usar só as ferramentas da sua guilda, como um jogador comum, ou as de todos os ofícios. Um administrador com guilda obedece a ela (a forja, as mesas de alquimia, o fogo, o secador, o defumador); `livre` libera todas até ele sair do servidor. Também aceita `/ofícios`.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** só você
+- **Código:** `src/server/commands/oficios.ts`, com apoio em `src/server/guild-crafts.ts`, `src/server/status.ts`
+
+```text
+/oficios  -- como você está
+/oficios guilda  -- só as ferramentas da sua guilda, como um jogador comum
+/oficios livre  -- as de todos os ofícios, até você sair do servidor
+```
+
+### `/coleta`
+
+(admin) A guilda dos **Coletores** (veja [A coleta](#a-coleta)): as regras de agora (os segundos por lenha e por tentativa na pedra, quanto cada árvore e pedra dá, quanto descansa, as chances da pedra), e quantas árvores e pedras estão em trabalho ou descansando. `sondar` diz o que o jogo vê para onde você olha, a até 6 m (a categoria `tree` ou `rock`, o modelo e o lugar): é o que conta para a coleta. `kit` dá um machado de lenhador e uma picareta para testar (a picareta usada, como a do kit). `descansar` faz toda árvore e pedra voltar a dar.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** só você, ou o jogador citado (`kit`)
+- **Código:** `src/server/commands/coleta.ts`, com apoio em `src/server/gather.ts` e `src/server/level-edits.ts` (a sondagem)
+
+```text
+/coleta  -- as regras e quantas árvores e pedras estão em trabalho ou descansando
+/coleta sondar  -- o que está para onde você olha (árvore, pedra, o modelo), a até 6 m
+/coleta kit [jogador]  -- um machado de lenhador e uma picareta, para testar
+/coleta descansar  -- toda árvore e pedra volta a dar
+```
+
+### `/horta`
+
+As **hortas** dos Agricultores (veja [A horta e os cavalos selvagens](#a-horta-e-os-cavalos-selvagens)). Qualquer jogador pergunta o que plantou e quando fica pronto, e as cinco hortas mais perto; o administrador, para testar, faz toda plantação ficar pronta na hora ou esvazia todos os canteiros.
+
+- **Quem pode usar:** jogador e admin (`crescer` e `limpar`, só admin)
+- **Quem é afetado:** só você (`crescer` e `limpar`, todos)
+- **Código:** `src/server/commands/horta.ts`, com apoio em `src/server/farm.ts` e `src/server/farm-data.ts`
+
+```text
+/horta  -- o que você plantou e quando fica pronto
+/horta perto  -- as cinco hortas mais perto de você, com quantos canteiros livres
+/horta crescer  -- (admin) toda plantação fica pronta agora, para testar
+/horta limpar  -- (admin) esvazia todos os canteiros
+/horta aqui [metros]  -- (admin) marca um canteiro onde você está, com a fileira para onde você olha (3 m; de 1,5 a 8)
+/horta tirar  -- (admin) tira o canteiro marcado mais perto (até 4 m), com o que nele estiver plantado
+```
+
+### `/selvagens`
+
+(admin) Os **cavalos selvagens** dos campos abertos: quantos há e como se comportam, os cinco mais perto com a confiança de cada um em você, e como testar a doma sem horas de cenoura (`confianca 100`: o cavalo mais perto já aceita ser montado). `ir` leva você até o mais perto; `repor` tira todos e põe de volta nos seus campos. Um administrador sem guilda doma como um agricultor; um com guilda usa `/oficios livre`.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** só você
+- **Código:** `src/server/commands/selvagens.ts`, com apoio em `src/server/wild-horses.ts`
+
+```text
+/selvagens  -- quantos cavalos selvagens há e como eles se comportam
+/selvagens perto  -- os cinco mais perto de você, com a distância e a confiança deles em você
+/selvagens ir  -- leva você ao cavalo selvagem mais perto (a até 5 m dele)
+/selvagens confianca <0-100>  -- a confiança do cavalo mais perto em você, para testar (100: ele já aceita ser montado)
+/selvagens repor  -- tira todos e põe de volta nos seus campos
+```
+
+### `/oficinas`
+
+(admin) As forjas e mesas de alquimia que o nível tem, com a distância de você e quem está usando cada uma.
+
+- **Quem pode usar:** só admin
+- **Quem é afetado:** só você
+- **Código:** `src/server/commands/oficinas.ts`
+- **API do motor que usa:** `Crafting.stations`, `Crafting.occupancy`
+
+```text
+/oficinas
 ```
 
 ### `/customitems`
@@ -1570,15 +1953,19 @@ Traça uma linha da sua mira e diz o que ela encontrou, inclusive qual jogador, 
 | --- | --- | --- |
 | `F2` | Abre e fecha o painel na categoria **Comum** (também fecha com `Esc` ou no X). Fecha quando a tecla é **solta**, não quando é apertada, e o painel só recebe o teclado depois que a tecla que o abriu foi solta: assim um mesmo toque não é lido pelo jogo e pela página ao mesmo tempo. Com um nome sendo digitado ou um formulário aberto, a tecla não fecha o painel. O aviso de entrada diz qual tecla apertar | `src/client/status.ts` |
 | `F3` | **Só admin**: abre o mesmo painel na categoria **Administração** (Chaves e Jogadores), **sem precisar abrir o F2 antes**: enquanto o servidor não disse que o jogador é admin, cada aperto pergunta de novo (quem virou admin com `/admin` no meio da sessão abre na hora). Com o painel aberto, a tecla da outra categoria troca de categoria, e a da categoria aberta fecha. Para um jogador, não faz nada | `src/client/status.ts` |
-| `V` | Falar (push-to-talk). O cliente é colocado em push-to-talk nesta tecla a cada entrada | `src/client/voice.ts` |
+| `H` | **Voz**. Desde 23/10/2026 o **microfone fica aberto**: envia sozinho quando o jogador fala, sem segurar tecla (`voiceActivity`, com o ruído do ambiente filtrado e uma sensibilidade à escolha: alta, média ou baixa); quem preferir volta a **segurar o `H`** (push-to-talk) em Opções → Microfone. O código não pede mais outra tecla (pedia o `V`, que nunca foi a do jogador: *o voip é H, não V*). Enquanto o servidor não disse o que o jogador escolheu, o microfone só envia com a tecla apertada | `src/client/voice.ts`, `src/server/voice-settings.ts` |
+| `Y` | Troca o alcance da voz: sussurro (3 m), fala (15 m) e grito (25 m) (a ação *Voice range* do KCDC, em Controles → Multiplayer). Ao trocar, o **indicador da voz** aparece por 2,4 s com o alcance novo, na cor dele | KCDC e `src/client/voice.ts` |
 | `F4` | Painel de debug do gamemode (mesmo que `/ui`). **Só admin**: a tecla pede ao servidor, que abre o painel para admin e responde com uma linha no chat para os outros | `src/client/index.ts` e `src/server/panel.ts` |
 | `Tab` | **Desligada para todos** (`mod.scoreboard: false` no `server.json`): é uma opção do servidor inteiro, não dá para ligar só para o admin. A lista de jogadores do admin está no painel, seção **Jogadores** | `server.json` |
 | `E` olhando para outro jogador | **Conversar**: abre a lista de diálogo do jogo com Apresentar-se, Jogar dados, Negociar e Sair (é a tecla de interação do jogo, a que o jogador tiver configurado). Veja [Encontros entre jogadores](#encontros-entre-jogadores) | `src/client/property-labels.ts` e `src/server/encounters.ts` |
-| `E` numa porta ou baú de uma propriedade | **Abrir**, a única opção que o jogo oferece ali (numa porta aberta, **Fechar**); numa porta que o servidor travou enquanto você a olha (a **trava ao olhar**, veja [Fechaduras](#fechaduras-e-na-porta-e-o-painel)), o jogo não oferece nada e o **Abrir** é o do mod, o mesmo desenho e a mesma tecla. Numa porta ou baú aberto, para quem não tem a chave, abre como em qualquer lugar; numa trancada, ou para quem tem a chave, abre o **menu**: Abrir, Destrancar, Trancar, a propriedade inteira, Arrombar e Sair. De dentro de uma casa trancada o jogo abre a porta direto, sem menu | `src/client/property-labels.ts` e `src/server/property-menu.ts` |
+| `E` numa porta ou baú de uma propriedade | O **E do jogo**: abre e fecha o que está destrancado. Numa porta ou baú trancado o jogo só oferece, do lado da fechadura, o **arrombamento dele** (segurar `E`, com gazua e a habilidade), e o servidor diz que está trancado (*aperte F para destrancar*, para quem pode). **Por dentro**, o `E` numa porta trancada puxa o ferrolho e abre. Veja [Fechaduras](#fechaduras-e-abre-f-tranca) | `src/client/property-labels.ts` e `src/server/property-menu.ts` |
+| `F` numa porta ou baú de uma propriedade | **[F] Trancar** ou **[F] Destrancar**, para quem tem a chave, é o dono, mora no quarto daquela porta ou baú, ou é admin, dos dois lados da porta; numa casa de várias portas, só aquela porta. O **[F] Trancar** só aparece numa porta **fechada e destrancada**: numa porta **aberta** o F não oferece nada (trancá-la a fechava sozinha; 25/10/2026: *o trancar no F só pode aparecer nas portas fechadas, não nas abertas*), e uma porta já trancada continua com **[F] Destrancar**. Para os outros o `F` não faz nada ali. É a tecla do jogo para agarrar e esfolar (`attack_special`), que porta e baú não usam | `src/client/property-labels.ts` e `src/server/property-menu.ts` |
+| `F` diante de um quadro de avisos | **[F] Quadro de avisos**: abre a página dos cartazes do quadro (o aviso aparece a 3,2 m do ponto diante das tábuas, com a mira no quadro). `Esc`, o X ou andar para longe a fecham. É a mesma tecla do fogo: não há fogo ao lado de um quadro | `src/client/cook-hint.ts` (tipo 7), `src/client/mural.ts` e `src/server/mural.ts` |
 | `Esc`, `F2` ou `F3` com a câmera livre ligada, ou o botão **Sair da câmera** | `Esc`, `F2` e o botão voltam à câmera normal; `F3` também, e abre o painel da administração (`F2`, o comum); de qualquer jeito, ela volta sozinha em 5 minutos. Quem ouve as teclas é uma página do mod (`ui/freecam.html`), porque o voo pronto do jogo engole todas | `src/client/camera.ts`, `ui-src/freecam.html` |
 | `W` `A` `S` `D`, `Espaço`, `Ctrl`, `Shift`, `Alt`, as **setas**, o mouse arrastado e `H` na câmera livre | `W A S D` voam, `Espaço` sobe, `Ctrl` desce, `Shift` acelera, `Alt` vai devagar; as **setas** e o mouse arrastado viram a câmera; `H` mostra de novo a ajuda e o botão de sair, que somem sozinhos depois de 9 segundos (e voltam quando o ponteiro se mexe) | `ui-src/freecam.html` |
+| `G` | A **roda de gestos**: abre uma roda de **sete grupos** (Saudações, Emoções, Rosto, Humor, Festa, Fé e Objetos) e o **Parar**; um clique num grupo abre o anel dos gestos dele (o meio da roda volta, `Backspace` também, `1` a `9` e `0` escolhem, `G`, `Esc` ou um clique fora fecham). Entre os gestos há o **lampião** e o **estandarte**, que a mão esquerda carrega enquanto o corpo anda (o mesmo gesto de novo guarda). Cada corpo vê só os gestos que o jogo tem para ele. Veja [`/gesto`](#gesto) | `src/client/emotes.ts`, `src/server/emotes.ts` e `ui-src/emotes.html` |
 | `X` | **Assobio**: o cavalo do jogador mais perto vem correndo, o mesmo que **Chamar** no painel (o assobio do jogo chama um cavalo que no multiplayer ninguém tem; o mod ouve a tecla). Montado no próprio cavalo, ou sem cavalo, não acontece nada. **No inventário (o menu de pausa) vale**: é de lá que o jogador chama o cavalo para guardar itens nele (pedido de 16/10/2026). **Não vale** nas telas do jogo em que o X confirma (seleção de itens, troca, livro, tela de pular o tempo, arrombamento, roubo, a inspeção do cavalo), nem numa conversa, com um livro aberto ou com uma página do mod no teclado: um **X** apertado para confirmar numa dessas telas não chama o cavalo | `src/client/whistle.ts` e `src/server/horses.ts` |
-| `T` | Abre o chat | cliente do jogo |
+| `T` | Abre o chat: o **cartão de papel** embaixo à esquerda (acima do logo do mod), na identidade do painel, com os **dois cantos dourados** (o leão em cima à esquerda e o corvo embaixo à direita) e, **à esquerda do campo de texto, um menu** (*Falar*, `/me`, `/do`, `/try`, `/dice`, `/anim`, `/face`, `/camera`, `/idioma` e `/help`, cada um com uma linha do que faz): escolher um põe o comando no começo da linha, e o nome do botão acompanha o que o jogador escreve. `Esc` fecha o menu e, de novo, o chat; `Enter` envia; as setas para cima e para baixo trazem as linhas de antes | `ui-src/chat.html` e `src/client/chat-card.ts` |
 | `F7` | World Builder, depois de `/builder` | framework |
 | `U` (segurar 1 s) | Oferece a paz para encerrar um combate | `src/server/combat.ts` e `src/client/combat.ts` |
 | `F9` | Desconecta do servidor | cliente do jogo |
@@ -1587,7 +1974,13 @@ Traça uma linha da sua mira e diz o que ela encontrou, inclusive qual jogador, 
 
 > **Por que `F2` e `F3`.** O painel morava no `U`, que é do jogo: segurar `U` por 1 segundo perto de um oponente em luta oferece a paz (`Offer to end combat`). Depois ele foi pedido na vírgula e no ponto, mas o mod (KCDC 1.6.9) não aceita nenhuma tecla de pontuação: `Key.bind` só conhece letras, números, `F1` a `F12`, setas, modificadoras, teclas de edição, teclado numérico e botões do mouse, e recusa `comma` e `period`. As setas, que ficaram no lugar por um dia, também andam com o personagem no KCD2. Nos mapas de teclas do próprio jogo (`Libs/Config/defaultProfile.xml` e `keybindSuperactions.xml`, dentro de `Data/IPL_GameData.pak`), o `F2` não faz nada e o `F3` só existe no mapa de debug, desligado no jogo normal. Entre os controles do mod, o `F2` só seria do `kcdc-playground`, que não está instalado.
 
-As demais ações do mod (roda de emotes, grupo, interação com NPC, alcance da voz: sussurro, normal e grito) ficam em **Controles → Multiplayer** no jogo.
+As demais ações do mod (roda de emotes, grupo, interação com NPC, alcance da voz: sussurro, fala e grito) ficam em **Controles → Multiplayer** no jogo.
+
+> **O indicador da voz (23/10/2026).** O microfone que o mod desenha embaixo à esquerda (e o ícone de fala no nome de quem o jogador ouve) fica escondido (`Voice.setIndicatorVisible(false)`, só depois que a página do servidor desenhou; se ela não abre, o do mod continua). No lugar, um **retângulo embaixo, no centro da tela, um pouco acima da barra de vida** (`ui/voice.html`, 20% da largura da tela, entre 300 e 440 px, e 5,8% da altura): o ícone do microfone, o nome do alcance com os metros que o servidor tem (**Sussurro** em azul-aço, **Fala** em dourado, **Grito** em vermelho), as barrinhas que sobem e descem com o volume do microfone (`Voice.getInputLevel`, numa escala de decibéis: −42 dB é nada e −10 dB é tudo; voz baixa dá barras baixas, voz alta dá barras altas) e três barras de sinal que dizem o alcance. Aparece quando o jogador fala e some 0,7 s depois da última palavra; ao apertar o `Y` aparece por 2,4 s mesmo calado. Não aparece com o chat escondido (câmera livre, criador de personagem) nem com a voz do jogo desligada. Como a vista só existe enquanto alguém fala, ela não pesa nos quadros por segundo.
+>
+> **A ajustar depois de testar no jogo** (tudo em `src/client/voice.ts`): `THRESHOLDS` (onde o microfone aberto passa a enviar: 0,02, 0,04 e 0,08 para alta, média e baixa), `LEVEL_FLOOR_DB` e `LEVEL_CEIL_DB` (a escala das barras), `hudGeometry` (a posição, que foi um palpite em relação à barra de vida), `HANG_MS` e `FLASH_MS`. O log do cliente guarda as primeiras 40 falas de cada sessão com o nível máximo lido, como `voice: falou 2.4 s, nível máximo 0.173 (aberto, abre em 0.04)`: com esses números dá para acertar a sensibilidade sem adivinhar.
+
+O jogador comum vê a lista das teclas e dos comandos do servidor no próprio painel, em **F2 → Opções → Teclas** (e a explicação de cada parte em **F2 → Informações**).
 
 ## Comandos do console do servidor
 
@@ -1659,7 +2052,7 @@ journalctl -u kcdc-server -f               (acompanhar o log)
 | Quem é quem | Nomes escondidos e apresentações (`encounters.ts`, `acquaintances.ts`): cada um só vê o nome de quem se apresentou a ele |
 | Ofícios | Kits e livros de receita (`kits.ts`, `books.ts`), `/crafttest` (alquimia e ferraria), `/pot`, ervas (`/herbs`, `World/gathering.md`) |
 | Transporte | `/horse` e `/cavalo` (cavalos com dono são guardados: `horses.ts`), `/cart`, `/dog` |
-| Voz e imersão | `V` para falar; alcance por jogador (`Voice.setPlayerRange`); sussurro, normal e grito (`Voice.setTier`); `/mute` |
+| Voz e imersão | microfone aberto por padrão, ou segurar o `H` (`voice.ts`, `voice-settings.ts`, escolha em Opções → Microfone); indicador próprio da voz (`ui/voice.html`); alcance por jogador (`Voice.setPlayerRange`); sussurro, fala e grito (`Voice.setTier`, tecla `Y`); `/mute` |
 | Hora e clima | Ciclo de 40 minutos de dia e 40 de noite com clima sorteado (`world-cycle.ts`, `/clima`); `/world` e `World/clock-and-weather.md` para o resto |
 | Vida no mundo | Acampamentos de bandidos (`bandits.ts`, `/bandidos`), animais (`animals.ts`, `/animals`), `/npc`, `/patrol`, `/dialogue`, `/quest` |
 | Entrada e administração | `auth.ts` (tickets com hash, perfis jogador e admin, bloqueio de comandos) e `scripts/auth.mjs`. Ainda não há comando de expulsar ou banir; as ações estão em `Players/actions.md` |
@@ -1732,14 +2125,14 @@ kcdc-whitelist enforce on                                # liga o bloqueio (off 
 | Bloqueio | O arquivo existe com `"enforce": true` | Quem não está na lista é recusado antes de baixar qualquer coisa, com a mensagem *Sua conta ainda não foi aprovada no Kingdom RP Brasil. Faça a inscrição pelo formulário (no nosso Discord) e aguarde a aprovação.* |
 | Quebrado | O arquivo não pode ser lido ou entendido | Recusa todo mundo e registra o motivo no log, como o `auth.json` |
 
-**Só contas Steam entram na lista.** O personagem é guardado pelo Steam ID, e o servidor só recebe do jogo, de quem o comprou na GOG, nenhum identificador; de quem usa a Epic, um id que o resto do mod não usa. Essas contas são recusadas como as que não estão na lista, até o mod aprender a guardar os personagens por outra chave. **Comece pondo o seu próprio Steam ID na lista, antes de ligar o bloqueio**, ou você mesmo fica de fora. **Estado atual (16/10/2026, a pedido: *desativar por enquanto, até eu conseguir configurar 100%*): o bloqueio está DESLIGADO** (`"enforce": false` em `secrets/whitelist.json`; `kcdc-whitelist list` diz `bloqueio: desligado`): entra quem souber a senha, e o log só anota quem a lista teria recusado. As 4 contas que já jogaram estão na lista. O comando `whitelist` do console, que valia só até o servidor parar, deixou de existir.
+**Quem entra sem conta Steam é recusado** (pedido de 25/10/2026: *independente do nome que o jogador colocar no menu, ao entrar no mundo ele sempre deve ir para um personagem já criado vinculado à Steam dele*). O personagem é guardado pelo Steam ID (`playerdata/characters/<steamId>.json`), nunca pelo nome digitado no menu de entrada do jogo (38 dos 68 personagens salvos foram feitos por quem entrou como "Player", o nome padrão); o que podia dar errado era o outro lado: de vez em quando o cliente não informa conta alguma (a Steam fechada ou fora do ar naquele instante: 26 de 1.378 entradas em nove dias, sempre das mesmas oito máquinas, que entravam com a conta no minuto seguinte). Esse corpo entrava como um estranho: estrada de chegada, o criador de novo, e nada do que fizesse era salvo. Agora `src/server/steam-gate.ts` recusa a entrada sem conta Steam, com a mensagem *Não recebi a sua conta Steam. Abra o Steam (ligado e online), feche o jogo e entre de novo pelo launcher...* (em português e inglês), e um corpo que chega ao mundo sem a conta que o jogo autenticou (`player.steamId`) é tirado do servidor. O arquivo `secrets/steam-gate.json` com `{ "required": false }` desliga a exigência na hora (para o dia em que a checagem do próprio mod falhar para todo mundo); sem o arquivo, ou com ele ilegível, a conta é exigida. O boas-vindas já não usa o nome do menu: diz o nome do personagem (ou só *Bem-vindo ao Kingdom RP BRASIL* a quem ainda não criou um). **Só contas Steam entram na lista.** O personagem é guardado pelo Steam ID, e o servidor só recebe do jogo, de quem o comprou na GOG, nenhum identificador; de quem usa a Epic, um id que o resto do mod não usa. Essas contas são recusadas como as que não estão na lista, até o mod aprender a guardar os personagens por outra chave. **Comece pondo o seu próprio Steam ID na lista, antes de ligar o bloqueio**, ou você mesmo fica de fora. **Estado atual (16/10/2026, a pedido: *desativar por enquanto, até eu conseguir configurar 100%*): o bloqueio está DESLIGADO** (`"enforce": false` em `secrets/whitelist.json`; `kcdc-whitelist list` diz `bloqueio: desligado`): entra quem souber a senha, e o log só anota quem a lista teria recusado. As 4 contas que já jogaram estão na lista. O comando `whitelist` do console, que valia só até o servidor parar, deixou de existir.
 
 ### Quem pode o quê
 
 | Perfil | Comandos |
 | --- | --- |
-| Jogador | `/admin`, `/alforje`, `/anim`, `/cachorro`, `/camera`, `/cansaco`, `/carroca`, `/cavalo`, `/chave`, `/cozinhar`, `/creator`, `/dice`, `/do`, `/face`, `/fome`, `/help`, `/idioma`, `/language`, `/leitura`, `/me`, `/mute`, `/mutes`, `/preso`, `/sujeira`, `/try`, `/unmute` |
-| Admin | Todos os 79 |
+| Jogador | `/aceitar`, `/acordar`, `/admin`, `/alforje`, `/anim`, `/cachorro`, `/camera`, `/cansaco`, `/carroca`, `/cavalo`, `/chave`, `/cozinhar`, `/dice`, `/do`, `/face`, `/fome`, `/help`, `/horta`, `/idioma`, `/language`, `/leitura`, `/me`, `/mural`, `/mute`, `/mutes`, `/paz`, `/preso`, `/sede`, `/sujeira`, `/try`, `/unmute` |
+| Admin | Todos os 80 |
 
 Para liberar mais um comando aos jogadores, inclua o nome em `COMMON_COMMANDS` (`src/server/auth.ts`) e gere de novo este documento. A checagem fica em `CommandRegistry.dispatch` (`src/server/command.ts`), então vale para o chat e para a caixa de comando do F4.
 
@@ -1765,48 +2158,81 @@ Com a árvore, o ceder região e as barras novas a página chegou a 175,3 KB esc
 
 Para caber a página do criador de personagem (24 KB empacotados, 7,6 KB comprimidos, mais 3,7 KB do script de cliente dele), a **transparência dos ornamentos** baixou para qualidade 12 a 30 (os onze títulos de seção, os cantos, a corda, os brasões pequenos e a árvore da hierarquia): comparados lado a lado e ampliados duas vezes, não se distinguem dos de antes, e foram 14 KB a menos. O empacotador (`scripts/pack-ui.mjs`) passou a empacotar **as duas páginas**, `status` e `creator` (uma lista `PAGES`), e o teste confere que cada uma é a atual. O pacote é de **474.497** bytes pela medida local (o servidor loga uns 1,7% a mais), contra o limite de 480.000: **sobram 5,5 KB**. Depois vieram a câmera livre (a página `freecam`, 3,7 KB), o cartão da região, a chave de duas faces da hierarquia, a lista de baús que rola sozinha e a trava ao olhar: o pacote está em **479.010** bytes pela medida local, contra o mesmo limite, e **sobra menos de 1 KB**. Qualquer coisa nova na página do painel pede antes diminuir imagens ou estilo.
 
+**2026-10-21: as imagens do painel saíram do pacote** (305 KB delas): as 28 do painel (brasões das guildas, facções e cidades, títulos das seções menos o do Personagem, a árvore, os brasões dos animais e das propriedades, o logo) viraram entradas de `data/ui-images.json` e o servidor as manda quando a página as pede. O pacote logado foi de `52 files, 166897 bytes` (eram `80 files, 470525`), e a margem sob os 480.000 do teste é de uns 300 KB. Para acrescentar uma imagem ao painel, ponha-a em `tools/make-ui-images.py` (fora da lista `LOCAL`) e use `data-img="nome"` no HTML ou `setPic(img, "nome")` no script.
+
 As pastas `stream/` e `replace/` de um recurso (modelos, sons, texturas do jogo) seguem outro caminho, os *asset paks*, e não entram nesse pacote; mas eles servem para arte do próprio jogo, não para as imagens de uma página da interface.
 
 ## Seções do painel
 
 O painel abre com o **F2** na categoria **Comum**, para todos, e com o **F3** na categoria **Administração**, só para admin; é a mesma página, mostrando uma categoria de cada vez (cliente em `src/client/status.ts`, página em `ui-src/status.html`, empacotada em `ui/status.html`, servidor em `src/server/status.ts`). Quem decide quem é admin é o servidor, pelo perfil do ticket; a página só esconde o que não é do jogador, e o servidor confere o perfil de novo em cada pedido.
 
+**As imagens vêm do servidor** (21/10/2026: *as imagens do F2 vamos deixar para vir do servidor, assim o F2 fica mais leve*). Do painel só ficam no pacote do cliente o papel, a foto do fundo, as molduras dos cantos, o título do Personagem e o QR do Pix; os brasões, os títulos das outras seções, a árvore e o painel dos animais são pedidos pela página, pelo nome, quando ela os desenha (`status.image`, `src/server/ui-images.ts`, de `data/ui-images.json`, feito por `tools/make-ui-images.py`), e o cliente guarda o que recebeu para a abertura seguinte. O pacote foi de 470.525 para **166.897 bytes**.
+
 **Fechar limpa tudo.** A página só existe enquanto o painel está aberto: cada abertura cria uma página nova (escondida até terminar de desenhar) e fechar a descarta inteira, com as imagens e a memória dela, então o painel fechado não pesa no jogo. O cliente guarda só as últimas respostas do servidor (alguns KB) e a seção em que o painel estava, para a página nova abrir já preenchida e no mesmo lugar. Por isso abrir leva uma fração de segundo a mais do que antes, quando a página ficava carregada escondida.
 
 | Seção | Categoria | O que mostra e faz | Onde fica salvo |
 | --- | --- | --- | --- |
-| Personagem | Comum | Nome (o que o jogador deu ao personagem no criador, com a alcunha; o apelido da conta, para um personagem feito antes do criador pedir o nome); **Titulus** (os títulos que o jogador tem, do mais alto ao mais baixo, quando tem algum); **Status Socialis** (Plebeius ou Nobilis); **Status Coniugalis** (Caelebs, solteiro; Coniugatus, casado; Viduus, viúvo; no feminino se o personagem for mulher); **Cognomen** (o sobrenome, quando há um); vida, stamina, fome e **energia**; e, à direita, abas **Guilda** e **Facção** para escolher o que fica em destaque | `playerdata/social.json`, `titles.json` |
-| Guildas | Comum | As cinco guildas (Ferreiro, Caçador, Taberneiro, Alquimista e **Artesão**, que é a antiga de alfaiate; o jogo não tem ofício de alfaiate, mas tem as roupas para vender); o jogador escolhe uma e, na primeira vez em cada guilda, recebe o kit dela | `playerdata/social.json` |
+| Personagem | Comum | Nome (o que o jogador deu ao personagem no criador, com a alcunha; o apelido da conta, para um personagem feito antes do criador pedir o nome); **Titulus** (os títulos que o jogador tem, do mais alto ao mais baixo, quando tem algum); **Status Socialis** (Plebeius ou Nobilis); **Status Coniugalis** (Caelebs, solteiro; Coniugatus, casado; Viduus, viúvo; no feminino se o personagem for mulher); **Cognomen** (o sobrenome, quando há um); vida, stamina, fome, **sede** e **energia**; e, à direita, abas **Guilda** e **Facção** para escolher o que fica em destaque | `playerdata/social.json`, `titles.json` |
+| Guildas | Comum | As seis guildas (Ferreiro, Caçador, Taberneiro, Alquimista, **Artesão**, que é a antiga de alfaiate; o jogo não tem ofício de alfaiate, mas tem as roupas para vender; e **Coletor**, desde 21/10/2026, com o brasão do usuário); o jogador escolhe uma e, na primeira vez em cada guilda, recebe o kit dela | `playerdata/social.json` |
 | Facções | Comum | Casa do Leão Dourado e Casa do Corvo, cortadas por uma diagonal; o jogador jura lealdade a uma e ela passa a ser a sua **facção de lealdade** (não a sua casa, que é uma propriedade); na primeira vez em cada facção, recebe **as cores dela**: o manto e a gola (veja [Cores das facções](#cores-das-facções)) | `playerdata/social.json` |
 | Família | Comum | Árvore genealógica por gerações, com o sobrenome da família. Cada parente pode ser marcado como **falecido**, ser **um jogador do servidor** e, sendo filho, **legítimo, adotivo ou bastardo** | `playerdata/family.json` |
-| Propriedades | Comum | As casas e baús que são do jogador, agrupados por **região** (um menu filtra). Clicar numa propriedade abre à direita o brasão, o nome, a região, a descrição, o dono e o estado, **parados no alto**, e a lista **dos baús e das portas**, que é a única parte que rola (os botões ficam parados embaixo). O dono **edita o nome e a descrição**, **tranca e destranca** a casa e cada baú pelos botões, e **faz chaves** da casa e de cada baú, para si ou para outro jogador do servidor (até 8 chaves por propriedade). Uma casa com **várias portas** lista as portas sob ela, como lista os baús, cada uma com o seu botão de trancar. O dono pode **entregar a casa** a outro jogador (com confirmação). Uma **região cedida** a ele pelo admin aparece inteira: o que é dele ele mexe, o que é de um NPC ou de outro dono aparece só para ler | `playerdata/properties.json`, `regions.json` |
-| Animais | Comum | Os cavalos do jogador (vida, fôlego, arreios, onde está, se está montado) e o cão, para quem apoia (o que está fazendo, a ordem e o ânimo). **Chamar**, **Dar nome** e, para o cão, **Seguir/Esperar**. Atualiza a cada 2,5 segundos enquanto a seção está aberta. Veja [Animais do jogador](#animais-do-jogador) | `horses.json`, `supporters.json` |
-| Opções | Comum | **Terceira pessoa** (ligar, desligar, e a distância: perto, normal ou longe; fica salva), **Câmera livre**, para gravar e tirar fotos, e **Título sobre a cabeça** (mostrar um dos seus títulos, ou nenhum). Veja [Opções](#opções) | `playerdata/options.json`, `titles.json` |
-| Nomeação | **Nobre** (só para quem é nobre, e para o admin, que nomeia como a Coroa) | Três vistas: **Nomear** (os títulos que o jogador pode dar, a lista de quem recebe e o título escolhido à direita, com confirmação), **Títulos** (os dele, quem o nomeou, e as pessoas que ele nomeou, com **Deixar o título** e **Retirar o título**) e **Ver hierarquia** (o reino todo, título por título, com os jogadores que os têm, as terras de cada um e a árvore da hierarquia). Veja [Títulos e status social](#títulos-e-status-social) | `playerdata/titles.json` |
-| Chaves | Administração | Todas as propriedades, agrupadas por **região** (menu), com busca. Só aparecem as casas e os edifícios; os baús ficam dentro da casa, no detalhe à direita (os que não estão em casa nenhuma aparecem com o botão **Baús avulsos**). O detalhe mostra, parados no alto, o brasão, o nome, a região, a descrição, o dono e o estado, e só a lista dos baús e das portas rola. O admin **entrega a propriedade** a um jogador (ele vira o dono; **nenhuma chave vai junto**, ele pega as que precisar, uma de cada vez, pelo painel), tira o dono, entrega ou pega chaves, **tranca e destranca** a casa e cada baú, e edita o nome, a descrição e a região. Uma **casa de vendedor** mostra o morador (NPC) e não pode ser entregue. O **cartão da região**, sempre à vista logo acima da lista (*Ceder a região inteira a ...* ou, com *Para mim* em *Quem recebe*, *Pegar a região inteira*), vale para a região do filtro ou, sem filtro, a da propriedade escolhida, diz quantas propriedades sem dono ela tem e passa a quem foi escolhido tudo o que não tem dono nela, depois de mostrar a conta: quantas propriedades e baús passam, quantas casas de NPC e quantas de outros donos ficam | `playerdata/properties.json`, `regions.json` |
-| Apoiador | Comum | A arte do nobre com o cão, a frase *Concordia parvae res crescunt* e o agradecimento, com o que o apoio dá (trajes de nobre e um cão fiel) e o botão **Apoiar**, que abre à direita o QR code do Pix, o valor e o que conferir no banco antes de pagar. Quem já apoia vê *Apoiador desde ...* | `supporters.json` |
-| Jogadores | Administração | Quem está no servidor agora. Clicar num jogador abre à direita os brasões da guilda e da facção dele, o nome, o status social e civil, o sobrenome, a guilda, a facção, se é apoiador, os títulos e as quatro barras (vida, stamina, fome e **energia**), e os botões **Títulos** (os que tem, para retirar, e todo o catálogo, para dar), **Status social**, **Terras** (cede a ele uma região inteira, com a conta antes: o que passa, o que é de NPC e o que já tem dono) e **Dar benefícios** (este com Confirmar e Cancelar). Substitui a lista do `Tab`, que está desligada para todos; atualiza a cada 3 segundos enquanto a página está aberta | `supporters.json` |
-| Cidadania | Comum | As três cidades (Suchdol, Raborsch e Malešov), cada uma com o brasão; ao clicar abre à direita o senhor das terras, o nome da família dele e a quantidade de cidadãos. O botão *Tornar-me cidadão* é definitivo; para o senhor das terras há *Ver cidadãos* (oito por página, com *Depor*). | `playerdata/citizenship.json` |
+| Propriedades | Comum | As casas e baús que são do jogador, agrupados por **região** (um menu filtra: **Minhas**, ou uma das regiões cedidas ao jogador, uma de cada vez). Clicar numa propriedade abre à direita o brasão, o nome, a região, a descrição, o dono e o estado, **parados no alto**, e a lista **dos baús e das portas**, que é a única parte que rola (os botões ficam parados embaixo). O dono **edita o nome e a descrição**, **tranca e destranca** a casa e cada baú pelos botões, e **faz chaves** da casa e de cada baú, para si ou para outro jogador do servidor (até 8 chaves por propriedade). Uma casa com **várias portas** lista as portas sob ela, como lista os baús, cada uma com o seu botão de trancar. O dono pode **entregar a casa** a outro jogador (com confirmação). Uma **região cedida** a ele pelo admin aparece inteira: o que é dele ele mexe, o que é de um NPC ou de outro dono aparece só para ler | `playerdata/properties.json`, `regions.json` |
+| Animais | Comum | Os cavalos do jogador (vida, fôlego, arreios, onde está, se está montado) e o cão, para quem apoia (o que está fazendo, a ordem e o ânimo). **Chamar**, **Dar nome** (e, para o cão, só esses dois: as ordens dele são o **E** diante dele). Atualiza a cada 2,5 segundos enquanto a seção está aberta. Veja [Animais do jogador](#animais-do-jogador) | `horses.json`, `supporters.json` |
+| Informações | **Configurações** | O que cada parte do painel e do servidor é, por tópico (o texto de cada tópico é **centralizado**, como o detalhe das outras seções; 25/10/2026), para o jogador comum: a história do reino, as regras de RP, o Personagem, as guildas, as facções, a cidadania, a família, as casas e chaves, os animais, a viagem rápida, o apoio, a nomeação, os dados e o corpo (fome, sede, cansaço, morte). Cada tópico tem, quando é de uma seção, o botão **No painel: ...** que leva até ela. Os textos estão em `ui-src/status.html` (`INFO_TOPICS`) e, em inglês, em `src/server/lang-en-panel.ts` | (nada: são textos da página) |
+| Opções | **Configurações** | **Terceira pessoa** (ligar, desligar, e a distância: perto, normal ou longe; fica salva), **Microfone** (aberto ou segurar o `H`, e a sensibilidade do aberto), **Teclas** (todas as teclas e os comandos do chat do servidor, por grupo, para o jogador comum), **Câmera livre**, para gravar e tirar fotos, e **Título sobre a cabeça** (mostrar um dos seus títulos, ou nenhum). Veja [Opções](#opções) | `playerdata/options.json`, `titles.json` |
+| Nomeação | **Nobre** (só para quem é nobre, e para o admin, que nomeia como a Coroa) | Três vistas: **Nomear** (os títulos que o jogador pode dar e, à direita, o título escolhido com o botão **Nomear**, que abre o quadro *Para quem* e a confirmação), **Títulos** (os dele, quem o nomeou, e as pessoas que ele nomeou, com **Deixar o título** e **Retirar o título**) e **Ver hierarquia** (o reino todo, título por título, com os jogadores que os têm, as terras de cada um e a árvore da hierarquia). Veja [Títulos e status social](#títulos-e-status-social) | `playerdata/titles.json` |
+| Esgrima | **Combate** (para o admin e para quem conhece ao menos uma combinação) | As **combinações de arma** que o jogador conhece, por arma (montante, espada, espada e escudo, maça ou machado, com escudo, alabarda e corpo a corpo), no mesmo padrão da *Informações*: a lista à esquerda e, ao clicar, o detalhe à direita (o que a combinação faz e como se executa, o texto de sabor do jogo, quantos golpes tem e como termina o último) com o botão **Ensinar**, que abre o quadro *Para quem* de sempre: quem conhece uma combinação pode passá-la a outro jogador, que passa a conhecê-la e a ensiná-la também. Só o admin vê o botão **Retirar**, que tira a combinação de um jogador. Veja [Esgrima](#esgrima) | `playerdata/esgrima.json` |
+| Chaves | Administração | As propriedades de **uma região de cada vez** (o menu de regiões escolhe; abre na região mais perto do admin, e as propriedades do próprio admin vêm de qualquer região), com busca dentro dela: com 17 regiões mapeadas o catálogo tem mais de mil propriedades, e uma linha para cada uma deixava o F3 pesado de abrir e baixava o FPS (21/10/2026). O servidor manda só a região aberta e uma linha por região com o que ela tem (para a conta do cartão da região); a escolha de outra região é pedida ao servidor (`status:propRegion`). Só aparecem as casas e os edifícios; os baús ficam dentro da casa, no detalhe à direita (os que não estão em casa nenhuma aparecem com o botão **Baús avulsos**). O detalhe mostra, parados no alto, o brasão, o nome, a região, a descrição, o dono e o estado, e só a lista dos baús e das portas rola. O admin **entrega a propriedade** a um jogador (ele vira o dono; **nenhuma chave vai junto**, ele pega as que precisar, uma de cada vez, pelo painel), tira o dono, entrega ou pega chaves, **tranca e destranca** a casa e cada baú, e edita o nome, a descrição e a região. Uma **casa de vendedor** mostra o morador (NPC) e não pode ser entregue. O **cartão da região**, sempre à vista logo acima da lista (*Ceder a região inteira a ...* ou, com *Para mim* em *Quem recebe*, *Pegar a região inteira*), vale para a região do filtro ou, sem filtro, a da propriedade escolhida, diz quantas propriedades sem dono ela tem e passa a quem foi escolhido tudo o que não tem dono nela, depois de mostrar a conta: quantas propriedades e baús passam, quantas casas de NPC e quantas de outros donos ficam | `playerdata/properties.json`, `regions.json` |
+| Apoiador | **Configurações** | A arte do nobre com o cão, a frase *Concordia parvae res crescunt* e o agradecimento, com o que o apoio dá (trajes de nobre e um cão fiel) e o botão **Apoiar**, que abre à direita um **aviso em vermelho** (*Diga por qual streamer você chegou ao jogo*: o jogador escreve o nome do streamer, ou do canal, junto com o comprovante no Discord, ou diz que chegou por conta própria), o QR code do Pix, o valor e o que conferir no banco antes de pagar. Quem já apoia vê *Apoiador desde ...* | `supporters.json` |
+| Jogadores | Administração | Quem está no servidor agora. Clicar num jogador abre à direita os brasões da guilda e da facção dele, o nome, o status social e civil, o sobrenome, a guilda, a facção, se é apoiador, os títulos e as cinco barras (vida, stamina, fome, **sede** e **energia**), e os botões **Títulos** (os que tem, para retirar, e todo o catálogo, para dar), **Status social**, **Terras** (cede a ele uma região inteira, com a conta antes: o que passa, o que é de NPC e o que já tem dono) e **Dar benefícios** (este com Confirmar e Cancelar). Substitui a lista do `Tab`, que está desligada para todos; atualiza a cada 3 segundos enquanto a página está aberta | `supporters.json` |
+| Cidadania | Comum | As cinco cidades (Suchdol, Raborsch, Malešov, Kuttenberg e Pschitoky), cada uma com o brasão; ao clicar abre à direita o senhor das terras, a **Lady das terras** (a esposa dele, quando há), o nome da família dele e a quantidade de cidadãos. O botão *Tornar-me cidadão* é definitivo; para o senhor das terras há *Ver cidadãos* (oito por página, com *Depor*). | `playerdata/citizenship.json` |
+
+**As categorias da barra lateral (26/10/2026).** **Comum** (Personagem, Guildas, Facções, Cidadania, Família, Propriedades, Animais), **Combate** (Esgrima, só para o admin e para quem conhece uma combinação), **Nobre** (Nomeação, só para nobres e admin), **Configurações** (**Informações**, **Apoiador** e **Opções**: pedido de 26/10/2026, *opções e informações vamos colocar em uma categoria de configurações igual a nomeação*, e depois *na seção apoiador coloque na categoria configurações*) e **Administração** (Chaves e Jogadores, no F3). A página decide o que mostrar pelo que o servidor diz (`esgrima.visible`, `nobility.visible`, o perfil).
 
 **O que mudou nas seções em 17/10/2026:** *Guildas* — escolha definitiva (com pergunta antes) e o botão **Ver membros**, na ordem da hierarquia; *Animais* — as carroças (brasão próprio, **Trazer até mim**, **Dar nome**) e, em cavalos e carroças, **Deixar livre / Trancar** e, nos cavalos, **Alforjes**; *Opções* — **Fiquei preso** e **Idioma / Language**; *Chaves* e *Propriedades* — a chave de **uma porta** ao lado do botão de trancar; *Jogadores* — busca por nome ou número, filtros (administradores, apoiadores, nobres, sem guilda) e páginas de 12, e as listas de "quem recebe" e de parente jogador buscam e viram páginas de 8; *Nomeação* — a árvore é desenhada em pé, a Coroa no alto; *Apoiador* — o novo brasão e o mosquete, o canhão de mão e as 10 balas no que o apoio dá. As barras de rolagem ficaram douradas, e o menu da esquerda rola quando há mais seções do que cabem.
+
+### Esgrima
+
+**As combinações de arma ensinadas de um jogador a outro** (26/10/2026: *vamos criar a categoria combate, uma seção nova chamada esgrima: todo admin recebe todas habilidades de esgrima, ele aprende todos combos de armas; na seção esgrima vai aparecer, na mesma ideia da seção informações, o nome do combo; ao clicar, as informações do combo e os botões ensinar e retirar; um admin pode ensinar um combo a outro jogador, e quando um player comum aprender um combo ele recebe acesso à seção esgrima, também categoria combate, e pode ensinar outros jogadores o combo que aprendeu mas não pode retirar: só um admin vê o botão retirar*).
+
+Uma combinação é uma sequência de dois a quatro golpes que termina num golpe especial (51 no jogo, por arma). O jogo as dava sozinho conforme a habilidade de arma subia (as de nível 5 e 6 a todo personagem novo: 63 dos 80 personagens salvos tinham 12 quando isto foi feito). Agora **ninguém ganha combinação lutando**:
+
+- **Estão bloqueadas** (`Progression.blockPerks`): o jogo não as concede mais; só o servidor as dá, por `addPerk`.
+- **Ensina-se:** o admin ensina qualquer uma a qualquer jogador; o jogador ensina a outro **as que ele conhece**. O ensinado é avisado (*Fulano ensinou a você o combo X: veja na seção Esgrima do painel*), e passa a ver a seção. **Só o admin retira** uma combinação de alguém (e o jogador, depois, só a recupera se alguém o ensinar de novo).
+- **O admin recebe todas as 51** a cada entrada (25 s depois de entrar, quando o jogo já restaurou os níveis) e **na hora em que vira administrador** pelo `/admin <ticket>` (26/10/2026: *ao virar admin usando o comando o personagem deve aprender todos combos de uma vez, ou pelo menos na seção de esgrima ele pode ensinar para si mesmo*): todas de uma vez, em silêncio, e, se o jogo não aceitar assim, uma a uma. Na seção, o botão **Ensinar** oferece ao administrador o **Para mim** (volta ao jogo dele um combo que o jogo não esteja segurando). Com `/admin sair` o que o cargo emprestou sai do jogo e ficam só os combos dele (os que aprendeu): é um teste de jogador comum de verdade.
+- **O que o cargo empresta nunca é gravado como dele:** o personagem salvo não leva combinação nenhuma (`playerdata/esgrima.json` é o único lugar), e um personagem salvo que tenha as 51 de uma vez (o administrador de antes desta regra) não as guarda como dele.
+- **Cada combo tem o desenho da sua arma** na lista (montante, espada, espada e escudo, maça ou machado, com escudo, alabarda, punhos).
+- **Quem já tinha continua tendo:** na primeira entrada depois disto, as combinações que o personagem salvo tinha são anotadas em `playerdata/esgrima.json` (por Steam id) e voltam a ele em toda entrada; o admin pode retirá-las.
+- **Como voltam:** o servidor tira as combinações do que o jogo restaura (um bloqueio dentro de uma restauração não foi testado, e uma restauração recusada custaria os níveis do jogador) e as devolve 25 s depois, primeiro todas de uma vez e em silêncio e, se o jogo não aceitar, uma a uma, quatro a cada 2,5 s (o jogo diz *Você aprendeu um novo combo* para cada uma).
+- **Apagar o personagem** apaga também as combinações (`character-reset.ts`).
+- **Em inglês** a seção, os nomes e as mensagens também saem em inglês (`Esgrima` é *Fencing*, `Combate` é *Combat*).
+
+Quais são perigosas para um servidor de RP, quais passam a guarda sozinhas e o que dá para fazer a respeito está em **`COMBOS.md`**, na mesma pasta deste arquivo; e o mesmo para as 268 passivas do jogo, em **`PASSIVAS.md`**.
+
+*Ainda não testado no jogo:* que o jogo aceita `addPerk` de uma combinação bloqueada, que a restauração em silêncio funciona (senão vale a uma a uma, com o aviso do jogo para cada), e a seção em si.
 
 ### Família
 
 A árvore tem sete linhas, de cima para baixo, e o jogador está sempre na do meio. Cada linha abre e fecha clicando no título; as que não têm ninguém e não são básicas (bisavós, netos, bisnetos) começam fechadas. O `+` ao fim de cada linha abre o formulário de novo parente, que só oferece os parentescos daquela linha.
 
+**O formulário com listas e os cartões com desenhos (25/10/2026: *na modal que abre para colocar o parente, as opções filhos, neto etc., ao invés de ser daquele jeito vamos usar o padrão de dropdown, além de colocar ícone nos cards*).** No formulário de novo parente e no de editar, o **parentesco** é uma lista do painel (o mesmo menu suspenso das outras seções), cada opção com o seu desenho, e o **grau** do primo também (1º grau, o primo comum, até o 4º). Cada cartão da árvore mostra, antes do parentesco, o desenho do tipo de parente: uma **árvore velha** para avós e bisavós, **adulto e criança** para pais, padrastos e sogros, **duas alianças** para cônjuge e companheiro, **dois lado a lado** para irmãos, primos, tios e cunhados, e um **broto** para filhos, genros, sobrinhos, netos e bisnetos. O ornamento sobre cada cartão (*o ícone de família que fica em cima de cada parente está achatado*) agora tem a caixa presa à proporção da arte (3 por 2), é um pouco maior e vem do servidor com o dobro da resolução (240 px).
+
+
 | Linha | Parentescos |
 | --- | --- |
 | Bisavós | bisavô, bisavó |
 | Avós | avô, avó |
-| Pais e tios | pai, mãe, tio, tia |
-| Cônjuge, irmãos e primos | esposo, esposa, irmão, irmã, primo e prima (do 1º ao 4º grau; o 1º é o primo comum) |
-| Filhos e sobrinhos | filho, filha, filho adotivo, filha adotiva, filho bastardo, filha bastarda, sobrinho, sobrinha |
+| Pais, sogros e tios | pai, mãe, tio, tia, sogro, sogra, padrasto, madrasta |
+| Cônjuge, irmãos, primos e cunhados | esposo, esposa, companheiro e companheira (de uma união que não é casamento), irmão, irmã, primo e prima (do 1º ao 4º grau; o 1º é o primo comum), cunhado e cunhada |
+| Filhos, genros e sobrinhos | filho, filha, filho adotivo, filha adotiva, filho bastardo, filha bastarda, sobrinho, sobrinha, genro, nora, enteado, enteada |
 | Netos | neto, neta |
 | Bisnetos | bisneto, bisneta |
 
 - Cada parente é só um **parentesco e um nome** (2 a 40 letras). O jogo não trata a árvore como mecânica: ela é o relato do personagem. Cabem até 80 parentes por jogador.
 - Cada parente é ligado à linha pelo parentesco, não a outro parente: um primo não precisa de um tio cadastrado antes. É por isso que a lista inclui diretamente os graus de primo.
-- **Estado civil** não é escolhido: é **casado** quando a árvore tem um cônjuge vivo, ou quando outro jogador põe você como cônjuge na árvore dele; **viúvo** quando todos os cônjuges da árvore estão marcados como falecidos; solteiro caso contrário.
+- **Estado civil** não é escolhido: é **casado** quando a árvore tem um cônjuge vivo, ou quando outro jogador põe você como cônjuge na árvore dele; **viúvo** quando todos os cônjuges da árvore estão marcados como falecidos; solteiro caso contrário. Um **companheiro ou companheira** vivo, de uma união que não é casamento, deixa de ser solteiro e vira **em união** (*Coniunctus*, *Coniuncta*); o casamento vem primeiro, e quem enviuvou e tem um companheiro vivo está em união.
+
+**A família por casamento e por união (25/10/2026: *a árvore de família deve se estender a cunhado, genro e coisa do tipo, e conexão de família, caso haja casamento e uniões*).** Além dos parentes de sangue, a árvore tem os do outro lado de um casamento (**sogro e sogra, genro e nora, cunhado e cunhada**), os de uma família refeita (**padrasto e madrasta, enteado e enteada**) e o **companheiro ou companheira** de uma união. Valem como os outros: o ligado a um jogador é pedido a ele e, no sim, a árvore dele ganha o lado de lá com a relação virada (a sogra de um é o genro ou a nora dela; o cunhado, cunhado ou cunhada; o padrasto, enteado ou enteada). Mas ninguém desses é herdeiro nem sobe com o nobre: só o cônjuge e a linha legítima, como sempre. Na árvore, o companheiro fica ao lado do jogador, como o cônjuge; os cunhados, junto dos irmãos e primos; os sogros, junto dos pais; os genros e noras, junto dos filhos.
 - **Editar** (o lápis na peça): o parentesco, dentro da mesma linha (um filho vira **adotivo** ou **bastardo**, ou filha), a situação (**vivo** ou **falecido**: a peça ganha uma cruz e fica apagada) e **se é um jogador**: um dos jogadores online, escolhido numa lista. O Steam ID do parente fica só no servidor; a página só sabe que é um jogador (a peça mostra a etiqueta *jogador*). Ao adicionar um parente também dá para escolher o jogador, que é então **perguntado** (veja abaixo).
 - **Os parentes que são jogadores** são o que o status social segue: veja [Títulos e status social](#títulos-e-status-social).
 - **O vínculo é um pedido, não uma imposição** (16/10/2026). Quando o parente é ligado a **outro jogador**, ele entra na sua árvore como um nome, com a etiqueta *aguardando*, e o pedido vai para a seção **Família do outro jogador**: lá aparece *"Fulano quer registrar você como Esposa"*, com **Aceitar** e **Recusar**. Ele também recebe um aviso no chat. Enquanto não responde, nada segue o vínculo (nem herdeiro, nem estado civil, nem a árvore dele). Trocar o jogador ou tirar o vínculo cancela o pedido; remover o parente também.
@@ -1846,8 +2272,8 @@ Um nobre pode nomear um **plebeu**, mas **só quem já se apresentou a ele** (ve
 | --- | --- |
 | **Nomear** | A lista dos títulos que o jogador pode dar, por ramo; no alto, quem recebe. À direita, o título escolhido, com o que é e o que pode. **Nomear** pede confirmação e avisa, num título de nobreza, que o nomeado e a família dele passam a ser nobres |
 | **Títulos** | Os títulos do jogador, quem o nomeou e quando, e as pessoas que ele nomeou. **Deixar o título** e **Retirar o título** (de quem ele nomeou ou de alguém abaixo; o admin retira de todos), com confirmação. Tirar um título **não** muda a condição social: quem foi elevado a nobre continua nobre |
-| **Ver hierarquia** | O reino todo, ramo por ramo, título por título, com os jogadores que o têm (ou *vago*). Clicar num jogador abre à direita os brasões da guilda e da facção, o nome, os títulos e quem os deu, o status social e civil, o sobrenome e as **terras** (regiões, casas e baús). Enquanto nada é escolhido, a árvore da hierarquia (a arte) enche o lado direito. Atualiza a cada 6 segundos |
-| ↳ a vista da hierarquia | Uma chave de duas faces, cada uma com o seu desenho: **Árvore**, a hierarquia como uma árvore de verdade, deitada, com **A Coroa** na raiz e cada nomeado ligado a quem o nomeou (um título dado pela Coroa sai dela; um dado por um lorde sai do lorde), do mais alto ao mais baixo; encolhe sozinha quando o reino é largo; e **Lista**, a lista ramo por ramo de antes |
+| **Ver hierarquia** | O reino todo, ramo por ramo, título por título, com os jogadores que o têm (ou *vago*). Clicar num jogador abre à direita os brasões da guilda e da facção, o nome, os títulos e quem os deu, o status social e civil, o sobrenome, o cônjuge (a **Lady**, quando o titular é um lorde) e as **terras** (regiões, casas e baús). Enquanto nada é escolhido, a árvore da hierarquia (a arte) enche o lado direito. Atualiza a cada 6 segundos |
+| ↳ a vista da hierarquia | Uma chave de duas faces, cada uma com o seu desenho: **Árvore**, a hierarquia como uma árvore de verdade, deitada, com **A Coroa** na raiz e cada nomeado (junto do cônjuge, no mesmo quadro: *& Lady Elisabeth*) ligado a quem o nomeou (um título dado pela Coroa sai dela; um dado por um lorde sai do lorde), do mais alto ao mais baixo; encolhe sozinha quando o reino é largo; e **Lista**, a lista ramo por ramo de antes |
 
 **O que a hierarquia não mostra**, para não quebrar o *metagaming*: onde a pessoa está, vida, fome, se está online, Steam ID, se apoia o servidor, se é admin. Só o que um personagem é **conhecido** por ser: nome, título, condição, casa, guilda, terras. Na página, cada jogador é uma chave embaralhada que muda a cada início; ela nunca recebe um Steam ID.
 
@@ -1867,13 +2293,17 @@ O **assobio** (`X`, a tecla do próprio jogo) chama do mesmo jeito. O cavalo cha
 
 > **Ainda não visto no jogo:** por que o cavalo vinha em linha reta sem desviar (relato de 2026-10-14). As linhas `horses:` do log dizem se a rota da malha era reta (cercas, árvores e pedras fora da malha) ou se ele empacou.
 
-Para quem apoia, um cartão do **cão**: o que ele está fazendo (seguindo, farejando, comendo...), a ordem (seguindo você ou esperando), o **ânimo** quando o jogo já disse, e os botões **Chamar**, **Seguir/Esperar aqui** e **Dar nome** (os mesmos do `/cachorro`). O cão do jogo não morre (derrubado, ele se levanta) e o framework não dá a vida dele, então não há regra de perda para o cão.
+Para quem apoia, um cartão do **cão**: o que ele está fazendo (seguindo, farejando, comendo...), a ordem (seguindo você ou esperando), o **ânimo** quando o jogo já disse, e os botões **Chamar** e **Dar nome** (os mesmos do `/cachorro`). As ordens (*Mandar ficar*, *Mandar seguir*) e o carinho estão no **E** diante do cão (`src/server/dog-menu.ts`); os botões *Sentar aqui* e *Seguir* do painel saíram em 26/10/2026. O cão do jogo não morre (derrubado, ele se levanta) e o framework não dá a vida dele, então não há regra de perda para o cão.
 
 ### Opções
 
 A seção **Opções** (`src/client/camera.ts`, guardada em `src/server/options.ts`):
 
 - **Terceira pessoa**: a câmera atrás do personagem (a câmera do próprio mod, `Camera.setThirdPerson`), em três distâncias: **perto** (2,2 m), **normal** (3,2 m) e **longe** (4,8 m), um pouco por cima do ombro direito. Escolher uma distância já liga. A escolha fica **salva no servidor** pelo Steam ID (`playerdata/options.json`), porque o cliente do jogo não tem onde guardar nada, e é posta de novo a cada entrada. O `/camera` faz a mesma escolha.
+- **Microfone** (`src/client/voice.ts`, guardado pelo mesmo `src/server/options.ts` e respondido por `src/server/voice-settings.ts`): o **modo** (`aberto`, o padrão de todos desde 23/10/2026, ou `apertar`, que é segurar o `H`) e, no aberto, a **sensibilidade** (`alta`, `media` ou `baixa`: o nível do microfone a partir do qual ele envia, 0,02, 0,04 ou 0,08, com o ruído do ambiente filtrado). Os campos `mic` e `sensitivity` ficam em `playerdata/options.json` ao lado da câmera (um arquivo antigo, sem eles, lê como microfone aberto e sensibilidade média), e o cliente os põe a cada entrada; a escolha vale na hora e o servidor guarda. O servidor também diz ao cliente o **alcance** de cada voz (`Voice.getTierRange`: 3, 15 e 25 m hoje), que o indicador e a seção escrevem. Eventos do cliente: `voice.get` e `voice.set` (cliente → servidor), `voice.state` (servidor → cliente); eventos locais entre o painel e o cliente: `voice.choose`, `voice.ask`, `voice.state`.
+- **Resolução da interface** (25/10/2026: *uma opção de resolução para o jogador poder mudar a resolução da interface, se quiser*): o tamanho do painel e das janelas do servidor (ofícios, criação de personagem, mural, boas-vindas e o chat) em **80%, 90%, 100%, 110% ou 125%** do que cabe na tela. Em 100% tudo já se ajusta sozinho à resolução da tela; o jogador diminui se ficar grande demais, aumenta se ficar pequeno. Fica **salva no servidor** com as outras opções (campo `ui` em `playerdata/options.json`) e vale em qualquer computador. O cliente avisa cada página quando ela abre e a cada troca (`src/client/ui-scale.ts`, evento `ui:scale`); o chat muda o tamanho da própria janela. O círculo de voz e a roda de emotes ficam como estão.
+- **Apagar personagem** (25/10/2026: *uma opção na seção Opções: apagar personagem, isso deleta o personagem dele, irreversível, deve avisar e joga ele na tela de menu principal do mod*; e, na mesma tarde, *ao apagar o personagem deve perder os cavalos, carroças e tudo, até apoiador, afinal ele perdeu o personagem*). Era o **Recomeçar do zero**, que valia uma vez por conta (dez jogadores já o tinham usado): agora o jogador pode apagar quando quiser. O painel avisa **duas vezes** que não tem volta; depois o servidor apaga **tudo** o que era do personagem: inventário, progressão, receitas, rosto e nome, guilda, facção, cidadania, títulos, família, conhecidos, o lugar onde estava e a marca de ladrão; os **cavalos** e as **carroças** (somem do mundo), o **apoio** ao servidor com os benefícios e o **cão**, as **casas e os baús** que eram dele (voltam a não ter dono, e os baús são **esvaziados**), os **quartos**, as **terras** cedidas a ele, os **canteiros** da horta, a confiança dos **cavalos selvagens** que domava, a sede, a leitura dos livros de habilidade, as trocas grátis, o que lhe era devido e os seus **baús de morte** (passam a ser de ninguém, e nada é devolvido ao próximo personagem). **2,5 s depois o jogador volta ao menu principal do mod** (é desconectado, com o aviso *Seu personagem foi apagado. Entre de novo no servidor para criar um novo.*); ao entrar de novo, cria outro personagem. Ficam só as **opções** do jogador (câmera, microfone, tamanho da interface e idioma) e o papel de administrador. O log diz `reset: Fulano apagou o personagem; foram junto 2 cavalos, 1 carroça, ...`. O último apagamento de cada conta fica em `playerdata/character-resets.json` (`src/server/character-reset.ts`).
+- **Refazer aparência** (25/10/2026: *uma opção chamada refazer aparência; essa é uma por conta, permite o jogador refazer a aparência do personagem uma vez, caso não tenha gostado, e trocar o nome; não perde nada*). Abre a **criação de personagem** de novo sobre o corpo, com o **nome e a alcunha livres** para trocar (o servidor confere se o nome novo está livre, como sempre), e nada mais do personagem muda: inventário, progressão, guilda, família, casas e cavalos continuam. O corpo continua do mesmo sexo (a família, os títulos e as roupas são de homem ou de mulher). Vale **uma vez por conta** e só é gasto quando o jogador **salva** a nova aparência: saindo sem salvar, a chance continua (`playerdata/look-remakes.json`, `src/server/look-remake.ts`). Apagar o personagem não devolve a chance.
 - **Câmera livre**, para gravar e tirar fotos: o painel fecha e a câmera passa a voar, comandada por uma **página do mod** (`ui/freecam.html`): **W A S D** voam, **Espaço** (ou `E`) sobe, **Ctrl** (ou `C`, `Q`) desce, **Shift** acelera, **Alt** vai devagar, as **setas** viram a câmera (70° por segundo) e o **mouse arrastado** (botão esquerdo ou direito) também; `H` mostra de novo a ajuda, que some sozinha depois de 9 segundos para a foto sair limpa, e o ponteiro que se mexe a traz de volta. **O corpo fica parado onde está.** Enquanto ela voa, o HUD (bússola, barras, dicas, legendas...) e o chat somem, e os nomes de portas e as dicas `[E]` também. **`Esc` volta** à câmera normal, **`F2` também** e o botão vermelho **Sair da câmera**, que fica no canto; **`F3`** também, e abre o painel da administração. Morrer também tira, e a terceira pessoa volta se estava ligada. Ela **volta sozinha em 5 minutos**, com aviso 30 segundos antes. A câmera não se afasta mais de **25 m** dos olhos do personagem: uma câmera que fosse a qualquer lugar, atravessando paredes, serviria para espiar casas trancadas e acampamentos.
 
   **Se a página não ouvir nada** (a primeira versão lia o código de posição da tecla, `event.code`, que o navegador do jogo deixa vazio, e nenhuma tecla funcionava: 2026-10-15 à noite), ela agora lê o número e o nome da tecla (`keyCode` e `key`). E se em **6 segundos** ela não ouvir nem uma tecla nem um clique, o teclado volta ao jogo e **a câmera passa a voar pelas teclas do próprio jogo** (`W A S D`, as setas, `Espaço`/`E` e `Ctrl`/`C`/`Q`, `Shift`, `Alt`; `Esc` e `F2` saem), com um aviso na tela. O log do cliente diz em que pé está: `free camera: the page drew`, `the page hears the player (key: ...)` na primeira tecla ouvida, `the page heard nothing in 6 s; the game's keys fly it now`, e `NoClip.move refused to move the camera` se o jogo recusar o movimento.
@@ -1911,9 +2341,10 @@ A página (CEF) fala com o script do cliente por `callEvent`, e o script repassa
 | `status:setSocial` | `targetId`, `status`, `family` | só admin |
 | `status:supporterGrant` | `targetId` | só admin |
 | `status:animals`, `status:animalName`, `status:animalCall`, `status:dogOrder` | o animal e o que fazer com ele | o dono do animal |
-| `props.use` | `guid`, `prompt` (o prompt do próprio jogo estava na tela quando o **E** foi apertado) | todos: o cliente avisou que apertou **E** perto de uma propriedade; se o jogo não disse nada em 450 ms, o servidor abre o menu da porta ou do baú; com `prompt` numa porta travada pelo olhar, solta a trava para aquele jogador |
+| `props.use` | `guid`, `use` (o *Abrir* do próprio jogo estava na tela quando o **E** foi apertado) | todos: o cliente avisou que apertou **E** numa porta ou baú de propriedade; numa trancada o servidor diz que está trancada, ou, de dentro, puxa o ferrolho e abre a porta |
 | `props.peek` | `guid` | todos: o cliente pergunta o nome da porta ou do baú que está mirando; o servidor responde com `props.label` (`label`, `use`, e `door` quando é uma porta) |
-| `props.gaze` | `guid` (vazio: o olhar saiu da porta), `released` (com o `guid` vazio: a porta de que o cliente solta a trava, porque o *Abrir* do jogo continuava na tela) | todos: o cliente diz qual porta de propriedade está sob a mira, a cada 700 ms enquanto durar; o servidor a tranca no mundo (veja *a trava ao olhar*) e responde com `props.gazed` (`guid`; vazio quando solta) |
+| `props.look` | `guid` (vazio: a mira saiu da porta ou do baú) | todos: a porta ou o baú de propriedade sob a mira, a cada 700 ms enquanto durar; o servidor responde com `props.can` (`guid`, `lock`: `lock`, `unlock` ou vazio), o que o **F** faz ali para aquele jogador |
+| `props.toggle` | `guid` | quem tem a chave, o dono, o morador do quarto e o admin: o **F**, que tranca ou destranca aquela porta ou baú; quem pode, a distância e a tranca são conferidos de novo no servidor |
 
 O painel ocupa a tela toda e esconde o chat, então um aviso só no chat não seria visto: o servidor manda também o evento `status.notice`, que a página mostra como uma faixa no rodapé por alguns segundos (`notice` em `src/server/status.ts`). Recusas de nome inválido, limite de parentes, pedidos de chave e edições de propriedade usam esse caminho.
 
@@ -1959,13 +2390,15 @@ O framework **não guarda nada** de um jogador que sai: ao voltar ele é um Henr
 
 **Itens no chão duram 30 minutos.** O que alguém larga no chão (ou um script põe lá) some depois de 30 minutos se ninguém pegar, e some também num reinício (`src/server/ground-items.ts`).
 
-**Cavalos.** Um cavalo passa a ser guardado quando é dado a um jogador (o `/horse` do admin cria um já do autor, e `/horse give` entrega a outro). O dono pode sair: o cavalo fica onde estava, ninguém mais monta (só o dono e os admins), e volta a ser dele quando ele entra. Morreu, foi esquecido, como no jogo. `/cavalo` diz onde ele está e chama ele; `/cavalo listar` e `liberar` são do admin.
+**Cavalos.** Um cavalo passa a ser guardado quando é dado a um jogador (o `/horse` do admin cria um já do autor, e `/horse give` entrega a outro). O dono pode sair: o cavalo fica onde estava, ninguém mais monta (só o dono e os admins), e volta a ser dele quando ele entra. Morreu, foi esquecido, como no jogo. **Derrubado também** (25/10/2026: *matei o cavalo duas vezes, ele voltou à vida; devia ir embora definitivo e sumir dos meus animais*): o jogo não mata o cavalo de um jogador, só o derruba, e ele se levantava sozinho minutos depois, sem ter saído da seção Animais. Agora um cavalo com dono que o servidor vê desacordado em duas olhadas seguidas (uma por segundo) **morre de vez**: o que ele levava nas alforjes vai para os bolsos do dono (ou para o chão, onde ele caiu), o registro some (e com ele a linha da seção Animais), o dono é avisado, o cavalo deixa de ser dele e é morto; se o jogo ainda o mantiver vivo 5 segundos depois, é tirado do mundo. Cavalo sem dono não é mexido (`src/server/horses.ts`, `watchKnockouts`; o log diz `horses: o cavalo ... ficou desacordado e morre de vez`). `/cavalo` diz onde ele está e chama ele; `/cavalo listar` e `liberar` são do admin.
 
 **Como o salvamento se protege.** Cada arquivo é gravado em duas etapas, com cópia da versão anterior (`.bak`), então uma queda no meio não deixa um arquivo pela metade. Cada parte só é gravada depois de ter sido devolvida: um jogador que sai antes de o jogo carregar não apaga o que estava salvo. Um inventário vazio nunca substitui um cheio. Se o arquivo do jogador não puder ser lido, ou o jogo recusar o inventário salvo, a sessão dele **não grava nada** e ele é avisado no chat; o que estava salvo continua intacto para a administração. Itens personalizados que o servidor não conhece mais (uma propriedade apagada) ficam guardados à parte e voltam quando o tipo existir de novo. O log mostra `characters: <nome>: inventário devolvido (N itens)` na entrada e `gravado (saída)` na saída.
 
 ## Criação de personagem
 
 Quem entra pela primeira vez **cria o personagem antes de jogar**: a tela de criação abre sozinha, **não tem saída** (sem botão de fechar, sem `Esc`, e o `/creator stop` é recusado) e só fecha quando o jogador escolhe o visual e **dá um nome**. Quem já tem personagem abre a tela com `/creator` e pode sair quando quiser; o visual volta ao que era.
+
+**A aba Roupas veste o corpo (25/10/2026: *na criação de personagem, na seção roupa, ao ir alterando as roupas deve refletir no boneco também*).** Para quem cria o primeiro personagem, a roupa escolhida nunca tinha aparecido: o servidor vestia as peças pelo **nome** do item, e essa forma de vestir só aceita o **código (GUID)**; o log mostrava `creator: Fulano: o jogo não vestiu TunicLong04_m02_D, ...` a cada troca. Agora vai pelo código, e o corpo mostra o que é escolhido. Quem **já tem personagem** (o `/creator` ou o *Refazer aparência*) também **prova** as peças: enquanto a criação está aberta sai o que ele veste **naquela parte do corpo** (a túnica ou a armadura do tronco, as calças, as botas) e o **capuz ou o elmo**, para o rosto aparecer; o resto (luvas, armas) fica. Tudo o que ele tinha continua no inventário, e **ao sair ou salvar volta exatamente como estava**, linhas e atalhos; ao salvar, as peças marcadas vão para o inventário, cada uma uma vez só, como antes.
 
 ### O que o jogador vê
 
@@ -2039,7 +2472,7 @@ A **câmera de frente** (que o corpo mire para onde o jogador olha, e que o enqu
 
 Todo personagem recebe **uma vez**:
 
-- roupas simples de trabalho, **já vestidas** (do gênero que escolheu no criador; o jogo oferece os presets `labourer_*` para homem e `f_villager_*` para mulher);
+- roupas simples de trabalho, **já vestidas**: as que o jogador escolheu na aba **Roupas** do criador (parte de cima, calças e calçados, entre 8 peças básicas de cada, com o ícone do jogo; `data/creator-clothes.json`, feito por `tools/make-creator-clothes.py`). Quem não mexeu na aba sai com a primeira de cada; se o jogo recusar, valem os presets `labourer_*` para homem e `f_villager_*` para mulher;
 - **100 moedas**;
 - **uma espada de caça** (`huntingSwordBasic`) **e uma adaga** (`daggerCommon`), as duas, para todos. A adaga do jogo não é feita para combate, e por isso o sorteio de antes (adaga, espada de treino ou espada de caça) foi trocado. Quem ganhou uma arma no sorteio e ainda a tem recebe só a outra;
 - **comida que não estraga para umas cinco horas**: 3 salames secos, 2 carnes-secas, 2 queijos secos e 2 porções de nozes, 188 de nutrição ao todo. No nível de fome padrão (`media`) um estômago cheio (100) dura 3 horas, então isso dá cerca de 5 h 30. Os quatro têm tempo de estrago 0 nas tabelas do jogo;
@@ -2052,7 +2485,7 @@ As armas, a tocha e a comida vão para o inventário; o jogador as equipa. Quem 
 
 ### Kit de cada guilda
 
-Entregue **na primeira vez** que o jogador entra na guilda (pelo painel). Trocar de guilda e voltar não repete; cada guilda tem o seu kit uma vez, então quem passa pelas quatro recebe os quatro kits. O kit da guilda a que o jogador já pertence é oferecido de novo a cada entrada, o que alcança quem entrou na guilda antes de os kits existirem ou estava com a mochila cheia na hora.
+Entregue **na primeira vez** que o jogador entra na guilda (pelo painel). Trocar de guilda e voltar não repete; cada guilda tem o seu kit uma vez, então quem passa por várias recebe o kit de cada uma. O kit da guilda a que o jogador já pertence é oferecido de novo a cada entrada, o que alcança quem entrou na guilda antes de os kits existirem ou estava com a mochila cheia na hora.
 
 | Guilda | Kit |
 | --- | --- |
@@ -2060,6 +2493,7 @@ Entregue **na primeira vez** que o jogador entra na guilda (pelo painel). Trocar
 | Caçador (Venatores) | Um arco de aveleira (`bow_b`), 20 flechas de caça e 20 flechas comuns |
 | Taberneiro (Tabernarii) | 3 carnes de porco cruas, para cozinhar |
 | Alquimista (Alchemistae) | O livro **Herbário do Aprendiz** (decocção de calêndula, poção digestiva e Aqua Vitalis) e as ervas para duas a três levas de cada: 5 urtigas, 8 calêndulas, 4 dentes-de-leão, 4 cardos e 2 carvões. A base líquida das poções vem da própria mesa de alquimia |
+| Coletor (Collectores) | O **machado de lenhador** (`axeWork01`), a **picareta** (a do cavaleiro, `axeBattle03`, a única picareta do jogo, **usada**: qualidade 1 e metade da condição; novas, o ferreiro forja) e a **roupa de trabalho**, cortada para o corpo: para homem, a túnica de minerador, as calças de mineiro, o capuz de minerador e botas de trabalho; para mulher, o vestido de trabalho, o lenço de cabeça de trabalho e os sapatos; para os dois, a bandagem de mão. Tudo no inventário (vestir é com o jogador) |
 | Artesão (Artifices) | **Dez roupas simples para vender**, nenhuma vestida: 2 túnicas curtas, 1 túnica longa, 1 túnica gasta, 1 vestido simples, 2 toucas, 2 capuzes e 1 véu. O jogo avalia o conjunto em cerca de 1.150, no meio dos outros kits (ferreiro 580 mais dois livros, taberneiro 140, alquimista 60 mais o livro, e o caçador 3.600 por causa do arco) |
 
 ### Cores das facções
@@ -2088,7 +2522,9 @@ As receitas de missão e as especiais do jogo (artefatos, espadas lendárias) n�
 
 ### Vendedores
 
-São os NPCs da cidade que o servidor cria (além dos bandidos): **cinco ofícios em Suchdol**, cada um numa loja que o próprio nível tem (as entidades `Shop` do nível): o taberneiro na taverna, o ferreiro na ferraria da vila, o boticário e o caçador nas duas bancas de mercado e a costureira entre elas; **13 mascates**, um em cada fogueira de beira de estrada que o nível guarda para os mercadores errantes do jogo (os lugares `taboryUCesty`); e **8 banhistas** nos banhos que o nível tem (pedido de 16/10/2026: *ative os NPC de banho*). **Wysoka e Raborsch não têm loja nenhuma no jogo**, então não têm vendedores (a loja de Wysoka que o nível guarda, `Shop[...seller/shop_noDesk5...]` em 378, 2458, é só uma marca de lugar, sem balcão). Aparecem uns 12 segundos depois de o servidor subir, **sem nome nem barra de vida sobre a cabeça**, como a gente do próprio nível, e **não podem ser feridos** (se algo os derrubar, voltam 10 segundos depois). Vendem pelo preço que o jogo dá ao item mais 20%, ou pelo preço do livro, e as prateleiras se enchem de novo a cada 15 minutos. Falar com o NPC abre a tela de comércio do jogo.
+São os NPCs da cidade que o servidor cria (além dos bandidos): **cinco ofícios em Suchdol**, cada um numa loja que o próprio nível tem (as entidades `Shop` do nível): o taberneiro na taverna, o ferreiro na ferraria da vila, o boticário e o caçador nas duas bancas de mercado e a costureira entre elas; **13 mascates**, um em cada fogueira de beira de estrada que o nível guarda para os mercadores errantes do jogo (os lugares `taboryUCesty`); e **8 banhistas** nos banhos que o nível tem (pedido de 16/10/2026: *ative os NPC de banho*). **Wysoka e Raborsch não têm loja nenhuma no jogo** (a loja de Wysoka que o nível guarda, `Shop[...seller/shop_noDesk5...]` em 378, 2458, é só uma marca de lugar, sem balcão), e as outras vilas também não: por isso o servidor põe em **toda vila mapeada** (três casas do censo ou mais) um **ferreiro, um boticário e um taberneiro** do lado de fora de uma casa livre, de dia pela vila e à noite na cama (pedido de 17/10/2026). Em 20/10/2026 (*vamos mapear o resto inteiro e já ir colocando os NPC de venda nas cidades*) o mapa passou de 6 para 17 regiões (veja [`/propriedade`](#propriedade)), e a vila que o censo arquiva nesse início ganha os seus 50 segundos depois de o servidor subir, sem esperar o reinício seguinte (o log diz `vendors: N vendedor(es) de vilas novas, mapeadas neste início: ...`). Aparecem uns 12 segundos depois de o servidor subir, **sem nome nem barra de vida sobre a cabeça**, como a gente do próprio nível, e **não podem ser feridos** (se algo os derrubar, voltam 10 segundos depois). Vendem pelo preço que o jogo dá ao item mais 20%, ou pelo preço do livro, e as prateleiras se enchem de novo a cada 15 minutos. Falar com o NPC abre a tela de comércio do jogo.
+
+**Não têm dinheiro** (pedido de 18/10/2026: *zerar o dinheiro dos NPC, fixo sempre, mesmo se comprar algo o NPC continua com 0, assim nenhum jogador vai vender mais nada aos NPCs*): a bolsa de todo vendedor é 0 e o que o jogador paga numa compra é tirado dela logo depois do negócio. **Não vendem mais livros de receita**, só os **livros de habilidade** do próprio jogo do seu ofício e os ingredientes que as receitas das guildas pedem. Os **mascates** levam, além das miudezas, 8 ingredientes das guildas (outros em cada fogueira) e um ou dois livros de habilidade da estrada (furto, briga, montaria). Os **baús dos bandidos**, os **tesouros** pelo mundo e às vezes **o próprio bandido** também trazem esses materiais.
 
 **Compram só o que é do ofício deles**, e pagam 35% do que o jogo diz que o item vale: o ferreiro, materiais de forja, armas do dia a dia e ferraduras; o boticário, ervas, poções, unguentos e o que a alquimia usa; o taberneiro, bebida, pão, queijo, frutas, legumes, carnes e peixes; o caçador, carne de caça, peixe, peles, flechas, arcos e balestras; o alfaiate, roupas; o mascate, miudezas (dados, insígnias, óculos, tapa-olho, broches, terços). Cada um aceita no máximo 128 tipos (é o limite do jogo); a lista fica em `data/vendor-buys.json`, só no servidor, gerada das tabelas do jogo por `tools/make-vendor-buys.py`. Cada vendedor tem uma **bolsa de 5.000 moedas** (como o jogo mostra) para pagar: quando acaba, ele para de comprar, e ela volta cheia **24 horas** depois de enchida, com reinício ou sem. O que resta em cada bolsa fica em `playerdata/vendor-purses.json`.
 
@@ -2104,9 +2540,9 @@ Os trajetos são **planejados pelo servidor na malha de navegação do nível** 
 
 | Id (`/vendedor`) | NPC | O que vende |
 | --- | --- | --- |
-| `ferreiro` | Mestre Ferreiro | Ferro, aço (3 tipos), cobre, material de fixação, guardas e pomos de espada, e os 6 livros de ferraria |
-| `alquimista` | Boticário | 19 ervas, carvão, teia de aranha, presa de javali, e os 6 livros de alquimia |
-| `taberneiro` | Taberneiro | **Só carne crua**: vaca, porco, carneiro e galinha |
+| `ferreiro` | Mestre Ferreiro | Ferro, aço (3 tipos), cobre, material de fixação, guardas e pomos de espada, guarda especial, madeira exótica, adornos, e os **livros de habilidade** de artesanato, espada, armas pesadas, armas grandes e força |
+| `alquimista` | Boticário | 19 ervas, carvão (e carvão melhor), teia de aranha, presa de javali, vinho, enxofre, salitre, papoula seca, amanita, raiz de mandrágora, pérola de água doce, e os **livros de habilidade** de alquimia, erudição e vitalidade |
+| `taberneiro` | Taberneiro | Carnes cruas, farinha, malte, lúpulo, ovos, leite, sal, mel, banha, legumes, frutas, temperos, vinho, cortes nobres, queijos, salame, peixes, lagostins, miúdos e cogumelos, e os **livros de habilidade** de bebida e de lábia |
 | `cacador` | Mestre Caçador | Arcos (3), flechas comuns, rústicas, de caça e de caça melhoradas |
 | `alfaiate` | Costureira | Roupas simples: túnicas, calças, sapatos, botas, casacos, chapéus e capuzes, e vestidos, sapatos e véus femininos |
 | `mascate-1` a `mascate-13` | Mascate (a cada três, Bufarinheira) | Peças de **bijuteria que o jogo não vende em outro lugar**, trocadas por sorteio entre as visitas: dados (o comum sempre, e mais 3 entre sortudo, favorável, ímpar, par, da Santíssima Trindade, azul, desequilibrado, equilibrado e de dentes), 2 insígnias de dados, 3 peças para vestir (óculos, tapa-olho do Žižka, broches, colar de cruz de estanho, escapulários, anel de prata gravado) e 2 miudezas (pente, flauta, terço, colar de jaspe) |
@@ -2167,61 +2603,75 @@ Rodando de novo, o comando só acrescenta o que é novo e nunca renumera. Dê `/
 
 **As portas de uma casa, como os baús.** Uma casa com **mais de uma porta** lista as portas sob ela, no detalhe das seções Propriedades e Chaves, como lista os baús: **Entrada** (a porta que o mapa marca como a da frente) e **Porta 2**, **Porta 3**..., cada uma com o seu botão **Trancar/Destrancar**. O botão da casa passa a dizer **Trancar tudo** e **Destrancar tudo**, e uma casa com só algumas portas trancadas aparece como **parcial**. O estado de cada porta é guardado (`doorLocks`, em `playerdata/properties.json`) e refeito a cada início.
 
-**Ceder uma região inteira.** O admin pode ceder uma região a um jogador (o cartão da região, na seção Chaves, com o jogador escolhido em *Quem recebe*; com *Para mim* o admin pega a região para si): tudo o que ainda não tem dono nela passa a ser dele (as casas e, sob elas, os baús; nenhuma chave é feita, porque o dono não precisa de uma), e ele **decide por si** o que fazer: dar nome e descrição, trancar, fazer chaves, **entregar** a outros. O que não passa fica na lista dele **só para ler**: a casa de um vendedor (um NPC) e o que já era de outro dono. A região fica registrada com o seu senhor (`playerdata/regions.json`): uma propriedade nova que o censo achar nela vai para ele também, e a hierarquia mostra a região entre as terras dele. Antes de ceder o painel mostra a conta, e o servidor confere de novo; `status.regionCede` sem `confirm` só diz o que passaria. A casa de um vendedor nunca é dada a ninguém, nem por quem a vê na lista.
+**Ceder uma região inteira.** O admin pode ceder uma região a um jogador (o cartão da região, na seção Chaves, abre o quadro **Ceder uma região**, com *Para quem*; com *Para mim* o admin pega a região para si): tudo o que ainda não tem dono nela passa a ser dele (as casas e, sob elas, os baús; nenhuma chave é feita, porque o dono não precisa de uma), e ele **decide por si** o que fazer: dar nome e descrição, trancar, fazer chaves, **entregar** a outros. O que não passa fica na lista dele **só para ler**: a casa de um vendedor (um NPC) e o que já era de outro dono. A região fica registrada com o seu senhor (`playerdata/regions.json`): uma propriedade nova que o censo achar nela vai para ele também, e a hierarquia mostra a região entre as terras dele. Antes de ceder o painel mostra a conta, e o servidor confere de novo; `status.regionCede` sem `confirm` só diz o que passaria. A casa de um vendedor nunca é dada a ninguém, nem por quem a vê na lista.
 
-**O nome na porta e no baú.** Ao olhar para uma porta ou um baú de uma propriedade, a poucos metros, aparece um texto branco, na fonte do próprio KCD2 (a Kingdom Come), um pouco abaixo da mira: `Casa 03 - Hans`, ou só `Casa 03` se não tem dono; um baú de uma casa mostra `Casa 03 · Baú 1 - Hans`. É o cliente que traça um raio curto da câmera pela mira e pergunta ao servidor o nome do que o raio encontrou (`src/client/property-labels.ts`, resposta em `labelFor`, `src/server/properties.ts`); a resposta fica guardada por meia minuto. O que não é propriedade não mostra nada. A posição do texto (`TEXT_Y`) e o tamanho (`TEXT_SIZE`) são constantes no começo do arquivo.
+**Remover o dono de uma região** (28/10/2026: *no ceder, adicione a opção "remover dono" no dropdown; ao selecionar, remove o dono da região*; e, depois de um teste que deixou mais de 100 propriedades no nome do administrador: *as propriedades da terra que eram do dono devem sair também; ao perder a terra ele perde as propriedades da região*). Numa região que tem senhor, o dropdown *Para quem* do quadro **Ceder uma região** ganha uma terceira opção, **Remover dono** (depois de *Para mim*); escolhida, o botão passa a dizer **Remover dono** e o quadro explica o que vai acontecer. A região deixa de constar em `playerdata/regions.json` (a Cidadania e a hierarquia deixam de mostrá-lo como senhor das terras, e uma propriedade nova que o censo achar lá não vai mais para ele) **e o senhor perde as propriedades que tem nela**, o que recebeu na cessão e o que já tinha lá: voltam a não ter dono (os baús vão junto com a casa, com o que há dentro). **O que é de outros donos na região continua com eles**, o que o senhor tem em outras regiões não é tocado, e as chaves já entregues continuam com quem as tem. O senhor que sai, se estiver no jogo, é avisado no chat. Sem confirmar, o evento só conta (*N propriedade(s) dele ficariam sem dono e M de outros donos continuariam*). **Para limpar uma região que ficou sem senhor mas com propriedades no nome de um jogador** (o que fazia a primeira versão do "Remover dono", de 28/10/2026): *Ceder a região inteira* → *Para mim* (ou para quem tem as propriedades) e logo *Remover dono*. É o evento `status.regionCede` com `remove: 1` (e `confirm: 1`, que sem ele só conta); só admin (`releaseRegion`, em `src/server/properties.ts`). A opção só aparece quando a linha da região diz que há senhor (`lord`, em `regionLines`, `src/server/status.ts`).
 
-**Como a chave funciona.** A tranca que o servidor põe numa propriedade não existe para o jogo (a porta está destrancada no mundo), então não há "destrancar com a chave do jogo": a chave é o **item** que o servidor confere quando alguém escolhe **Destrancar** ou **Trancar** no menu da porta ou do baú, ou usa `/chave`. Quem tem a chave de uma casa a leva no inventário; o admin faz o que um portador faz. **O dono não precisa de menos:** ele pega as chaves que quiser no painel (*Pegar chave*, *Dar chave*), uma de cada vez. Pelo próprio **painel**, o dono (seção Propriedades) e o admin (Chaves) trancam e destrancam a casa, as portas e os baús sem a chave.
+**Dar e ceder, sempre pelo mesmo quadro** (22/10/2026: *nos meus animais existe um botão ceder, achei bem legal esse padrão, muito mais do que na tela Nomeação, Chaves e Propriedades, a forma de ceder algo ali é ruim; prefiro que sejam tudo no padrão do ceder igual de animais*). Chaves, Propriedades e Nomeação escolhiam o destinatário num seletor no alto da lista (*Quem recebe*, *Quem será nomeado*) e os botões agiam sobre ele; o seletor foi embora. Agora **o botão está na coisa** e abre o quadro dos Animais (`openGiveForm`, em `ui-src/status.html`): o que é (o tipo e o nome), **Para quem** (a lista de jogadores, pedida ao servidor uma página por vez, com busca; *Para mim* primeiro quando o jogador pode ficar com a coisa), uma nota do que vai acontecer, dita com o nome escolhido, e o botão de confirmar com **Cancelar**. Os botões: **Dar chave** (a casa, uma porta, um baú; admin e dono; com *Para mim*), **Ceder** (a propriedade: o dono a outro jogador, e o admin a um jogador ou a si mesmo), **Ceder o quarto**, **Ceder a região inteira** (o cartão de Chaves, com *Para mim* e, havendo senhor, *Remover dono*), **Nomear** (em Nomeação: os jogadores que o nobre pode nomear, ou qualquer um para o admin) e **Dar** o cavalo ou a carroça (Animais, o que já era). Os eventos que o painel manda ao servidor são os mesmos de antes (`status:grantKey`, `propOwner`, `propGive`, `roomGive`, `regionCede`, `nominate`, `animalGive`): só a escolha do jogador mudou de lugar.
 
-### Fechaduras: [E] na porta e o painel
+**O nome na porta e no baú.** (Tirado em 18/10/2026, quando o nome ia no menu do **E**, e devolvido em 19/10/2026, quando o menu saiu.) Ao olhar para uma porta ou um baú de uma propriedade, a poucos metros, aparece um texto branco, na fonte do próprio KCD2 (a Kingdom Come), um pouco abaixo da mira: `Casa 03 - Hans`, ou só `Casa 03` se não tem dono; um baú de uma casa mostra `Casa 03 · Baú 1 - Hans`. É o cliente que traça um raio curto da câmera pela mira e pergunta ao servidor o nome do que o raio encontrou (`src/client/property-labels.ts`, resposta em `labelFor`, `src/server/properties.ts`); a resposta fica guardada por meia minuto. O que não é propriedade não mostra nada. A posição do texto (`TEXT_Y`) e o tamanho (`TEXT_SIZE`) são constantes no começo do arquivo.
 
-Olhando para qualquer porta ou baú de uma propriedade, o nome aparece e o jogo mostra **uma opção só: Abrir** (na porta aberta, Fechar). Antes, depois de entrar numa casa o jogador via duas (o *Abrir* do próprio jogo, de dentro de uma porta trancada, e a *Fechadura* do mod). Agora o mundo está sempre destrancado e quem trava é o servidor, que ouve o aperto antes de o jogo agir (`src/server/property-menu.ts`):
+**A chave.** É o **item** da propriedade (`kcdc-property:...`) no inventário: a de uma casa vale para os baús dela, e uma porta pode ter chave própria, que vale só para ela. O **dono** não precisa da chave; pega as que quiser no painel (*Pegar chave*, *Dar chave*), uma de cada vez. Pelo **painel**, o dono (seção Propriedades) e o admin (Chaves) trancam e destrancam a casa, as portas e os baús sem estar perto.
 
-- numa porta ou baú **aberto**, para quem **não tem a chave**, o aperto abre, como em qualquer lugar;
-- em qualquer outro caso, o aperto não abre e a lista de diálogo do jogo aparece com o que o jogador pode fazer:
+### O alcance do E e do F
 
-| Opção | Quando aparece | O que faz |
-| --- | --- | --- |
-| **Abrir** | só se **não** está trancada | Abre a porta; num baú, mostra o baú (veja *O baú abre numa cópia*, abaixo) |
-| **Destrancar** | trancada; ativa só para quem tem a **chave** (e para o admin), apagada (*precisa da chave*) para os outros | Destranca **aquela porta**, e a abre; as outras portas da casa ficam como estavam |
-| **Trancar** | aberta, para quem tem a chave | Tranca aquela porta |
-| **Destrancar a propriedade inteira** / **Trancar a propriedade inteira** | numa casa com **mais de uma porta**, para quem tem a chave | Muda todas as portas da propriedade de uma vez (os baús de dentro têm a tranca deles) |
-| **Arrombar** | trancada, para quem **não** tem a chave e não está dentro | Só com uma **gazua** no inventário (apagada: *precisa de uma gazua*; ou *esta fechadura não se arromba*, ou *alguém já está tentando*): o servidor **tranca de verdade aquela porta por dois minutos**, o jogo oferece o **minijogo da gazua dele** (segure E) e quem acerta a abre; o dono é avisado se estiver online, e quem erra perde a gazua, como o jogo manda. Quem se afasta mais de 8 m, ou passam os dois minutos, desfaz |
-| **Abrir por dentro** | trancada, quem está **dentro** da construção (o lado da porta sem a fechadura, como o jogo diz) **e o nível do jogo não confirma**; de dentro, onde o nível confirma, o jogo abre a porta direto, sem menu | Abre só aquela porta, sem chave, como quem puxa o ferrolho por dentro; o resto da propriedade continua trancado. Era o caso de quem dormiu num castelo e ficou preso |
-| **Sair** | sempre | Fecha |
+Pedido de 22/10/2026: *as distâncias das interações do E e F que fizemos personalizadas em tudo devem ter o mesmo padrão de distância, exemplo 1 m a 2 m*. Cada aviso nosso tinha o seu número (de 2,6 m a 5,5 m no cliente, de 3 m a 8 m no servidor), e a porta e a pessoa eram medidas **da câmera**, não do corpo: na terceira pessoa do mod (a câmera 3,5 m atrás) uma porta a dois metros ficava fora de alcance. Agora há **um alcance só**, em `src/client/reach.ts` e `src/server/reach.ts`:
 
-Uma tranca que o **nível do jogo** pôs (casas de NPCs e cenário) é respeitada: a porta é lida como trancada, até alguém a destrancar ou arrombar, e **volta trancada no reinício**, como o nível a fez. O servidor confere de novo a distância (4,5 m), a tranca, a chave e o lado de dentro em cada passo; o que o cliente diz não basta. O log diz o que aconteceu (`property-menu: Mauro em Casa 03 · Porta 2 (trancada, por fora)`).
+- **O padrão é 2 m, do corpo até a borda da coisa** (o ponto da mira numa árvore, numa pedra, numa porta, num baú, numa pessoa, na água). Onde o jogo dá **um ponto só** para uma coisa grande, o ponto está a uma *margem* da borda, e o alcance até ele é o padrão mais a margem: pessoa 0, porta e baú 0,5, cadeira 0,4, cama 1, a mesa de dados 1, o fogo 0,6, o canteiro da horta 0,5 (medido até o ponto mais perto da fileira de terra: 2,5 m do corpo), a carroça 1 (medida até o eixo dela), o cavalo 1,1 (até o meio dele), o secador 1,2, a forja e a mesa de alquimia 1,5, o quadro de avisos 1,2 (o ponto fica no chão, meio metro diante das tábuas) e o defumador 2,5 (um casebre com o ponto dentro).
+- **O servidor aceita 1 m a mais** (`SLACK_M`): o cliente decidiu com os olhos dele, e o aperto, a rede e um passo dado no meio não podem fazer um aviso que estava na tela responder *longe demais*.
+- Onde ficou: **árvore e pedra 2 m** (era 3), **porta e baú 2 m** (era 2,8 da câmera; o servidor 3,5, era 3,2 e 3,5), **pessoa para conversar 2 m** (era 3; o servidor 3, era 4), **água para beber 2 m** (era 3,2, e o chão lido até 2,5 m adiante; o servidor 3, era 6), **cavalo 3,1 m até o meio dele** (era 4; o servidor 4,1, era 4,5), **fogo 2,6 m** (era 3,2), **secador 3,2** (era 4,5), **defumador 4,5** (era 5,5), **forja e mesa de alquimia 3,5** (era 4), **cadeira 2,4** (era 2,6) e **cama 3** (era 3,2), **carroça 3 m do eixo** (era 3,5; 4 para o aperto) e **mesa de dados 3** (como era). Os números dos servidores das mesas (`cookingSettings`, `craftSettings.forgeM`, `PLACE_REACH_M`) e dos assentos (`REACH_M`, `BED_REACH_M`) saem da mesma tabela.
+- **Não mudaram**, porque não são um E nem um F nosso: os NPCs com o menu do jogo (vendedores, barbeiros, mestres, cocheiros), que usam a distância do próprio jogo, o *Seguir* do jogo (20 m), as alforjes do painel (8 m) e o menu do cavalo já aberto (8 m, só para não se perder ao andar).
+- *Ainda não testado no jogo:* que as margens (`EDGE_M`) servem para o tamanho de cada coisa: o fogo, a forja e o defumador são os mais prováveis de pedir ajuste. É o primeiro lugar para mexer se um aviso não aparecer a dois metros da coisa.
 
-**O baú abre numa cópia.** O servidor não consegue abrir a tela de um baú do nível (só a de um baú virtual), então **Abrir** copia o conteúdo para um baú virtual, abre a tela do jogo nele, e cada movimento volta para o baú de verdade na hora e de novo ao fechar (`src/server/chest-view.ts`); enquanto uma cópia está aberta, ninguém mais abre aquele baú. Se a cópia não abrir, o jogador tem 15 segundos para apertar E no baú e abri-lo pelo caminho do próprio jogo.
+### Fechaduras: E abre, F tranca
 
-**Portas que o jogo não avisa.** O framework (KCDC 1.6.9) registra no log do cliente `Door dispatcher unavailable ... could not execute the entity-environment AnimDoor dispatcher chunk` para certas portas, em certas entradas (em 2026-10-15, 11 portas: 9 do Castelo de Suchdol, a Casa 02 e a **Casa 01 em toda sessão**). Naquele cliente a porta não é sincronizada e o servidor **nunca recebe o aperto**: era assim que a porta parecia "sem menu" ou mostrava só o aviso do jogo. O cliente também avisa, ele mesmo, quando o **E** é apertado perto de uma propriedade (`props.use`), e se em 450 ms o jogo não disse nada o servidor abre o menu mesmo assim (log: `apertou E em ... e o jogo não avisou`). É um defeito do framework, que vale ser reportado à KCDC.
+Pedido de 19/10/2026: *o E é apenas abrir, o F destrancar ou trancar (caso tenha a chave ou seja o dono da propriedade); se não for nenhum dos 2, continue E abrir e F vira arrombar (se tiver gazua); assim fica bem mais simples ... o mesmo vale para baús*. Não há mais menu na porta nem no baú (`src/server/property-menu.ts`, `src/server/properties.ts`, `src/client/property-labels.ts`):
 
-**A porta que abre e fecha sozinha: a trava ao olhar.** O jogo começa a abrir uma porta destrancada no instante do aperto; quando o servidor recusa o aperto para abrir o menu, ele "põe a porta de volta" no cliente de quem apertou, e o jogador via o boneco abrir a porta e ela fechar sozinha antes de escolher qualquer coisa (2026-10-15). Para que isso não aconteça, **a porta de que o menu vai sair é trancada no mundo, só para o jogo, enquanto o jogador olha para ela** (`src/server/property-menu.ts`, `gaze`; `src/client/property-labels.ts`): o cliente diz ao servidor qual porta de propriedade está sob a mira (`props.gaze`, a cada 700 ms enquanto durar o olhar), o servidor tranca aquela porta (`Door.locked`), responde (`props.gazed`) e, **com a porta trancada, o jogo não oferece nada** do lado da fechadura: o aperto não faz nada e o **Abrir** que aparece é o do mod (a mesma dica do jogo, com a mesma tecla, só depois que a do jogo some, nunca ao lado dela); o **E** dela avisa o servidor (`props.use`), que abre o menu em 120 ms. Quando o olhar sai da porta, ou passa de 2 segundos sem ser repetido, a porta é destrancada no mundo de novo.
+- **A tranca é a do jogo.** O que foi trancado de propósito (pelo **F**, pelo painel ou por `/propriedade trancar`) fica **trancado de verdade no mundo**; o resto fica como o nível deixa. A cada 5 segundos o servidor põe a tranca numa porta ou baú que o jogo informou tarde e fecha uma porta que ficou aberta estando trancada.
+- **E** é o do jogo: abre e fecha o que está destrancado. Numa porta ou baú **trancado**, do lado da fechadura, o jogo só oferece o arrombamento dele; o servidor diz *Casa 03 está trancada.* (*... aperte F para destrancar.*, para quem pode), no máximo uma vez a cada 3 segundos.
+- **F**: para quem **tem a chave**, é o **dono**, mora no **quarto** daquela porta ou baú, ou é **admin**, a mira numa porta ou baú da propriedade (até 2 m do corpo, o alcance padrão: veja [O alcance do E e do F](#o-alcance-do-e-e-do-f)) mostra **[F] Trancar** ou **[F] Destrancar**, de fora e de dentro. Numa casa de várias portas, o F mexe só naquela porta; num baú, só no baú. Quem não pode não vê nada no F. Quem trancou ouve *Casa 03: trancada.*, e o log guarda (`property-menu: Hans trancou Casa 03 com F`).
+- **Arrombar** continua sendo o do jogo, **segurar E** (com gazua e a habilidade): o minijogo não pode ser começado por um script, então não dá para pô-lo no F. Quando alguém começa, o dono (se estiver no servidor) ouve *Alguém está tentando arrombar Casa 03.*; quando a varredura vê aberta no jogo uma tranca que o servidor pôs, ela foi arrombada: fica aberta, quem arrombou ouve *Você arrombou Casa 03.* e o dono *Alguém arrombou Casa 03!*.
+- **Por dentro**, uma porta trancada abre com o **E**: o framework recusa a mão do jogador numa tranca que um script pôs, então o servidor puxa o ferrolho e abre a porta (*Você abriu Casa 03 por dentro.*); se quem abriu não tinha a chave, o dono é avisado (*Alguém abriu Casa 03 por dentro.*). Qual lado é dentro: as áreas do nível, onde elas cobrem a porta; senão, o que o jogo disse naquela porta antes (o lado da fechadura de cada aperto, guardado em `playerdata/door-sides.json`); senão, o próprio *Abrir* do jogo na tela, que numa porta trancada só aparece do lado de dentro.
+- Numa porta que o **nível** trancou (casas de NPCs e cenário), o jogo abre por dentro sozinho e o servidor não mexe.
 
-Só vale onde o aperto daria um menu e a trava não atrapalha ninguém:
+**O que saiu em 19/10/2026:** o menu da porta e do baú (Abrir, Destrancar, Trancar, a propriedade inteira, Arrombar, Abrir por dentro, Roubar), a **cópia do baú** (a tela do jogo abre o baú de verdade) e a **trava ao olhar** (`/propriedade olhar`), que existia só para o menu não brigar com o *Abrir* do jogo.
 
-- **de fora**: de dentro (o lado sem a fechadura), o jogo ainda oferece o seu *Abrir* numa porta trancada, e a trava só o tornaria uma recusa. Quem diz qual lado é qual são as áreas do próprio nível (`Door.areas`); **numa porta que nenhuma área reivindica** (a maior parte do castelo), é o que o próprio jogo disse naquela porta: cada aperto traz `keySide` (de que lado da fechadura o jogador estava), e o servidor guarda, por porta, a direção de onde ficaram os dois lados (`playerdata/door-sides.json`). Uma porta que **ninguém usou ainda** é travada dos dois lados, e o log diz uma vez (`não tem área do jogo que diga o que é dentro, e ninguém a usou ainda`);
-- **onde o *Abrir* do jogo continua na tela com a trava posta** (o lado do ferrolho, ou uma porta que não tranca), o **cliente solta a trava** depois de 0,8 s e avisa o servidor (`props.gaze` com `released`): ele lembra aquele ponto (1,2 m) por 15 minutos e não trava ali de novo, e o aperto seguinte é o do próprio jogo. Um **E apertado com o prompt do jogo ainda na tela** (`props.use` com `prompt`) solta a porta para aquele jogador por 15 segundos e não abre menu nenhum: o próprio jogo abre a porta;
-- numa porta que **o servidor tem por trancada**, vale para quem olha, tenha a chave ou não (todos vão ao menu de qualquer jeito), a menos que haja **alguém dentro** por perto; numa porta que está **aberta a todos** (só quem tem a chave ganha menu), só se **ninguém mais** estiver a 8 m, para que ninguém fique do lado de fora por causa do olhar de outro;
-- a até 3 m da porta, com a porta **fechada**, e nunca numa que está **em arrombamento** (a tranca do arrombamento tem a vez).
-
-**Por dentro a porta abre direto.** Quando o jogo diz que o jogador está do lado **sem** a fechadura (`keySide` falso) e as áreas, ou o que a porta já aprendeu, não dizem que é fora, o aperto é aceito e **não vira menu**: o jogo abre a porta sem ter nada a desfazer (uma recusa faz o boneco abrir e a porta voltar). Se estava trancada, o ferrolho é puxado à mão, só aquela porta, e o dono é avisado quando quem abriu não tem a chave. **Quem tem a chave e está dentro** e quer trancar usa o painel (**Propriedades**, os botões de tranca) ou tranca por fora; **Abrir por dentro** continua no menu quando o jogo não disse o lado.
-
-Uma porta que o jogo ainda oferece apesar da trava é contada (`property-menu: o jogo ainda ofereceu Casa 03 a ... com a trava ao olhar posta`) e o cliente escreve no log quando solta uma porta porque o prompt do jogo não some (`o "Abrir" do jogo continua na tela ... a trava foi solta para este olhar`); o servidor conta as travas soltas e as portas de lado já aprendido, e `/propriedade olhar` mostra os dois números. O **minijogo da gazua** do jogo aparece numa porta travada pelo olhar para quem tem a habilidade: é tratado como o **Arrombar** do menu, tomado na hora, se a pessoa pode (trancada, sem a chave, com a gazua, num trinco que se arromba) e recusado em qualquer outro caso. **`/propriedade olhar desligar`** (admin) desliga tudo isso, e o menu volta a funcionar como antes, com o abre-e-fecha; `ligar` religa, e o estado fica em `playerdata/property-menu.json`.
-
-> **Ainda não testado no jogo:** se a trava chega ao jogo antes do aperto e cala o *Abrir* dele (o servidor diz, com `props.gazed`, que a porta está travada, e o log do servidor conta quantas vezes o jogo ofereceu a porta mesmo assim), se a dica *Abrir* do mod aparece no lugar e com a tecla certa, e o que acontece com os NPCs que passam por uma porta travada pelo olhar de alguém (a trava dura só enquanto o olhar dura). Por dentro (quem tem a chave incluído) o menu deixou de existir justamente para não haver o abre-e-fecha; o que o jogo diz em cada aperto entra na conta (os mais antigos pesam metade depois de 50 apertos), então um lado aprendido de um aperto estranho se corrige com o uso.
-
-**O que a varredura faz.** A cada 5 segundos o servidor põe o mundo de volta na linha do que ele guarda: destranca no mundo o que não está em arrombamento e fecha uma porta que ficou aberta e deveria estar trancada.
-
-> **Ainda não testado no jogo:** que **Abrir** aparece sozinho em toda porta e baú; o minijogo da gazua começar na porta que o servidor trancou para o arrombamento e o servidor ver que acertou; o baú abrir na cópia e os itens voltarem ao fechar; e a cama, que **não** mudou (veja [Cama](#cama-descansar-sem-dormir)).
+> **Ainda não testado no jogo:** a dica **[F] Trancar/Destrancar** aparecer junto do *Abrir* do jogo e o F trancar sem o jogo agarrar nada; o **E** por dentro puxar o ferrolho onde as áreas do nível não dizem o lado; os avisos de arrombamento.
 
 ### Castelos
 
-O castelo de cada região com muralhas é **uma propriedade só**: `Castelo de Suchdol` e `Castelo de Raborsch`, com **todas as portas dentro das muralhas** (uma chave, uma tranca para todas) e **os baús de dentro sob ele** (`Castelo de Suchdol · Baú 7`), como uma casa tem os seus. O censo deixava a fortaleza de fora; em Raborsch tinha cadastrado as portas uma a uma, como `Fortaleza` e `Porta`, e as que ninguém tinha trancado, ganhado chave ou recebido foram juntadas ao castelo. Um baú que alguém já renomeou mantém o nome; um que tem dono ou chaves entregues fica como está. Roda sozinho 30 segundos e 2 minutos depois de cada início (só acrescenta o que é novo) e por `/propriedade castelo [região]`. No primeiro início: **Suchdol com 33 portas e 62 baús; Raborsch com 12 portas e 5 baús**, juntando 7 portas soltas. Um castelo pode ser entregue a um jogador como qualquer casa.
+O castelo de cada região com muralhas é **uma propriedade só**: `Castelo de Suchdol` e `Castelo de Raborsch`, com **todas as portas dentro das muralhas** (uma chave, uma tranca para todas) e **os baús de dentro sob ele** (`Castelo de Suchdol · Baú 7`), como uma casa tem os seus. O censo deixava a fortaleza de fora; em Raborsch tinha cadastrado as portas uma a uma, como `Fortaleza` e `Porta`, e as que ninguém tinha trancado, ganhado chave ou recebido foram juntadas ao castelo. Um baú que alguém já renomeou mantém o nome; um que tem dono ou chaves entregues fica como está. Roda sozinho 30 segundos e 2 minutos depois de cada início (só acrescenta o que é novo) e por `/propriedade castelo [região]`.
+
+**Pschitoky tem castelo, e a estalagem, o haras e a Toca do Diabo são uma propriedade cada (2026-10-26).** Pschitoky ganhou as muralhas da sua fortaleza (`Castelo de Pschitoky`, 7 portas, 5 baús: os baús que o arrumador tinha posto sob a Casa 01 passam para o castelo). 
+A **Estalagem de Pschitoky deixou de ser uma região**: é uma propriedade da região Pschitoky, com as portas do lugar e os baús sob ela (`Estalagem de Pschitoky · Baú 3`); a casa e os 10 baús que ela tinha como região foram juntados a essa propriedade. 
+O **Haras de Malešov** (a casa, os dois celeiros e o estábulo ao sul de Malešov, perto da antiga `kmal_courtStudFarmArea`) é uma propriedade da região Malešov. A **Toca do Diabo** (o lugar que o mapa chama de Devil's Den: a estalagem Čertovka, celeiros e estábulo) é uma propriedade da região **Minas** (a antiga Grunta: veja abaixo), 770 m a noroeste da vila, e **não conta como povoado** para os baús do mundo.
+
+**Minas, e onde fica cada região (26/10/2026: *no mapa se chama Minas em português, que fica acima de Stará Kutná; não sei me localizar pelas regiões que você mapeou e não aparecem com nome no mapa; poderia corrigir Minas e colocar alguma identificação, exemplo próximo a X local, até mesmo no dropdown da seção Chaves, e também usar o nosso padrão de ícones*).** A região que o censo chamava de **Grunta** (o `Grund` do nível) chama-se **Minas** no mapa do jogo em português (o próprio texto dele, `location_grunta`), e agora também aqui: as propriedades, as vendedoras dos banhos, a parada da carroça, a igreja, o quadro de avisos, as hortas e os bandidos usam o nome do mapa; o catálogo salvo é lido com o nome novo (o `id` interno `grunta` não mudou, nem as chaves, as hortas plantadas e as paradas) e a Toca do Diabo, que o dia anterior tinha posto numa região "Minas" à parte, passou a ser uma propriedade da Minas de verdade. Os nomes do mapa, em português, saem do próprio jogo (`tools/make-map-places.py` grava `src/server/map-places-data.ts`: 27 lugares do mapa com o contorno de cada um). No **dropdown de regiões** das *Chaves* e das *Propriedades*, cada região leva o desenho do que é (o **castelo** para quem tem muralhas, a **casa** para as outras), o nome e, embaixo, um **alfinete** com **onde fica pelo mapa do jogo**: *ao norte de Stará Kutná* para a Minas (a referência do pedido), *a leste de Miskowitz* para Pschitoky, e, quando o mapa a escreve de outro jeito, *no mapa: Lhota* (Stará Lhota) ou *no mapa: Maleshov* (Malešov). A propriedade que é um lugar próprio (o castelo, a estalagem, o haras, a Toca do Diabo) mostra, sob o nome, a mesma linha com a distância: *a noroeste das Minas (770 m)* para a Toca do Diabo, *no mapa: Estalagem dos Carroceiros de Pschitoky · a sudoeste de Pschitoky (340 m)*. (`src/server/place-hints.ts`; o servidor manda `regionHints` na página e `where` em cada propriedade.)
+Cada um é como um castelo (`Região.compounds` em `properties.ts`): todas as portas dentro do lugar e todos os baús sob ele; o censo da região deixa o lugar para ele. Rodam sozinhos junto dos castelos, e por `/propriedade lugar [região]`. No primeiro início: **Suchdol com 33 portas e 62 baús; Raborsch com 12 portas e 5 baús**, juntando 7 portas soltas. Um castelo pode ser entregue a um jogador como qualquer casa.
+
+### Quartos
+
+Castelos e casas têm **quartos** (pedido de 18/10/2026: *assim eu posso dar quartos às pessoas ou famílias minhas*). Um quarto é uma parte da casa, **algumas portas e alguns baús**, que o dono dá a um jogador ou a vários (uma família, até 8) **sem dar a casa**.
+
+- **Criar:** na seção **Propriedades** (ou **Chaves**, o admin), escolha a casa e aperte **Novo quarto**: dê um nome (*Aposentos do senhor*, *Quarto da torre*) e marque as portas e os baús que são dele. Uma porta ou um baú fica em um quarto só.
+- **Dar:** escolha o jogador no alto da lista (**Para ...**) e aperte **Dar a ...** na linha do quarto. Ele é avisado e o quarto aparece nas Propriedades dele, com as portas e os baús para **trancar e destrancar**.
+- **Quem mora no quarto** é, para as portas e os baús dele, como quem tem a chave: o **F** tranca e destranca, e mexer nos baús do quarto **não é roubo**. O resto da casa continua só do dono.
+- **Esvaziar** tira todos os moradores; **Apagar** desfaz o quarto; o morador pode **Deixar o quarto**.
+- Fica em `playerdata/rooms.json`. Código: `src/server/rooms.ts`, `src/server/status.ts`, `src/server/property-menu.ts`.
+
+### Baús de outro jogador: o roubo e a marca de ladrão
+
+Um baú que **tem dono** (um jogador) e está **destrancado** abre para qualquer um, pela tela do próprio jogo; trancado, só com a chave (o **F**) ou arrombado. O que alguém **tira** de um baú com dono, sem ser o dono, sem ter a chave, sem morar no quarto dele e sem ser da família do dono, **conta como roubo** (até 19/10/2026 isso passava pela opção *Roubar* do menu do baú, que saiu com o menu; a conta continua a mesma).
+
+Quem rouba **mais de 3 baús diferentes em menos de uma hora** ganha a **marca de ladrão por 1 dia** (o título sobre a cabeça). O log do servidor guarda o que cada um tirou e pôs em cada baú com dono (linhas `baús: ...`). Veja [`/ladrao`](#ladrao).
+
+O motivo (18/10/2026): os baús 4 e 62 do Castelo de Suchdol, do Radovan, foram esvaziados pela tela do próprio jogo enquanto estavam destrancados. O que foi levado voltou para o Radovan (entregue na próxima entrada dele, por `playerdata/restitution.json`).
 
 ## Animais e ervas
 
 Os animais vêm do gerenciador de populações do gamemode (`src/server/animals.ts`), que usa os pontos de nascimento autorados no próprio nível: **711 pontos**. Para o mundo ter bem mais caça e mais vida (pedido de 16/10/2026: *mais animais para caçar no mapa*), cada ponto guarda **duas vezes e meia** o bando que o nível pôs lá (`animalDensity`, no mínimo 1 e no máximo **10** por ponto; eram 1,5 vez e 6), e **lobos e cães selvagens, o dobro** (eram 1,5 vez). Os animais **selvagens** (lebre, javali, corça, cervo, lobo, cão selvagem) ganham ainda, em volta de cada ponto, **um bando menor num chão próprio** (60% do bando, até 120 m do ponto, escolhido uma vez numa área andável): enche o mato entre os pontos que o nível pôs. As vacas, os touros, as ovelhas e os porcos ficam nos pastos e **mantêm os números do nível** (1×: até 16/10/2026 também eram 2,5×, e mais de 60 bichos de fazenda na vila pesaram no FPS de Suchdol). Ao subir, o servidor loga as vagas por espécie; hoje: lebres 3014, javalis 802, porcos 195, corças e cervos 1647 + 1051 + 799 + 759, ovelhas 254 + 77, vacas e touros 247 + 43, **lobos 466** e **cães selvagens 316** (antes: 1000, 288, 121, 568 + 374 + 279 + 283, 153 + 48, 149 + 27, 205 e 141). No máximo **700 corpos** ao mesmo tempo (eram 384), só perto de jogadores (350 m), nascendo até 4 por segundo (eram 2) fora da vista (60 m), e quem morre volta uns **3 minutos** depois. Lobos e cães selvagens atacam quem chega a 18 metros. A carne dos animais caçados é entregue ao esfolar (`animalDropChance` em `src/server/npc-spawn.ts`). **`/animals status`** diz quantos há agora e **`/animals max <n>`** muda o máximo na hora (até o servidor reiniciar), se a máquina de alguém sentir o peso.
+
+**Lobos e cães selvagens (24/10/2026).** *"Jogador reportou que spawn de cachorros selvagens: ele mata eles e depois de 1 m já dá spawn de novo."* Um bando morto (lobos e cães selvagens, `PREDATORS`) agora só volta depois de **20 a 30 minutos** (`predatorRespawnMs` e `predatorRespawnJitterMs`, em `src/server/animals.ts`); os outros animais mantêm o tempo de antes.
 
 **Ervas.** O nível decide onde cada planta nasce, e um script não cria plantas novas. O que dá para mudar é o tempo de rebrota de uma planta colhida (`Gathering`): o padrão do framework (um quinto do tempo do jogo) dava de 40 a 120 minutos reais neste relógio; agora são **4,5 a 12 horas de jogo**, cerca de **15 a 40 minutos reais** (`src/server/flora.ts`). A regra fica na memória do servidor e é posta de novo a cada início; o `/herbs` ainda muda até o próximo.
 
@@ -2232,20 +2682,22 @@ Os animais vêm do gerenciador de populações do gamemode (`src/server/animals.
 **Ovos nos ninhos e peixes nas armadilhas** (pedidos de 16/10/2026). Como galinhas não dá para ligar, os ovos vêm de onde o nível os guarda: os **ninhos de galinha** (`henCare_coop`, os galinheiros das vilas: 87 no servidor) e os poucos **ninhos de ave** (`Nest`) que o servidor conhece como baús; e os peixes vêm das **armadilhas de pesca** do nível (`fish_trap_cage`). Meio minuto depois de cada início, e a cada 40 minutos reais, `src/server/nests.ts` põe **1 a 3 ovos** em cada ninho e **2 a 4 peixes** (perca, truta ou lagostim, um tipo por vez) em cada armadilha (o que havia é trocado), desde que **ninguém esteja a menos de 25 m** e o baú não esteja aberto; se alguém está perto, fica para a próxima olhada (a cada minuto, que também acolhe um baú que o nível só informa mais tarde). O log diz `nests: 87 ninho(s) do nível ganham ovos a cada 40 min; M já cheios; por exemplo ...` e `traps: N armadilha(s) de pesca do nível ganham peixes ...`. Os cestos de ovos das casas são tarefa dos moradores do jogo, não baús: ficam de fora.
 
 
+**Quem passeia e quem fica parado (25/10/2026, desempenho).** O servidor roda tudo numa linha só, e a rodada dos animais, uma vez por segundo, era o maior gasto dos nossos scripts (cerca de 30 ms a cada segundo, com as ordens de caminhada, que o servidor traça na malha de navegação, e a conta de todos os 1000 pontos contra todos os jogadores). Agora um bando só passeia, foge ou ataca quando há um jogador a até **76 m do ponto-base dele** (a coleira de 45 m mais o maior alcance de uma caça ou de uma fuga, 26 m, mais uma folga): mais longe que isso nenhum animal vivo do bando pode ter o que fazer com ninguém, então o servidor nem pergunta ao jogo por ele. Os bandos longe de todos ficam parados onde estão e voltam a andar quando um jogador chega perto; a carga de cada jogador (quantos corpos o jogo dele roda) é contada pelo último lugar visto de cada corpo, e os pontos perto de um jogador são achados por quadrados de 200 m, sem medir todos. O que muda para quem joga: nada que se veja, porque nada se vê a mais de 76 m do bando; se um animal for morto fora do alcance, a morte vem pelo evento do jogo. O `perf-watch` (`src/server/perf-watch.ts`, uma linha por minuto no registro) mostra o que cada timer gastou e, na parte `por dentro:`, o tempo das ordens, da malha e dos nascimentos da rodada dos animais.
+
 ## Dia, noite e clima
 
 **40 minutos de dia e 40 de noite.** O dia do jogo não é dividido ao meio (é claro das 06:00 às 21:00, 15 horas, e escuro das 21:00 às 06:00, 9 horas), então o relógio anda mais rápido de dia (22,5 segundos de jogo por segundo real) e mais devagar de noite (13,5), e cada metade dura 40 minutos reais. O dia completo leva 80 minutos. O servidor ajusta a escala sozinho a cada 5 segundos e guarda o dia e a hora em `playerdata/world.json`, então um reinício continua de onde parou. `/clima relogio parar` congela a hora; `seguir` volta ao ciclo.
 
-**Clima que muda sozinho.** Cada clima dura de 20 a 45 minutos e passa para o próximo em cerca de 4 minutos. A chuva e o vento sobem e descem junto com a troca. Os céus são os do próprio jogo, os mesmos que os scripts do jogo usam (`BlendTimeOfDay` no `Scripts.pak`):
+**Clima que muda sozinho.** Cada clima dura de 20 a 45 minutos (os de chuva, de 8 a 20) e passa para o próximo em cerca de 4 minutos. A chuva é a exceção (20/10/2026: *"está chovendo muito"*): os três climas de chuva juntos são cerca de um décimo dos sorteios, e a chuva nunca é seguida de chuva. A chuva e o vento sobem e descem junto com a troca. Os céus são os do próprio jogo, os mesmos que os scripts do jogo usam (`BlendTimeOfDay` no `Scripts.pak`):
 
 | Id (`/clima`) | Clima | Chance | Céus do jogo | Chuva | Vento |
 | --- | --- | --- | --- | --- | --- |
-| `limpo` | Céu limpo | 26% | `cloudless_sunny`, `_B` | nenhuma | fraco |
-| `poucas-nuvens` | Poucas nuvens | 22% | `semicloudy_clear`, `_B` | nenhuma | fraco |
-| `nublado` | Nublado | 18% | `cloudy_no_rain` (3), `summer_overcast` (3) | nenhuma | moderado |
-| `pancadas` | Pancadas de chuva | 12% | `cloudy_frequent_showers`, `_B` | média | moderado |
-| `garoa` | Neblina com garoa | 8% | `foggy_drizzly`, `_B` | fraca | quase nenhum |
-| `tempestade` | Tempestade | 10% | `foggy_storm`, `_B` | forte | forte (10 a 18 m/s) |
+| `limpo` | Céu limpo | 34% | `cloudless_sunny`, `_B` | nenhuma | fraco |
+| `poucas-nuvens` | Poucas nuvens | 28% | `semicloudy_clear`, `_B` | nenhuma | fraco |
+| `nublado` | Nublado | 23% | `cloudy_no_rain` (3), `summer_overcast` (3) | nenhuma | moderado |
+| `pancadas` | Pancadas de chuva | 5% | `cloudy_frequent_showers`, `_B` | fraca a média | moderado |
+| `garoa` | Neblina com garoa | 3% | `foggy_drizzly`, `_B` | fraca | quase nenhum |
+| `tempestade` | Tempestade | 2% | `foggy_storm`, `_B` | forte (menos que antes) | forte (10 a 18 m/s) |
 | `ventania` | Ventania | 4% | `foggy_storm_no_rain` | nenhuma | forte |
 
 O mesmo clima não é sorteado duas vezes seguidas. O admin troca na hora com `/clima <id>`. O servidor aceita qualquer nome de céu sem conferir (um nome errado só gera erro no cliente), por isso só os nomes que o próprio jogo usa estão na lista. Código: `src/server/world-cycle.ts`.
@@ -2256,21 +2708,32 @@ Os acampamentos são os do próprio nível: `Npc.placements()` lista cada pessoa
 
 **Esconderijos na mata.** Além dos acampamentos do nível, o servidor espalha até **14 esconderijos** seus (hoje **11**, com **53 bandidos**), de 4 a 6 bandidos cada um e um arqueiro, chamados `Esconderijo N`. Cada um fica num ponto de caça **selvagem** do nível (nunca num pasto), num chão que a malha de navegação diz ser andável, **a pelo menos 300 m de qualquer lugar onde o nível põe gente comum** (vilas, fazendas, moinhos, postos de guarda), a 450 m dos acampamentos do nível e a 650 m um do outro. O sorteio é sempre o mesmo, em cada início: os esconderijos não mudam de lugar. Usam as mesmas almas de bandido do nível, a mesma dureza e o mesmo saque pobre, e não têm baú. Se a malha de navegação demora para ficar pronta, eles esperam até 2 minutos (log: `bandits: N esconderijo(s) na mata ...`, e uma linha por esconderijo com onde fica).
 
+**Mais acampamentos e postos nas estradas (24/10/2026).** *"Existe acampamento de inimigos sem bandidos"* e *"coloque alguns bandidos pelas estradas, já que o sistema de emboscada não funciona"*. O nível tem acampamentos de outros inimigos, com barracas e fogueiras e ninguém neles, porque as missões que os povoam não rodam aqui: os dos **caçadores furtivos** de Suchdol e de Vrchlicko, o dos **caçadores de tesouro** de Lorec e o **celeiro dos desertores** de Přítoky. Agora a camada ou o nome com `poach`, `pytlak`, `treasureHunter` ou `zbeh` também vira acampamento de bandidos (14 pessoas, 4 acampamentos: *Suchdol*, *Vrchlicko*, *Lorec* e *Přítoky*), com o mesmo modo difícil e os mesmos baús. E o servidor põe **postos de 3 ou 4 bandidos nas estradas**: os lugares de estrada do próprio nível (os cruzamentos, entroncamentos e estradas de floresta, de campo e de estalagem onde o jogo faz os encontros, e os pontos de saída das caravanas, **64** lugares em `data/road-posts.json`, feito por `tools/make-road-posts.py`) escolhidos de um jeito sempre igual: **10 postos** (o limite; com 170, 380 e 650 m só sobravam 5), a pelo menos 140 m de qualquer lugar com gente, 330 m de um acampamento e 550 m um do outro, em chão onde se anda (a malha de navegação). Chamam-se `Estrada 1`, `Estrada 2`... em `/bandidos`, com um arqueiro e um veterano em cada. O servidor diz no registro quantos pôs (*"e N posto(s) nas estradas"*) e, se o arquivo `data/road-posts.json` faltar, que não pôs nenhum.
+
 **Modo mais difícil:**
 
 - 180 de vida (o padrão de um NPC é 100);
 - golpes 60% mais fortes nos jogadores (o servidor aumenta o dano no `playerHit`);
 - enxergam o jogador a 28 m e perseguem até 60 m do acampamento;
-- quando um bandido é atingido ou entra em luta, **o acampamento inteiro vem junto** por um minuto;
-- um arqueiro para cada quatro bandidos, atirando de longe.
+- quando um bandido é atingido ou entra em luta, **o acampamento inteiro vem junto** por um minuto, e **o atingido recebe a ordem de lutar na hora** (não na olhada seguinte, um segundo depois; no máximo uma vez a cada 0,8 s por bandido): o susto que o próprio jogo dá a quem leva um golpe é trocado pela ordem de lutar (relato de 21/10/2026: *eles nasceram mas não lutaram, eu batia e eles corriam*). A ordem que o susto tirou (o bandido deixou de estar mandado lutar ou correr atrás do alvo) é dada de novo na olhada seguinte, no mais a cada 4 s;
+- um arqueiro para cada quatro bandidos, atirando de longe;
+- **veteranos** (21/10/2026: *armaduras melhores em alguns e deixar eles mais hard ainda*): **um em cada três** de um acampamento (nunca o arqueiro) é um **Bandido veterano**, com **260 de vida**, golpes **25% mais fortes** ainda e o equipamento de um soldado que a guerra deixou: capacete de chaleira ou de aço, almofre ou capuz de malha, jaquetão longo, cotoveleiras com rondelas, botas de andarilho e, metade das vezes, a cota de malha saxônica, tudo **gasto** (30% a 50% da condição);
+- **o arco quando o jogador se afasta** (*se o jogador se afastar eles começam a disparar com besta*): todo bandido de lâmina leva também um **arco** e flechas e passa a atirar quando o alvo está a **mais de 12 m**, voltando à lâmina quando ele chega a **menos de 6 m** (o intervalo evita que troque a cada passo). O jogo deixa um NPC do servidor atirar de **arco**, não de **besta**. Se o jogo recusar o arco, ele luta com a lâmina e só tenta de novo depois de 30 s;
+- **poção** (*e tomam poção também, assim evitar jogador ficar abusando*): abaixo de **40% da vida**, o bandido bebe e recupera **45%** da vida, com um grito (*Ainda não acabou!*); **uma** poção por bandido, **duas** por veterano, no máximo uma a cada 15 s. A poção não é um item: não sai no saque.
+
+**O que não é saque:** a armadura do veterano e o arco e as flechas do bandido de lâmina **saem do corpo quando ele morre** (o servidor tira essas peças do inventário do corpo): quem rouba bandido continua achando só roupa simples, a arma de sempre, moedas e comida, e armadura e arco seguem sendo coisa dos ofícios.
+
+**O alvo fixado prefere o NPC (25/10/2026).** *"Se tiver player e bandido, o fixar na luta foca os jogadores como prioridade; o correto deve ser os NPCs primeiro e só depois player."* O alvo fixado e o seletor de oponente do jogo escolhem entre tudo o que está na frente, jogadores incluídos, e o framework só dá um controle sobre isso: tirar o corpo de um jogador da mira de **um** cliente (`Player.setTargetable`). Então, enquanto há um inimigo NPC por perto (um bandido de acampamento, esconderijo ou posto, um salteador das estradas ou um animal que caça: lobo, cão selvagem) a menos de **28 m** de quem luta, o servidor diz a esse cliente (a cada segundo, só quando muda) quais jogadores estão em volta (até 80 m), e o cliente os tira da mira; continua assim até não haver nenhum a **40 m**, mais **4 segundos** (para um bandido que dá a volta numa árvore não fazer a mira piscar), e então os jogadores voltam. O golpe de ninguém é impedido: só muda o que a mira oferece. O duelo marcado entre dois jogadores segue igual, e o fim de um duelo não devolve o jogador à mira enquanto houver inimigo NPC por perto. Código: `src/server/lockon-priority.ts` e `src/client/combat.ts`; o log diz `combat: o alvo fixado prefere os NPCs inimigos...` ao subir. Ainda não visto no jogo.
 
 **Saque básico, de propósito.** No KCDC o que um NPC veste e empunha é o saque do corpo, então os bandidos vestem e levam só coisa simples: túnica gasta ou de mendigo, calça simples, capuz ou gorro, às vezes um casaco de mendigo; um porrete, um machado de trabalho ou uma lâmina caseira (o arqueiro, um arco de aveleira e flechas rústicas); de 5 a 20 moedas e um pão, uma maçã ou uma cenoura. Assim roubar bandido não paga mais que trabalhar numa guilda.
 
-**Morrem e voltam.** O corpo fica 10 minutos para ser revistado e some quando não há ninguém a 50 m. O bandido volta 30 minutos depois de morrer, quando não há jogador a 90 m do acampamento.
+**Os bandidos de estrada que desviavam de tudo (25/10/2026: *os bandidos de estrada desviam de todos os golpes e não morrem*).** O golpe num NPC é julgado pelo jogo de **quem roda** aquele NPC, e o servidor mantinha quem o rodava até ele estar a 160 m. Pelo log, metade dos golpes nos postos das estradas caía em bandidos rodados pelo jogo de **outro jogador**, a até 60 m dali: o golpe não pegava. Agora, quando alguém bate num bandido cujo jogo que o roda está a **mais de 20 m** dele, e quem bate está a **até 15 m**, o bandido passa a ser rodado pelo jogo de quem bate (`preso ao jogo de quem bate` no log); e a cada olhada um bandido cujo jogo está a **mais de 60 m** passa para um jogador **25 m mais perto** (`era rodado por X, a N m: preso ao jogo de Y`). Dois jogadores perto do mesmo bandido não o puxam de um para o outro. Cada golpe agora escreve a vida do bandido no log (`atingido (vida X/Y)`). **Ainda não testado no jogo.**
+
+**Morrem e voltam.** O corpo fica 10 minutos para ser revistado e some quando não há ninguém a 50 m. Nos acampamentos e nos esconderijos o bandido volta 30 minutos depois de morrer; nos **postos das estradas** (`Estrada N`) cada bandido volta num tempo só dele, **entre 2 e 4 horas** depois de morrer (25/10/2026: *os bandidos de estrada, o respawn está muito rápido, devia ser umas 2h a 4h*). Em todos só volta quando não há jogador a 90 m do acampamento, e um reinício do servidor repõe todos de uma vez.
 
 **Baús dos acampamentos.** Os baús, caixas, sacos e barris a até 35 m de cada acampamento (menos colmeias, corpos, os de missão ou de cena e os que são de uma propriedade) recebem de 3 a 6 tipos de coisas que as guildas usam: sucata, ferro, aço, material de fixação, guarda e pomo de espada (ferreiro); ervas, carvão e teia (alquimista); flechas e couros (caçador); carne crua (taberneiro); e, em 4 de cada 10 vezes, uma peça de roupa. São enchidos de novo a cada hora, quando não há jogador a 60 m e ninguém está com o baú aberto, e o que houver neles é trocado pelo novo: não servem de esconderijo para guardar coisas.
 
-`/bandidos` mostra cada acampamento; `/bandidos ir <n>` leva o admin até ele; `/bandidos repor` traz os mortos de volta e enche os baús na hora. Se o jogo recusar alguma peça de roupa ou algum item de baú, o servidor deixa só aquele de fora e diz qual no log (`bandits: o jogo não vestiu: ...`, `bandits: os baús não aceitaram: ...`).
+`/bandidos` mostra cada acampamento; `/bandidos ir <n>` leva o admin até ele; `/bandidos repor` traz os mortos de volta (sem herdar o "preso ao jogo" do anterior) e enche os baús na hora; `/bandidos estado` diz, para cada bandido a até 250 m, o que ele faz e quem o roda (e, para os mortos, quanto falta para voltarem). O log do servidor escreve `bandits: ... ataque ordenado` quando um bandido é mandado lutar, e `atingido: ataque reordenado` quando o golpe o fez. Se o jogo recusar alguma peça de roupa ou algum item de baú, o servidor deixa só aquele de fora e diz qual no log (`bandits: o jogo não vestiu: ...`, `bandits: os baús não aceitaram: ...`).
 
 > **Atenção ao programar:** `Inventory.set` e `stash.setInventory` só aceitam o **GUID** do item. O nome é recusado (`invalidItem`, ou `invalidEquipment` numa peça vestida), e foi por isso que a primeira versão dos bandidos saiu sem roupa nova e com os baús vazios. `Inventory.add`, `stash.addItem` e as lojas (`Vendor.setStock`) aceitam o nome. `Inventory.classes()` lista os 3948 itens que se vestem ou empunham, com o GUID; para os outros, `resolveItems` (`src/server/bandits.ts`) põe o item num baú virtual e lê o GUID da linha.
 
@@ -2289,6 +2752,22 @@ Se o jogo já gasta a fome sozinho, o que ele gastou conta como parte do que o n
 
 **A fome está ligada** (17/10/2026). Ela chegou a ficar pausada por um dia, enquanto o sistema de comida era revisto, e o padrão voltou a ser o ritmo do nível. `/fome pausa ligar|desligar` (admin) mantém a saciedade de todos em 100% enquanto a pausa estiver ligada, e a escolha fica salva em `playerdata/hunger.json`.
 
+## Sede
+
+O jogo não tem sede; o servidor tem, e a barra **Sede** aparece na seção Personagem do painel e na lista de Jogadores do admin (`src/server/thirst.ts`). A medida é de 0 a 100, começa em 100, cai com o relógio (**2 h 30 de jogo de pé**, metade disso dormindo) e é guardada por Steam ID em `playerdata/thirst.json`.
+
+| Medida | O que acontece |
+| --- | --- |
+| abaixo de 30 | efeito **Sede** (ícone e nome no painel): o fôlego volta mais devagar (80%). Só passa quando a medida volta a 40 |
+| abaixo de 10 | efeito **Desidratação**: o fôlego volta a 55%, o fôlego máximo cai a 85% e o passo fica 4% mais lento |
+| 0 | o corpo falha: 2% da vida a cada 15 s, **nunca abaixo de 20%**: a sede sozinha não mata |
+
+**O que mata a sede.** Uma bebida das tabelas do jogo (`tools/make-drinks.py`: 54 itens), ouvida no `playerConsumed`: **água +45**, leite +30, cerveja +18, vinho +12, hidromel e aguardentes +5; as **sopas** do taberneiro (itens nossos, veja [Ofícios das guildas](#ofícios-das-guildas)) tiram de 10 a 20 ao serem comidas. Ou **a água onde ela corre**: um rio, uma lagoa ou um riacho; o cliente reconhece a água pelo tipo de superfície que o rastro do jogo encontra no leito (`mat_mudwater` e `mat_rockwater` no rio, `mat_water`, `mat_slowwater`: o chão sob a água é o que o raio acha, não a água), e mirando nela, com o personagem de pé na margem, aparece **[F] Beber água** (o controle `attack_special`, o mesmo F do trancar; o E já é de tanta coisa). O corpo se abaixa e bebe com a animação do próprio jogo (a de beber de uma tina ou de uma nascente, a primeira que o banco de animações do corpo tiver: `WaterTubDrinking`, `CampDrinkWatertube`, `CampDrinkSpruit`, `HousekeeperDrinkWaterTub`, `WashFace`), de 3 a 8 s, e a sede sobe 40. Um gole de cada vez (6 s), só para quem tem sede, a até 6 m da água que apontou.
+
+`/sede` fala da sua; `/sede <ligar|desligar>` e `/sede definir <n>` são do admin. Quem morre volta com 60%.
+
+> **Ainda não testado no jogo:** se o raio acha mesmo o leito do rio com esses tipos de superfície (a hipótese vem dos materiais do jogo: `river_bottom.mtl` é `mat_mudwater`, `water_volume_river.mtl` é `mat_water`); se a animação de beber toca no corpo do jogador; e se os efeitos têm os modificadores que o `Buffs.register` aceita (se não aceitar, os efeitos entram só com nome e ícone: o log diz `thirst: o efeito ... tento sem eles`).
+
 ### Cozinhar, secar e defumar
 
 O **cozinhar, o secar e o defumar do jogo** (a carne no espeto, na panela, no secador e no defumador do açougueiro) acontecem na máquina do jogador, e o multiplayer só leva ao servidor a alquimia, a ferraria, o reparo e o afiar: a carne crua ficava na bolsa e a pronta nunca chegava (relato de 16/10/2026, e o mesmo para secar e defumar). Não há aviso do jogo para ouvir, então o servidor faz o que o jogo faria, **por um macete** (ideia do dono do servidor): quando o jogador *tenta* fazer, o servidor tira o item cru da bolsa e entrega o pronto, como um `/give`. Funciona em um lugar que o próprio nível marca:
@@ -2301,7 +2780,7 @@ O **cozinhar, o secar e o defumar do jogo** (a carne no espeto, na panela, no se
 
 **Cada lugar é de uma guilda** (17/10/2026): o **fogo** é dos **taberneiros**, o **secador** e o **defumador** dos **caçadores**; quem é de outra guilda recebe o aviso e nada é trocado (o cozinhar do próprio jogo, que roda na máquina dele, não chega ao servidor, então não rende nada). O mod só leva ao servidor a ferraria e a alquimia como ofícios de verdade; para o resto, é este jeito.
 
-**O menu do fogo** (17/10/2026): ao chegar a uns 2,5 m de um fogo, de um secador ou de um defumador, o cliente põe na tecla de interação a dica **Cozinhar** (ou **Secar**, **Defumar**), ao lado do aviso do próprio jogo, que não dá para esconder. Apertar abre a lista de diálogo do jogo, conduzida pelo servidor: **Cozinhar** ou **Sair**; em **Cozinhar** vem a lista do que você leva e o lugar sabe fazer, uma escolha para cada comida e **Tudo o que der**. Quem não é da guilda do lugar recebe o aviso no chat e nenhum menu. Ainda não visto funcionando no jogo (a tela de cozinhar do próprio jogo pode abrir junto).
+**O menu do fogo** (17/10/2026): ao chegar a uns 2,5 m de um fogo, de um secador ou de um defumador, o cliente põe a dica **Cozinhar** (ou **Secar**, **Defumar**), ao lado do aviso do próprio jogo, que não dá para esconder. **No fogo a tecla é o F, não o E** (pedido de 20/10/2026: *na fogueira tem E cozinhar e E comer da panela; o E comer da panela precisa virar F, se não tiver como inverte os dois*): o **E** do fogo é do jogo (comer da panela), e a tela de escolher comida que ele abre para cozinhar é fechada na hora, com o aviso *No fogo, cozinhar é com a tecla F; o E é do jogo (comer da panela).* no chat e na tela; no secador, no defumador, na forja e na costura continua o E. Apertar abre a lista de diálogo do jogo, conduzida pelo servidor: **Cozinhar** ou **Sair**; em **Cozinhar** vem a lista do que você leva e o lugar sabe fazer, uma escolha para cada comida e **Tudo o que der**. Quem não é da guilda do lugar recebe o aviso no chat e nenhum menu. Ainda não visto funcionando no jogo (a tela de cozinhar do próprio jogo pode abrir junto).
 
 Há mais dois jeitos de pedir, a até 4 m do lugar e no mesmo andar (3 m de altura): **`/cozinhar`** faz tudo o que ele leva e o lugar sabe fazer; e o **Usar do inventário numa carne ou peixe cru** (31 deles, `MEATS` em `cooking-data.ts`: o cliente toma a ação do item, como nos livros, e pede ao servidor) faz só o monte em que ele apertou. Fruta, legume, ovo, queijo e cogumelo não têm o Usar tomado (senão não se comeriam do inventário): para eles vale o `/cozinhar`. O que cada comida vira vem das tabelas do jogo (`cooking-data.ts`, gerado por `tools/make-cooking.py`: **43** para cozinhar (`CookedItemId`), **27** para secar (`DriedItemId`), **22** para defumar (a linha de mesmo nome com `Smoked`)); onde ficam os lugares vem das camadas do nível (`stations-data.ts`, `tools/make-stations.py`). A troca é de um para um: o servidor tira o cru, entrega o pronto, e o que não couber volta como estava. O log diz `cooking: Fulano cozinhou|secou|defumou 3x ...`.
 
@@ -2324,6 +2803,10 @@ Um convite sem resposta caduca em 30 segundos, e o mesmo convite só pode ser re
 
 Junto de uma mesa de dados, a mira numa pessoa mostra **[E] Conversar** e esconde o **[E] Jogar dados** da mesa, para que um aperto não faça duas coisas; para usar a mesa do jeito antigo, mire a mesa. Quem já esperava na mesa e aceita um convite pelo menu sai da espera e senta para o jogo combinado.
 
+**Quem joga dados é de quem joga** (pedido de 20/10/2026: *o som dos dados caindo na mesa está indo para todos os jogadores enquanto jogadores jogam dados, igual à fogueira*; *quando um jogador estiver jogando dados não deve ter como interagir com ele quem estiver por fora do jogo*). Enquanto dura uma partida: o **som** da mesa (o chacoalhar, o cair dos dados, a tigela, o ganhar e o perder: 17 gatilhos `event:/special/dice/...` que as animações do jogo tocam com volume cheio em toda máquina que mostra o corpo, como o do fogo) é **parado em todas as máquinas que não estão naquela mesa**, uns 16 vezes por segundo (`src/client/dice-quiet.ts`; o servidor diz quem joga no evento `dice.busy`); e **quem está de fora não interage com os dois**: não aparece **[E] Conversar** nem a dica de seguir neles, o `Conversar` e o convite do menu recusam (*Fulano está jogando dados.*), e o nome sobre a cabeça some. Quando a partida acaba, ou um dos dois sai, tudo volta.
+
+> **Ainda não testado no jogo:** se o som some de verdade (parar o gatilho 16 vezes por segundo pode deixar escapar o primeiro estalo; se escapar, o remédio é encurtar `QUIET_EVERY_MS`).
+
 **Jogar dados: a aposta e os seus dados.** Na conversa em que os dois combinam a pontuação (2000 de início, de 500 em 500), vem também a **aposta**, em moedas **de cada um**: de nada a 1000, em degraus de 5, 10, 20, 50, 100, 200, 500 e 1000 (**Apostar mais** e **Apostar menos**; só se sobe até o que quem sobe tem na bolsa). Mudar a pontuação ou a aposta **desfaz** o aceite de quem já tinha aceitado, e o jogo só começa quando os dois aceitam o mesmo.
 
 - **A aposta sai da bolsa de cada um quando o jogo começa**, e fica anotada em `playerdata/dice-pot.json`. Quem vence leva as duas (a mensagem diz quanto). **Ninguém lançou um dado** (a mesa foi deixada em 0 a 0), ou o jogo **acabou sem vencedor**: cada um recebe a sua de volta. Desistir **depois do primeiro lance** perde a aposta, como o próprio jogo avisa (*Cuidado, você vai perder a aposta!*). Se o servidor reiniciar no meio de um jogo, a aposta e os dados voltam a quem estava jogando na próxima entrada (log: `dice: N jogo(s) de dados estava(m) aberto(s) quando o servidor parou`).
@@ -2337,14 +2820,13 @@ Junto de uma mesa de dados, a mira numa pessoa mostra **[E] Conversar** e escond
 
 **Negociar.** O jogo não tem uma tela de troca entre jogadores (a tela de comércio é de loja, de NPC). A negociação usa as telas que ele já tem: a lista de diálogo, para ver as ofertas e aceitar, e a tela de baú, para pôr itens na oferta. Cada um vê:
 
-- **Você oferece** e **<nome> oferece**, com o dinheiro e os itens de cada lado, e `(aceitou)` quando o outro já aceitou;
-- **Mudar os meus itens**: abre a tela de baú do jogo, com o seu inventário de um lado e a sua oferta do outro. Arraste o que quer oferecer; ao fechar, a lista volta (0,7 segundo depois, e desenhada de novo logo em seguida: aberta enquanto o jogo ainda fechava a tela, ela vinha vazia e prendia o jogador; um `Esc` logo depois de ela voltar a mostra de novo, uma vez, avisando como sair);
-- **Mudar o dinheiro**: mais ou menos 1, 10 ou 50 moedas, ou nenhuma. O dinheiro fica no inventário até a troca fechar;
-- **Ver o que <nome> oferece**: o dinheiro e os itens do outro lado, com os nomes em português do jogo e a qualidade;
+- **Você oferece** e **<nome> oferece**, com os itens de cada lado (o dinheiro é um deles), e `(aceitou)` quando o outro já aceitou;
+- **Mudar os meus itens**: abre a tela de baú do jogo, com o seu inventário de um lado e a sua oferta do outro. Arraste o que quer oferecer, **dinheiro incluído** (as moedas são um item do inventário e passam por essa tela do próprio jogo: a página não tem campo de dinheiro, pedido de 21/10/2026: *não precisa estar na tela personalizada, a tela do vanilla já tem como passar dinheiro*); ao fechar, a lista volta (0,7 segundo depois, e desenhada de novo logo em seguida: aberta enquanto o jogo ainda fechava a tela, ela vinha vazia e prendia o jogador; um `Esc` logo depois de ela voltar a mostra de novo, uma vez, avisando como sair);
+- **Ver o que <nome> oferece**: os itens do outro lado, com os nomes em português do jogo e a qualidade;
 - **Aceitar a troca**: a troca fecha quando os dois aceitam. Qualquer mudança numa das ofertas desfaz os dois aceites, e os dois são avisados;
 - **Cancelar a troca**: cada um recebe de volta o que pôs. `Esc`, se afastar mais de 8 metros, 10 minutos sem mexer, sair do servidor ou morrer também cancelam.
 
-**Uma troca não perde item.** Os itens oferecidos saem do inventário para um baú virtual e ficam anotados em `playerdata/escrow.json` enquanto a negociação está aberta. Se o servidor cair no meio, cada um recebe de volta o que tinha posto na próxima entrada. O que não cabe no inventário de quem recebe volta para quem ofereceu, e o que não cabe nem lá fica anotado e é entregue na próxima entrada. O dinheiro é conferido e tirado de uma vez: se um dos dois não tem mais o que ofereceu, nada é trocado e os dois aceitam de novo.
+**Uma troca não perde item.** Os itens oferecidos saem do inventário para um baú virtual e ficam anotados em `playerdata/escrow.json` enquanto a negociação está aberta. Se o servidor cair no meio, cada um recebe de volta o que tinha posto na próxima entrada. O que não cabe no inventário de quem recebe volta para quem ofereceu, e o que não cabe nem lá fica anotado e é entregue na próxima entrada. O dinheiro posto na oferta é um item como os outros: sai do bolso de quem o pôs, e volta para ele se a troca for cancelada. **O jogo só aceita de 1 a 10.000 unidades de um item por chamada de `Inventory.add`, e o dinheiro conta em décimos de moeda (10.000 unidades são 1.000 moedas)**: em 25/10/2026 Kael de Borova pôs 2.438 moedas na mesa, cancelou, e só 28 voltaram; as outras 2.410 ficaram anotadas como devidas e **toda tentativa de devolver também falhava**, pelo mesmo motivo. Tudo o que devolve uma pilha ao inventário (a troca, a devolução do que ela deve, o prêmio do pote dos dados, o que o baú de uma morte devolve, a restituição de um ladrão, `giveMoney`) agora passa por `src/server/inventory-add.ts`, que entrega em lotes de até 10.000 e, se um lote for recusado, tira os anteriores: **uma pilha nunca é entregue pela metade**. O que já estava devido (as 2.410 moedas de Kael) é pago na próxima vez que ele entrar.
 
 **Quem conhece quem** fica em `playerdata/acquaintances.json`, por Steam ID, e vale para sempre, mesmo depois de um reinício. O placar dos dados também mostra o nome como cada um conhece o outro. O admin também vê Desconhecido. O chat de texto continua mostrando o apelido de quem escreve, porque é o jogo que põe o nome na linha.
 
@@ -2354,7 +2836,7 @@ Código: `src/server/encounters.ts` (menu e convites), `src/server/trade.ts` (ne
 
 ## Apoiador
 
-A seção **Apoiador** do painel (para todos) agradece quem joga e explica como apoiar: o botão **Apoiar** abre o QR code do Pix, com o valor e o que conferir no banco antes de pagar (identificação **KINGDOMRPBRASIL**, recebedor **Mauro Alves Aguiar**, **Banco Santander**). Depois de pagar, o jogador manda o comprovante no Discord, e um admin entrega os benefícios na seção **Jogadores**: escolhe o jogador e clica em **Dar benefícios**, que pede confirmação. O servidor não vê pagamento nenhum: a palavra do admin é a prova.
+A seção **Apoiador** do painel (para todos; fica na categoria **Configurações**, com Informações e Opções) agradece quem joga e explica como apoiar: o botão **Apoiar** abre o QR code do Pix, com o valor e o que conferir no banco antes de pagar (identificação **KINGDOMRPBRASIL**, recebedor **Mauro Alves Aguiar**, **Banco Santander**). No alto dessa tela há um aviso em vermelho (26/10/2026: *uma instrução bem destacada de informar por qual streamer ele veio no jogo*): **o jogador escreve, junto com o comprovante no Discord, o nome do streamer (ou do canal) por quem chegou ao jogo**, ou que chegou por conta própria; o servidor não guarda essa informação, ela vai pelo Discord com o comprovante. Depois de pagar, o jogador manda o comprovante no Discord, e um admin entrega os benefícios na seção **Jogadores**: escolhe o jogador e clica em **Dar benefícios**, que pede confirmação. O servidor não vê pagamento nenhum: a palavra do admin é a prova. **Se a entrega foi para a pessoa errada** (25/10/2026: *deve ter como retirar benefícios de um jogador, para o caso de ceder errado*), o mesmo detalhe tem o botão **Retirar benefícios**, que pede confirmação e, no servidor (`supporters.revoke`, só admin): tira do inventário os **trajes de nobre, a bombarda e as balas** que ele ainda tiver (um conjunto por entrega; o que ele já gastou ou vendeu não é pedido de volta), tira os **cavalos** que as entregas deram, tira o **cão** e apaga o **registro de apoiador** (`playerdata/supporters.json`); o jogador é avisado. Desde 25/10/2026 cada entrega anota a chave do cavalo (`horseKeys`, depois que o módulo dos cavalos o registra, uns segundos depois); um cavalo entregue **antes** disso não é reconhecido e fica com ele (a mensagem do admin diz isso): retire-o pelos Animais, se for o caso. O botão só aparece para quem é apoiador.
 
 O QR code foi conferido: é um Pix estático, com chave aleatória, identificação `KINGDOMRPBRASIL` e **valor fixo de R$ 69,99**, e o código de verificação (CRC) confere (o QR foi trocado em 2026-10-15: o novo foi lido de novo, e a imagem refeita do painel lê exatamente o mesmo conteúdo). O nome e a cidade gravados dentro do código são só `N` e `C` (o banco do pagador mostra o recebedor pela chave). A imagem do painel (`ui/img/pix-qr.png`, 57×57, meio KB) é refeita módulo a módulo do original `img/qrcode-pix.png` por `tools/make-ui-images.py`; o valor e os nomes ao lado ficam em `PIX`, no começo do script de `ui-src/status.html`, e mudam junto com um QR novo.
 
@@ -2395,12 +2877,12 @@ O framework não tem renascimento: o corpo fica no chão depois de `playerDied` 
 | Kuttenberg, no arrabalde | 3073, 977 |
 | São Tiago, em Kuttenberg | 3047, 684 |
 | Stará Kutná | 3059, 1442 |
-| Grunta | 3197, 2183 |
+| Minas (Grunta) | 3197, 2183 |
 
 **As portas das igrejas** (pergunta de 16/10/2026: *as portas das igrejas são desativadas?*). Não achei porta nenhuma de igreja que o servidor controle: nas camadas do nível não há porta com nome de igreja, e perto das caixas de doação só há portas de casas vizinhas (a primeira versão destrancava tudo a 25 m da caixa e abriu casas de Grunta; foi corrigido). Um pouco depois de cada início (30 s), `src/server/respawn.ts` destranca só a porta **trancada pelo nível cujo próprio nome diga que é de igreja** (`church`, `chapel`, `kostel`, `parish`, `sacral`...) a até 40 m de uma caixa; uma porta trancada por script (a de uma propriedade, segurada por um olhar ou um arrombamento) é deixada em paz. E o log lista, **para cada igreja, as portas que há ao redor e o estado de cada uma** (`respawn: igreja de Suchdol: 3 porta(s) a 40 m, 0 de igreja destrancada(s) (trancada AnimDoor[...]; ...)`), que é como se descobre qual é a porta da igreja se ela existir. As entradas das igrejas podem ser aberturas sem porta, ou parte do prédio, que o servidor não vê.
 
 
-**Quem tem cidadania acorda na sua cidade** (Suchdol e Raborsch, na igreja; Malešov, na praça): *"Você morreu. Em 8 segundos você acorda em Suchdol, a sua cidade."* Quem não tem acorda na igreja mais próxima, como a tabela acima. Veja [Cidadania](#cidadania).
+**Quem tem cidadania acorda na sua cidade** (Suchdol e Raborsch, na igreja; Malešov e Pschitoky, na praça): *"Você morreu. Em 8 segundos você acorda em Suchdol, a sua cidade."* Quem não tem acorda na igreja mais próxima, como a tabela acima. Veja [Cidadania](#cidadania).
 
 Se um admin levantar a pessoa antes (`revive`), ela não é levada. Quem sai do servidor morto não é levantado; o número de jogador pode passar para quem entra, e o Steam ID é conferido em cada passo.
 
@@ -2433,30 +2915,206 @@ O que o gamemode faz (`src/server/dirt.ts`):
 
 ## Cidadania
 
-A seção **Cidadania** do painel (tecla F2) mostra as três cidades do reino, cada uma com o seu brasão: **Suchdol**, **Raborsch** e **Malešov**. Ao clicar numa cidade abre à direita o **senhor das terras** (o jogador a quem a região foi cedida), o **nome da família** dele e a **quantidade de cidadãos**.
+A seção **Cidadania** do painel (tecla F2) mostra as cinco cidades do reino, cada uma com o seu brasão: **Suchdol**, **Raborsch**, **Malešov**, **Kuttenberg** e **Pschitoky**. Ao clicar numa cidade abre à direita o **senhor das terras** (o jogador a quem a região foi cedida), a **Lady das terras** (a esposa dele; ver abaixo), o **nome da família** dele e a **quantidade de cidadãos**.
 
 - **Escolher** (botão *Tornar-me cidadão*, com confirmação): uma cidade só, e a escolha é **definitiva**.
 - **Morrer**: o cidadão acorda na sua cidade; quem não tem cidadania acorda nas igrejas.
+- **Kuttenberg** (pedido de 20/10/2026: *dentro de img temos os brasões de Kuttenberg, e já adicione a cidadania de Kuttenberg*): a quarta cidade, com os mesmos direitos das outras. O cidadão acorda na igreja de **São Tiago**, a mais perto do meio da cidade (Santa Bárbara fica na ponta oeste e a do arrabalde ao norte). O brasão **vai do servidor para a página** junto com ela (`data/ui-images.json`, feito por `tools/make-ui-images.py`), porque o pacote do cliente não tem mais espaço; enquanto ele não chega, a cidade aparece com um quadro vazio no lugar.
+- **Pschitoky** (pedido de 25/10/2026: *adicione a cidadania de Pschitoky, o brasão está na pasta img*): a quinta cidade, com os mesmos direitos das outras (a região `Pschitoky` do catálogo de propriedades é a das terras dela). A vila não tem igreja, então o cidadão acorda na **praça**, ao lado do quadro de avisos que você pôs lá (2307, 1821,5), no chão andável mais perto. O brasão (`Brasão Pschitoky.png`) também vai do servidor para a página (`data/ui-images.json`, `town-pschitoky`, pela mesma ferramenta, 20 KB).
+- **A Lady das terras** (pedido de 25/10/2026: *um lorde manda em uma terra; se ele tiver uma esposa ela vira Lady, então na árvore eles deviam estar juntos; e na cidadania deve aparecer o nome da Lady também*): a esposa viva do senhor das terras, tirada da árvore de família dele (ou de quem o põe como cônjuge na dela), aparece na página da cidade como **Lady das terras** com o nome do personagem dela, e na Hierarquia fica **no mesmo quadro** do marido (*& Lady Elisabeth*). O tratamento vem do título de sangue dele: a esposa de um **lorde** é *Lady*; de um **marquês**, *Marquesa*; de um **príncipe**, *Princesa*; de um **rei**, *Rainha*; de um cavaleiro, escudeiro ou pequeno nobre, *Dama*; de quem só tem um cargo (um burgomestre), ou de quem não tem título, só *esposa*; o marido de uma Lady em direito próprio é *esposo*. Um cônjuge marcado como falecido não aparece, e o companheiro de uma união não é cônjuge. Só o nome do personagem é dito, nunca o jogador (`src/server/consort.ts`, `consortStyle` em `src/server/nobility.ts`).
 - **O senhor das terras** vê o botão *Ver cidadãos*: a lista de quem mora nas terras dele, oito por página, com o botão *Depor* em cada um. **É a única forma de um cidadão mudar de cidade**: depois de deposto, ele escolhe de novo. Os administradores também veem e depõem, e `/cidadania` define ou limpa à mão.
 - Guardado por Steam ID em `playerdata/citizenship.json`.
 
-> **Ainda não testado no jogo.** O ponto de renascimento de Malešov é a praça (560, 258): se não for bom, é só trocar a posição em `citizenship.ts`.
+> **Ainda não testado no jogo.** O ponto de renascimento de Malešov é a praça (560, 258): se não for bom, é só trocar a posição em `citizenship.ts`. Nem o brasão de Kuttenberg, que vem do servidor, nem o acordar em São Tiago foram vistos no jogo.
 
 ## Ofícios das guildas
 
-Cada ofício tem as suas ferramentas, e só a guilda dele as usa (administradores usam todas):
+Cada ofício tem os seus lugares, e só a guilda dele os usa (um administrador com guilda obedece a ela; `/oficios livre` libera tudo; `/guilda entrar` troca a guilda do admin na hora):
 
-| Guilda | Usa |
+| Guilda | Usa | Habilidade que sobe |
+| --- | --- | --- |
+| **Taberneiro** (Tabernarii) | o **fogo** de cozinha: pães, tortas, ensopados, **sopas**, cerveja, assados | Sobrevivência (bebidas: Bebida) |
+| **Caçador** (Venatores) | o **defumador** | Sobrevivência |
+| **Alquimista** (Alchemistae) | o **secador** e as **mesas de alquimia** | Alquimia |
+| **Ferreiro** (Fabri Ferrarii) | a **forja** | Ofício |
+| **Artesão** (Artifices) | **costura**, de qualquer lugar: F2, Guildas, **Costurar** (roupas, botas, gibões; desde 22/10/2026 também as **joias**, anéis, colares e broches ([As joias do artesão](#as-joias-do-artesão)); desde 26/10/2026 os **cintos e bolsas** e os **casacos e túnicas com o brasão** das casas e cidades ([Cintos, bolsas e casacos de brasão](#cintos-bolsas-e-casacos-de-brasão-do-artesão)); e, desde 21/10/2026, o **kit de alfaiate**, que conserta roupas, nível 2, e o **kit de sapateiro**, que conserta sapatos e botas, nível 3, na categoria Kits de reparo) | Ofício |
+| **Coletor** (Collectores) | o **machado nas árvores** e a **picareta nas pedras**, sem mesa nem página: o E mirando a árvore ou a pedra (veja [A coleta](#a-coleta)) | Sobrevivência (árvores) e Força (pedras) |
+| **Agricultor** (Agricolae) | os **canteiros das hortas** das aldeias, com a página da horta à direita (veja [A horta e os cavalos selvagens](#a-horta-e-os-cavalos-selvagens)) | Sobrevivência |
+| **Domador** (Domitores) | a **doma** dos cavalos selvagens dos campos abertos, que era dos Agricultores até 25/10/2026 (veja [A horta e os cavalos selvagens](#a-horta-e-os-cavalos-selvagens)) | Sobrevivência |
+
+**A tela do próprio jogo não serve** (21/10/2026: *jogador caçador reportou que estava conseguindo defumar carne pelo inventário; acredito que outras guildas estavam conseguindo fazer coisas do tipo; isso não pode, o correto é só nas mesas de ofícios de cada guilda*). O defumador e o secador do jogo abrem uma tela de mercadorias que parece a bolsa, e o que se punha nela saía defumado ou seco na hora, sem receita nem nível; no fogo, a do jogo também cozinhava. Desde o KCDC 1.7.0 o servidor converte esse trabalho do jogo (`playerPreparing`), e até aqui deixava passar a guilda dona do lugar. Agora **recusa para todos** (`prepare-guard.ts`): os itens voltam como estavam, e quem é do ofício ouve *Isso se faz pela página de ofícios: no defumador, com a tecla E (Defumar)* (no secador, E; no fogo, F). A forja e a mesa de alquimia do jogo continuam: os livros do ferreiro ensinam a forja do próprio jogo, e a poção se prepara no minijogo da mesa.
+
+**A forja e a pedra de afiar** (22/10/2026: *apertei E na forja e ao sair fiquei preso igual na pedra de afiar, que todo mundo consegue usar e era para ser só o ferreiro*). Duas coisas. **Preso:** o E do jogo na forja começava uma interação do próprio jogo, cuja tela nós mantínhamos fechada (a página é nossa), e a que ficou pela metade prendia o jogador ao sair do nosso menu; agora, enquanto o nosso **Forjar** está na tela, a ação `use` (e `trigger_use`) do jogo fica desligada (`Controls.disableAction`) e o E é lido por nós (`Key.bind`), e ao se afastar da forja o jogo volta a ter o E (`src/client/cook-hint.ts`). **A pedra de afiar foi do ferreiro por uma tarde e voltou a ser de todos** (22/10/2026, à noite: *existe um ângulo ali que ainda consigo interagir com a pedra de amolar e abre o menu vanilla; para facilitar nossa vida vamos deixar liberado para todo mundo mesmo*): a trava (a ação do jogo desligada mirando a pedra, o aviso `cook.grindstone`, a afiação desfeita no servidor e o campo `forja` do `crafts.rights`) **saiu**; o E na pedra é o do próprio jogo, de qualquer ângulo, para qualquer guilda. Mirando a pedra o nosso *Forjar* continua saindo do caminho (`NATIVE_ONLY`, `src/client/cook-hint.ts`). *Ainda não testado no jogo:* se o E da forja é mesmo a ação `use` ou `trigger_use` do jogo; se não for, o log do cliente não mostra erro e o jogo abre a tela dele como antes.
+
+**O defumador e o secador prendiam como a forja** (23/10/2026: *a cabine de defumar está prendendo os jogadores igual ocorria com a forja*). Era o mesmo defeito: o E do jogo no defumador e no secador começa a preparação do próprio jogo (a animação e a tela de mercadorias), a tela é fechada por baixo da nossa página (`ItemTransfer`) e o que ficou pela metade prendia o jogador. Agora, enquanto o nosso **Defumar** ou **Secar** está na tela, a ação `use` (e `trigger_use`) do jogo fica desligada e o E é lido por nós, exatamente como na forja (`OWN_E_KINDS` em `src/client/cook-hint.ts`); ao se afastar o jogo volta a ter o E. E, mirando uma **porta** ou um **baú** ao lado (a porta da própria cabine), a nossa dica sai da frente e o E é do jogo, como já era numa cama. O fogo continua como estava (o nosso é o F; o E é do jogo: comer da panela). *Ainda não testado no jogo.*
+
+**A carne do abate vem pela metade** (22/10/2026: *vamos diminuir a quantidade de carne que os animais estão dropando, está vindo carne demais*). O jogo abate na máquina do caçador e o servidor ouve o fim (`npcHarvested`), quando o estoque da carcaça está aberto: ali cada carne e cada víscera (as 28 do jogo: carne de veado, de javali, de lebre, de lobo, coração, lombo, rim...) é cortada para **metade, no mínimo uma de cada**, e o resto é tirado da carcaça (`src/server/carcass.ts`); o couro e o que não é carne ficam como estão. `/animals carne <0.1 a 1>` muda a parte até o servidor reiniciar (o fixo está em `carcassSettings.meatShare`). O log diz `abate: X abateu um animal: carne 12 -> 6`.
+
+**O abate da caça é só dos caçadores** (21/10/2026: *mesmo eu não sendo caçador o F de abater apareceu e permitiu eu abater, não era para isso poder ocorrer*). O jogo abate na máquina do jogador e o servidor só fica sabendo depois, então até aqui a carcaça abatida por outro era esvaziada (a carne e o couro perdidos, com o aviso) mas a faca saía. Agora o servidor diz a cada cliente o que a guilda dele permite (`crafts.rights`, a cada entrada, a cada troca de guilda e no `/oficios livre`), e para quem não é caçador o cliente **desliga a ação de abater do próprio jogo** (`butcher`, a do F diante da carcaça, `Controls.disableAction`): o F não abate. A carcaça esvaziada continua valendo para um cliente que ainda não recebeu o aviso. *Ainda não testado no jogo:* se o aviso do F some junto ou só deixa de funcionar.
+
+**A página de ofícios** (à direita, como a criação de personagem): no defumador, no secador e na forja o E, e no fogo o F (o E do fogo é do jogo: comer da panela), abre o menu **Cozinhar / Defumar / Secar / Forjar** e **Sair**; o primeiro abre a página. A tela do próprio jogo que o mesmo E abriria é fechada na hora (a de escolher comida do fogo, a de itens do defumador) e, na forja, a tela de receitas do jogo fica desligada enquanto o "Forjar" está na tela. Na página: a lista de **categorias** (uma lista suspensa, com quantas receitas cada uma tem), a busca, as receitas em páginas (PRONTO, FALTA ou NÍVEL n) e o detalhe com o que a receita pede e quanto você tem. **Fazer** toca a animação do lugar (a panela no fogo, a do defumador), gasta os ingredientes e dá o item e a experiência. As receitas (697: 627 tiradas das tabelas do jogo (com as 5 ferraduras), as 12 sopas, as 6 peças de malha da forja, as 4 que o ferreiro faz com o que os Coletores trazem (carvão de lenha, a barra de prata, a taça e o cálice) e, do artesão, os 2 kits de reparo e as 16 joias; e as 30 peças de arreio de cavalo do ferreiro; mais farinha, malte, lúpulo, linha e madeira de arco, itens nossos vendidos pelos vendedores) se **liberam sozinhas** conforme o nível da habilidade sobe. A forja também faz as **peças de malha** (21/10/2026: *adicione para o ferreiro cotas de malha*; o som de uma cota no jogo é `armor_chainmail`, que a seleção da forja nunca reconhecia, e nenhuma peça de malha tinha sido forjada): as quatro **cotas de malha** (italiana, nível 8; saxônica, 11; curta, 13; longa, 16, em ferro as duas primeiras e em aço as outras, a longa com cobre), a **gola de armadura** (nível 6) e o **almofre de malha** (nível 9), na categoria **Cotas e almofres** (as cotas, em **Peitorais e cotas**, com as couraças de placa); as luvas e manoplas (`armor_gauntlets`) ainda ficam de fora. A forja também faz **arcos** (15, do arco de nogueira do vilarejo ao arco longo de freixo; madeira de arco e linha, e a madeira exótica nos de nível 15 em diante), **flechas** (10 tipos, **5 por vez**: uma haste, uma pena e uma ponta de metal do nível delas) e o kit de atirador; os arcos e flechas de missão ficam de fora. Os **ícones** são os do próprio jogo, desenhados pelo jogo por baixo da página, num fundo da cor do papel; os **títulos** (COQUENDI, DEFUMADOR, SECADOR, FABRICARE, ALCHEMY, SUERE) vão do servidor junto com a página, fora do pacote do cliente. **A alquimia** mantém o minijogo do jogo: na mesa, o menu **Criar / Sair** abre a página, a poção escolhida entra no livro de receitas, e a mesa abre na próxima vez.
+
+**As animações do próprio jogo (25/10/2026: *ao interagir com a forja, abre o nosso menu e usamos uma animação genérica; ao selecionar um item, passar para a animação de forja do vanilla*; o mesmo para alquimia, cozinhar, defumar e secar).** O **minijogo** da forja e o da mesa de alquimia não podem ser abertos por script numa receita escolhida na nossa página: o do jogo só roda pelo E dele, na estação dele, com as receitas dele, e duas vezes deixou jogador preso numa tela debaixo da nossa (forja em 22/10, mesa em 24/10). O que mudou foi o trabalho: em vez de uma animação qualquer, o jogador faz **o trabalho do artesão do próprio jogo**, em etapas, com as ferramentas na mão e **virado para a estação**, pelo tempo da receita (`src/server/craft-animation.ts`, com o lugar em `src/server/craft-spot.ts`):
+
+| Estação | O que o jogador faz |
 | --- | --- |
-| **Ferreiro** (Fabri Ferrarii) | a **forja** (ferraria do jogo) |
-| **Alquimista** (Alchemistae) | as **mesas de alquimia** |
-| **Caçador** (Venatores) | o **defumador** e o **secador** do açougueiro |
-| **Taberneiro** (Tabernarii) | o **fogo** de cozinha: assar, ensopados e o que for do fogo |
-| **Artesão** (Artifices) | nada ainda: o jogo não tem esse ofício; o sistema do alfaiate será feito à parte |
+| Forja | pega a lâmina, **aquece na forja puxando o fole**, leva à bigorna e **martela**, e no fim **tempera** (as do ferreiro do jogo, `BlacksmithBehavior*`), com o **martelo** na mão direita e a **lâmina semiacabada** na esquerda; numa receita curta a parte de aquecer fica de fora |
+| Fogo | **mexe a panela** sobre a fogueira com a concha (`Cooking`, `campfire`) ou, num caldeirão, **mexe o caldeirão** com a concha |
+| Mesa de alquimia | **põe a base** na panela com o frasco e depois **as ervas**, uma atrás da outra; uma personagem mulher **mói no pilão** (`ApothecaryMortar`, que o jogo só tem para elas) |
+| Defumador e secador | as animações do próprio jogo nesses lugares (`SmokehouseSniff`, `Drying`, este com as ervas na mão) |
+| Costura | o alfaiate do jogo trabalhando o molde em pé (`TailorPattern`; a costura sentada precisa de uma cadeira) |
 
-A forja e as mesas são recusadas pelo próprio mod (`craftingStarting` devolve `false`, com um aviso no chat); o fogo, o secador e o defumador são os do servidor (`/cozinhar`, o menu do fogo, o **Usar** do inventário). Duas coisas o mod não deixa recusar antes: a **tela da forja abre** para qualquer um (o aviso vem quando se escolhe uma receita) e a **pedra de amolar** é toda do jogo; o que o servidor faz é **desfazer a afiação** de quem não é ferreiro (o aviso diz isso), pelo evento de inventário `sharpen`. O kit de reparo é de todos.
+Os sons são os do trabalho (bigorna, fole, panela). As do ferreiro o jogo só tem para corpo de homem: uma ferreira continua com a de antes. O `/cozinhar` usa a do fogo. O log escreve uma vez a rotina de cada estação (`craft: rotina de forja (homem): ...`). **Ainda não testado no jogo:** se as ferramentas ficam na mão certa e se a pessoa fica na frente da bigorna (o corpo é virado para a estação, sem ser movido).
 
-> **Mesas de alquimia que não abriam:** o log do servidor mostrava `alchemy character unavailable: nativeModifierTieOrderRequired:f9de0477...` para quem tinha o talento **"Secrets of matter I"** (e o **II**, que depende dele): o servidor não consegue montar o personagem alquimista com esse talento. Ele está **bloqueado na tela de talentos** e, em quem já o tinha, é **tirado ao entrar, com o ponto devolvido** (`perk-guard.ts`). Ainda não visto funcionando no jogo.
+**O filtro das receitas tem ícones** (25/10/2026: *nas opções de filtro das receitas, alquimia, ferreiro e etc., vamos usar o padrão dos ícones que usamos*). A lista de categorias da página de trabalho (`ui-src/craft.html`) mostra, antes de cada nome e no botão, um **desenho de traço** no padrão do painel (24x24, a cor da tinta, dourado na escolhida): a grade para *Todas*, a panela, a caneca, o queijo, o prato, o pão e a tigela da cozinha; o peixe, a linguiça, o ovo, o cogumelo, a folha e a maçã do defumador e do secador; a adaga, a espada, o montante, o machado, a lança, a maça, o arco, a flecha, o escudo, o capacete, a luva de malha, a ferradura, a sela e o resto da forja; o anel, a bota, as calças, o chapéu, o colar, o gibão, a luva, a túnica e o carretel da costura; a cruz, o frasco, a caveira e a gota da alquimia; a cenoura, a folha, a maçã e o saco de especiarias da horta. Uma categoria sem desenho usa a etiqueta. *Kits de reparo* é a chave inglesa na forja e o carretel na costura. Os desenhos estão em `CAT_ICONS` e o nome de cada categoria em `CAT_KEY`.
+
+**As ferramentas só nas partes sem troca de mãos** (25/10/2026, à noite: *na animação do ferreiro fica um martelo flutuando na hora de forjar*). O ferreiro e o cozinheiro do jogo pegam o martelo, a lâmina e a concha de um **encaixe** da estação (`hammerSlot`, `swordSlot`, `scoopSlot`) e os põem de volta nele, por eventos dentro dos próprios clipes (`pickup pickupHammer,hammerSlot,Right`, `place placeHammer,hammerSlot,Right,true`, `place placeSword,swordSlot,Left,true`, `place,scoopSlot,Right,true`; as variáveis do comportamento, `hammerItem` e `hammerSlot`, ficam vazias para um jogador). O objeto que o servidor põe na mão de quem toca o clipe era largado por esse `place` e ficava parado no ar. Agora o **martelo e a lâmina** só aparecem no **martelar** (`BlacksmithBehaviorForgingLoop`, que não tem esse evento) e a **concha** no **mexer** (`Cooking`); o aquecer, o entrar e o temperar são com as mãos vazias. Se o martelo ainda flutuar *durante* o martelar, o passo seguinte é dar ao objeto o osso `RightHandSlot` (a opção `joint` do `playAnimation`). **Não testado no jogo.**
+
+**A tocha abaixa** (25/10/2026, à noite: *nas animações gerais, quando o jogador vai fazer e estiver com tochas em mãos, a tocha deve abaixar; se não, ela fica aparecendo nas animações, meio bugada*). Antes de qualquer animação que o servidor toca num **jogador** (o trabalho dos ofícios, a horta, as emoções, sentar e deitar, beber, a doma, `/anim`), uma tocha **empunhada** (a classe dela na mão direita ou na esquerda) é guardada: a linha dela no inventário perde o `equipped`, como o criador de personagem tira roupa para provar outra (`Inventory.set`, com as linhas e os atalhos como estavam; `src/server/torch-down.ts`, chamada logo antes de cada animação de um jogador: o trabalho dos ofícios em `craft-animation.ts`, a horta, as emoções, sentar e deitar, beber, a doma e `/anim`; um gancho único em `Player.playAnimation` não serve, porque os métodos de um jogador não ficam no `Player.prototype`). O jogador é avisado (uma vez por minuto) e **empunha a tocha de novo** quando terminar. Tocha só equipada, sem estar na mão, e mãos vazias não mexem em nada (nem o inventário é lido). Falhas vão ao log (`tocha: ...`). **Não testado no jogo:** se o jogo tira a tocha da mão ao desequipar.
+
+**A pedra de amolar que não consertava** (25/10/2026: *jogador falou que mesmo após ficar afiando a lâmina muito tempo ela não reparava*). O log mostra a causa de antes: na tarde de **22/10** a pedra foi só do ferreiro, e quem não era ferreiro tinha a afiação **desfeita** pelo servidor (`guild-crafts: Kael de Borova (venatores) barrado em sharpen`, três vezes naquela noite); na mesma noite ela voltou a ser de todos e isso saiu do código. Desde então nada nosso mexe na afiação: quem decide é o servidor do KCDC, que só aceita a afiação numa **pedra do próprio nível** (uma copiada no World Builder não serve), perto dela, e numa arma que o jogo afia, e **desfaz em silêncio** o que não aprova. Para saber, o log agora escreve cada afiação aceita (`sharpen: Fulano afiou Espada ...: 54% -> 71%`, `src/server/sharpen-log.ts`): se um jogador afiar e não aparecer nada, foi o servidor do KCDC que recusou.
+
+### A mesa de alquimia, as armas de madeira, a gazua e as joelheiras (24/10/2026)
+
+- **A mesa de alquimia prendia o jogador** (*"o bug que ocorreu na forja e no defumar ocorreu na mesa de alquimia: jogador abre e fica preso sem conseguir sair nem iniciar o processo de criação"*). Foi o mesmo erro: o **E do jogo** na mesa abria a alquimia dele, que o servidor recusa até a poção ser escolhida, e a tela que sobrava ficava por baixo da nossa página. Agora, nas mesas do nível e nas postas com o World Builder, o **Preparar** é nosso: enquanto o aviso está na tela o `use` do jogo fica desligado e o **E** é lido pela tecla (`OWN_E_KINDS` em `src/client/cook-hint.ts`), o menu de criação do jogo fica desligado, a página faz a poção (`BREW_SECONDS` na mesa, a animação de pôr a base e o ingrediente) e a lista de pontos que o servidor manda ao cliente inclui as mesas do nível (`src/server/cook-menu.ts`).
+- **Armas de madeira no ferreiro:** seis receitas de **lenha**, categoria *Armas de madeira* (bastão, clava de treino, escudo de treino, espada, machado e montante de treinamento), do nível 1 ao 3 do ferreiro.
+- **Gazua:** receita nova no ferreiro, **2 gazuas** por sucata, ferragem e carvão (`forja:gazua`, nível 3).
+- **Joelheiras em forma de folha:** o jogo chama `Leaf-shaped couters` (cotoveleiras) uma peça que na verdade é de **perna** (`LegsPlate07`), e jogadores fabricaram a peça errada. O nome vem agora do texto do jogo corrigido em `tools/make-item-names.py` (`NAME_FIXES`): *Joelheiras em forma de folha*, categoria *Pernas*, no ferreiro, em `ITENS.md` e em `ARMADURAS.md`.
+
+### As joias do artesão
+
+Pedido de 22/10/2026: *depois de fazer isso tudo vamos adicionar receitas de anéis e colares para o artesão*. Na **costura** (F2, Guildas, **Costurar**), duas categorias novas, **Anéis** e **Colares e broches**: **16 joias**, todas as que o jogo tem de anel, colar e broche que não são de missão nem pedem o que o jogo não vende. A matéria é a prata que os Coletores trazem (a **barra**, que o ferreiro funde do minério), o cobre, o jaspe e o pó de esmalte do vendedor ferreiro (10 de cada por dia), a linha e o linho do alfaiate e o material de fixação. O nível vai do preço da peça: do broche de latão (2) ao anel de pedra preciosa (19), cada uma com um pouco mais do que vale o que entra; o tempo é de 11 a 19 s e a habilidade é a de Ofício, como a do resto da costura.
+
+| Peça | Nível | O que leva |
+| --- | --- | --- |
+| Broche de latão com letras | 2 | 1 cobre, 1 material de fixação |
+| Cruz de estanho | 4 | 2 cobre, 1 linha |
+| Broche de prata | 5 | 1 barra de prata, 1 material de fixação |
+| Contas de jaspe | 7 | 2 jaspe, 1 linha |
+| Escapulário de santo | 8 | 1 linho, 2 linha, 1 cobre |
+| Escapulário com abertura | 11 | 1 linho, 2 linha, 1 cobre, 1 jaspe |
+| Anel de prata gravado | 12 | 2 barras de prata, 1 material de fixação |
+| Broche feminino | 13 | 2 cobre, 1 jaspe, 1 linha |
+| Anel de prata com pedra preciosa | 14 | 2 barras de prata, 1 jaspe |
+| Colar de pedras preciosas | 14 | 3 jaspe, 1 barra de prata, 1 linha |
+| Escapulário com insígnia | 15 | 1 linho, 2 linha, 1 barra de prata, 1 pó de esmalte |
+| Broche de prata esmaltado | 16 | 2 barras de prata, 1 pó de esmalte |
+| Cruz de prata com insígnia | 17 | 2 barras de prata, 1 pó de esmalte, 1 linha |
+| Cruz prateada com granate | 17 | 2 barras de prata, 1 jaspe, 1 linha |
+| Anel de pedras preciosas | 18 | 3 barras de prata, 2 jaspe |
+| Anel de pedra preciosa | 19 | 3 barras de prata, 2 jaspe, 1 material de fixação |
+
+**Fora, por falta de matéria:** as joias de ouro, as de granate e as de pérolas do jogo (o jogo não vende ouro, granate nem pérola; as que levam granate aqui levam jaspe no lugar). O vendedor ferreiro continua comprando as peças de prata (a taça, o cálice, os anéis e o broche), e a forja continua com a **barra**, a **taça** e o **cálice**. As receitas saem de `tools/make-craft-recipes.py` (`JEWELS`). *Ainda não testado no jogo:* que o jogo aceita as 16 peças na bolsa e as veste (anéis e colares são equipamento; as contas e o colar de pedras são itens de saque, que se guardam e se vendem).
+
+### Cintos, bolsas e casacos de brasão do artesão
+
+Pedidos de 26/10/2026: *vamos add cintos e bolsas para o artesão poder fazer* e *nas criações dos artesões vamos adicionar para ele poder criar os casacos com brasões de casas*. Na **costura** (F2, Guildas, **Costurar**), 49 receitas em 14 categorias novas (nove das de brasão já existiam por engano: veja *O que mudou*), de `tools/make-craft-recipes.py` (`BELTS`, `HOUSE_COATS`).
+
+**Cintos e bolsas** (categorias **Cintos** e **Bolsas**). Os 3 cintos e as 4 bolsilhas do jogo, que são o que dá ao jogador os seus **espaços de acesso rápido**: 2, 3 e 4 nos cintos de caçador, de cavaleiro e de nobre, e de 1 a 4 nas bolsilhas de andarilho, de caçador, de cavaleiro e de nobre. Couro nos mesmos degraus das roupas (vaca, porco, cervo), linha, o material de fixação do ferreiro para fivelas e fechos, e, nas duas peças de nobre, uma **barra de prata** dos Coletores. O nível vai do preço da peça, do cinto de caçador (6) à bolsilha de nobre (20). No jogo as bolsilhas se chamam `Pouch_test_*` (nome de teste: o texto, o ícone e os espaços são de peça acabada).
+
+| Peça | Nível | O que leva |
+| --- | --- | --- |
+| Cinto de caçador (2 espaços) | 6 | 2 pele de vaca, 2 linha, 1 material de fixação |
+| Bolsilha de andarilho (1) | 8 | 1 pele de vaca, 2 linha |
+| Bolsilha de caçador (2) | 11 | 1 pele de porco, 2 linha, 1 material de fixação |
+| Cinto de cavaleiro (3) | 14 | 2 pele de porco, 3 linha, 2 material de fixação |
+| Bolsilha de cavaleiro (3) | 16 | 1 pele de cervo, 1 linho, 3 linha, 1 material de fixação |
+| Cinto de nobre (4) | 19 | 2 pele de cervo, 3 linha, 2 material de fixação, 1 barra de prata |
+| Bolsilha de nobre (4) | 20 | 2 pele de cervo, 1 linho, 3 linha, 1 barra de prata |
+
+**Casacos e túnicas de brasão** (uma categoria **Brasão: <casa>** para cada casa e cidade). São as **42 peças** de roupa de tronco que levam o brasão de Kuttenberg, Praga, Bergow, Leipa, Nebakov, Písek, Polner, Ruthard, Semine, Vavák, Zavish ou Zimburg: os sobretudos de brasão (`Coat02`), os casacos (`Coat04`, `Coat11`) e as túnicas de brasão (`Waffenrock`), as mesmas que `ARMADURAS.md` lista em *Casas e cidades*. Cada uma leva o que a roupa leva (linho; lã de carneiro nas mais caras) e **duas linhas a mais** para bordar o brasão; o nível vai do preço, do 6 ao 18, e o trabalho é mais demorado que o de uma túnica lisa (15 a 21 segundos). A lista distingue as casas pelo nome (*Sobretudo de brasão (Leipa)*), porque o jogo dá o mesmo nome a todos. Fica de fora o que é único (de missão ou de recompensa), o que é armadura ou capuz, as peças de Skalitz (são as roupas do Henry) e as das ordens e do reino da Hungria.
+
+| Casa | Peças | Níveis | O que faz |
+| --- | --- | --- | --- |
+| Bergow | 6 | 7 a 18 | sobretudo, túnica simples, com bainha, de montaria, para cavaleiro, ornamentada |
+| Kuttenberg | 7 | 6 a 17 | sobretudo, túnica simples, casaco comum com brasão, casaco quente bordado, túnica de montaria, para cavaleiro, com fecho |
+| Leipa | 3 | 7 a 18 | sobretudo, túnica para cavaleiro, túnica com fecho |
+| Nebakov | 4 | 6 a 13 | sobretudo, túnica simples, com bainha, para cavaleiro |
+| Polner | 2 | 7 a 12 | sobretudo, uniforme da família Polner |
+| Praga | 4 | 10 a 17 | casaco comum, túnica com bainha, de montaria, com botões |
+| Písek | 4 | 7 a 16 | sobretudo, túnica com bainha, de montaria, para cavaleiro |
+| Ruthard | 3 | 8 a 12 | sobretudo, túnica simples, com bainha |
+| Semine | 5 | 8 a 17 | sobretudo, túnica simples, com bainha, para cavaleiro, de montaria |
+| Vavák | 2 | 8 a 17 | sobretudo, túnica para cavaleiro |
+| Zavish | 1 | 14 | túnica dos Lordes de Garbow |
+| Zimburg | 1 | 13 | túnica com bainha |
+
+**O que mudou do que já existia.** Nove dessas peças já saíam da costura por engano, sob nomes comuns: o gerador pegava a peça mais cara de cada nome, e *Túnica simples* era a de Semine, *Túnica de montaria* a de Písek, *Túnica para cavaleiro* a de Kuttenberg. Elas foram para a categoria da sua casa (o nível das outras roupas não se mexeu). As túnicas lisas, sem brasão, ficaram sem receita até a rodada seguinte (veja **As túnicas lisas**, logo abaixo). As peças das ordens (teutônica, da Cruz) e a do reino da Hungria que já saíam continuam onde estavam, em *Túnicas e vestidos*. Se o jogo recusar uma peça na bolsa (a classe do cinto e da bolsilha ainda não foi vista no jogo), a mensagem diz *o jogo não aceitou este item, e nada foi gasto* e a linha `craft: o jogo não aceitou ...` do registro traz o código. *Ainda não testado no jogo:* que as sete peças entram na bolsa, se equipam e dão os espaços de acesso rápido, e que as túnicas de brasão aparecem com o brasão certo.
+
+**As túnicas lisas** (26/10/2026, no mesmo dia: *vamos add túnicas lisas para o artesão*). Seis nomes do jogo, a *Túnica simples*, a *com bainha*, a *para cavaleiro*, a *de montaria*, a *ornamentada* e a *com fecho*, vêm em **tinturas numeradas** (`Waffenrock02_m01_D`, `_m02_D`...) e também com o brasão de uma casa. A receita de cada nome era a da peça mais cara, que em três deles era de uma casa e foi para a categoria dela: ficaram sem túnica lisa. Agora **cada tintura dos seis** sai da costura, numa categoria só delas, **Túnicas lisas** (**38 receitas**: simples 5, com bainha 3, de montaria 15, para cavaleiro 6, com fecho 4 e ornamentada 5), no **nível que o nome já tinha** (simples 10, com bainha 12, de montaria 15, para cavaleiro 16, com fecho 18, ornamentada 19) e com o que a túnica leva (linho, linha, lã de carneiro nas mais caras). A cor vem **depois do nome**, *Túnica de montaria (azul-marinho)*, lida do ícone da própria peça (`tools/make-tunic-colours.py` grava `tools/tunic-colours.json`; a palavra é uma ajuda, e a lista mostra o ícone): uma palavra que duas tinturas dividem leva número (*ocre 1*, *ocre 2*). Os seis nomes saíram da categoria *Túnicas e vestidos* (as três que já estavam lá, a com bainha, a com fecho e a ornamentada, agora estão só na nova), e o resto dessa categoria ficou como era. **Hoje a costura tem 339 receitas, e a lista toda do jogo, 779.**
+
+### Selas e arreios do ferreiro
+
+O ferreiro (Fabri Ferrarii) forja **coisas de cavalo** (23/10/2026: *coloque para o ferreiro poder forjar selas e coisas de cavalo*): **35 receitas novas** na forja, em quatro categorias (`tools/make-craft-recipes.py`, `TACK`; as peças vêm da tabela `item__horse.xml` do jogo, que tem 505, entre cores e brasões: aqui uma de cada tipo sem brasão, numa cor que os conjuntos do próprio jogo usam, para o nome ser certamente de arreio de cavalo).
+
+- **Selas** (11, nível 2 a 22, pelo preço): Praga (2), de soldado (4), normanda (6), de Moglen (8), lovariana (10), húngara (12), de cavaleiro da Transilvânia (14), de Bridon (16), de Bravante (18), da Cracóvia (20) e de dragão (22). Pedem **couro** (vaca, porco ou cervo, pelo peso e pelo nível), **madeira de arco** para a armação, **ferro** para os estribos, **material de fixação**, linha e linho.
+- **Rédeas e chanfros** (9): rédeas de couro macio (2), bridão com focinheira (4), bridão de placa (7), de Sharukan (10), do Sacro Império (12), de torneio (17); **chanfros** de placa: milanês (14), tirolês (20) e de dragão (22), de aço.
+- **Arreios e caparazões** (10): arreios de Mainz (2), de Wieluń (4) e de Haia (9); caparazões de linho, do acolchoado ao decorado, até o de carrasco com arreio (22).
+- **Ferraduras** (5, as receitas do próprio jogo): de fazendeiro (2), do cavaleiro (8), de Lovarian (12), do nobre (17) e de corrida (22), de sucata, ferro e aço.
+
+Fora: as peças com brasão de uma casa. As cores além da primeira ficam para quando pedirem. O cavalo se veste pela aba **Cavalo** do inventário (a última aba, perto do cavalo; `gearLocked` desligado nos cavalos de jogador; o registro do servidor mostra `Horse N now wears 3 piece(s) of gear` a cada troca); `/horse gear <código>` e `/horse gear preset` continuam para o admin. *Ainda não testado no jogo:* que a aba aceita as peças forjadas (as compradas e as achadas já foram aceitas).
+
+### A coleta
+
+A guilda dos **Coletores** (Collectores; pedido de 21/10/2026: *"uma guilda nova Coletor ... sempre que o jogador bater com o machado em uma árvore, depois de x batidas ele recebe lenha ... com picareta nas pedras, chance muito baixa de vir prata, chance moderada de vir ferro ou parafuso e na maior parte algo inútil"*; *"não precisa cair, só de chegar o aviso nativo lá na esquerda está ótimo"*).
+
+**Com E, desde a mesma noite** (*"golpeei umas 11 vezes, o machado quebrou e só recebi uma lenha; acho melhor apertar E e começar a animação de cortar lenha com machado nas mãos, ou nas pedras de mineração começar a picareta; assim conseguimos controlar melhor"*). Olhando para uma árvore ou uma pedra, a até 2 m do corpo (o alcance padrão, [O alcance do E e do F](#o-alcance-do-e-e-do-f)), o Coletor vê **[E] Cortar lenha** ou **[E] Minerar** (quem não é Coletor não vê nada). O E começa o trabalho: o personagem fica parado fazendo a animação do próprio jogo, a do lenhador cortando a árvore (`LumberJackCuttingTree`) com o machado de lenhador na mão, ou a do pedreiro com a picareta (`StonemasonPick`; na mão, a picareta do cavaleiro, `axeBattle03`, a mesma da bolsa, com a de mineiro do jogo, `pick`, de reserva: com ela o objeto não apareceu na mão em 22/10/2026), e a cada tantos segundos vem uma lenha, ou uma tentativa na pedra, até a árvore ou a pedra se esgotar. Enquanto trabalha, a dica vira **[E] Parar de cortar** (ou **Parar de minerar**). Nada vai para o chão: o que vem entra na bolsa, e o aviso do próprio jogo à esquerda é tudo o que aparece.
+
+- **Ferramenta na bolsa** (não precisa estar na mão): qualquer machado do jogo (menos o de treino, de madeira) para as árvores; a picareta para as pedras. Cada lenha ou tentativa gasta **1,5%** da ferramenta; abaixo de 2% ela não serve mais (*conserte com um kit de reparo ou faça outra no ferreiro*): uns 65 trabalhos por ferramenta nova. **Dois machados (ou duas picaretas) iguais, na mesma condição, são uma linha só do inventário**, e a condição é da linha: um desgaste gastava os dois (25/10/2026: *se ele coletar recursos, minério ou lenha, e ter 2 machados, os dois se quebram juntos*). Agora o servidor **separa um da pilha** e gasta só ele: o da mão primeiro, senão o de melhor condição, de modo que dois machados se revezam e cada um dura o dobro. Se o inventário não tem lugar para o separado, aquela lenha sai sem gastar nada (o log diz `coleta: ... não coube na bolsa`), e se a retirada falha o machado separado é desfeito.
+- **Árvore** (só as vivas das matas: pinheiro, abeto, faia, carvalho, bétula, tília, salgueiro, sorveira; não as secas, queimadas, doentes, pequenas, os tocos, os galhos, as caídas nem as macieiras dos pomares): **1 lenha a cada 10 s**, com **4 XP de Sobrevivência** (1 s a menos a cada 6 níveis de Sobrevivência, nunca menos de 5 s). Uma árvore dá **2 a 4 lenhas** (carvalho e faia 4; pinheiro, abeto e tília 3; bétula, salgueiro e sorveira 2) e **descansa 1 hora**.
+- **Pedra** (as rochas e pedras do mapa, das encostas às pedreiras): **uma tentativa a cada 8 s**, com **2 XP de Força** (1 s a menos a cada 6 níveis de Força, nunca menos de 4 s). Cada tentativa: **minério de prata 1%** (**3%** nas rochas da região de Kuttenberg, `kutnohorsko_rocks`, e das pedreiras); senão, por peso: **nada 10**, **lasca de pedra 45** (sem serventia, 0,2 kg), **sal 10** (o sal do jogo, que o taberneiro e o caçador usam; pedido de 22/10/2026), **sucata 14**, **material de fixação 11**, **ferro 10**. Uma pedra dá de **3** (as pequenas, à beira da estrada) a **12** tentativas (os penhascos e as pedras grandes) e **descansa 30 minutos**.
+- **Para**: E de novo; **andar** (W, A, S, D, as setas ou o espaço, depois de 0,7 s de carência para a tecla ainda apertada da caminhada até a árvore: *se o jogador andar deve cortar a animação, senão ele fica preso na animação*, 22/10/2026; o corpo é segurado parado pela animação, por isso a tecla é lida no cliente, como numa cama); sair do lugar (mais de 1,5 m); levar um golpe ou um tombo; o jogo cortar a animação (sacar a arma, por exemplo); a árvore ou pedra se esgotar; a ferramenta acabar. Não começa montado, nem durante outro trabalho de ofício.
+- O mesmo modelo a até 1,8 m (árvore) ou 2,5 m (pedra) é a mesma árvore ou pedra. Árvore e pedra não caem nem quebram de verdade (o jogo não deixa o servidor tirá-las do mapa): o servidor guarda o que cada uma ainda dá, e nada disso passa de um reinício.
+- **Avisos** (na linha de avisos do jogo): sem ferramenta, ferramenta gasta, árvore ou pedra esgotada, saiu do lugar, foi interrompido; quem não é Coletor, se chegar a mandar o pedido, *Cortar lenha e quebrar pedra é ofício dos Coletores...* (uma vez por minuto).
+- **No log**: cada lenha (`coleta: X cortou lenha (modelo, resta N)`), cada prata (`achou minério de prata`) e cada E que não começou e por quê (`coleta: X não começou a cortar lenha: sem ferramenta`).
+- **O ferreiro** faz as ferramentas (*a picareta deve virar ferramenta do ferreiro*): na categoria **Ferramentas** da forja, o machado de lenhador (nível 2: 2 sucatas, 1 lenha, 1 carvão) e a picareta (nível 6, antes 12 na tabela do jogo: 2 ferros, 2 sucatas, 2 lenhas, 1 carvão). Em **Carvão**, 2 lenhas dão 3 carvões (nível 1). Em **Prata**, o minério vira **barra de prata** (nível 4: 1 minério e 1 carvão) e a barra vira a prata do jogo: taça de prata (6) e cálice (9); os anéis e o broche de prata, que a forja fazia desde 21/10/2026, são do artesão desde 22/10/2026 ([As joias do artesão](#as-joias-do-artesão)); o jaspe e o pó de esmalte o vendedor ferreiro vende (10 de cada). O vendedor ferreiro **compra** a lenha, o minério e a barra de prata e essas peças, à frente do resto da lista dele.
+- **Itens nossos** (`tools/make-craft-recipes.py`): Lenha (3 moedas no preço do jogo), Minério de prata (15), Barra de prata (30) e Lasca de pedra (0,1).
+
+**O som** (23/10/2026: *"o barulho de cortar madeira e minerar só pode dar para escutar em quem estiver perto"*): a animação do lenhador e a do pedreiro tocam no corpo de quem trabalha **em todas as máquinas**, e cada uma dispara sons de ofício do próprio jogo (o machado no tronco, `f_lu_axe_log2`, a picareta na pedra, `f_sto_pickaxe_stone`, o cinzel, as pedras que caem), que o jogo deixa chegar a **30 m** (15 e 20 m alguns), medida de praça de aldeia. O servidor avisa a todos quem está trabalhando e em quê (`work.sounds`, a cada 4 s enquanto alguém trabalha; `work-sound.ts`), e **cada máquina corta esses sons nos corpos a mais de 12 m** (`client/work-quiet.ts`, a cada 60 ms, como já se fazia com os dados): quem está a menos de 12 m ouve; o próprio trabalhador ouve o seu. O que escapa é um estalo. O mesmo vale para a pá e a enxada do Agricultor. *Não testado no jogo.*
+
+**O primeiro jeito (21/10/2026, à noite) e por que mudou:** a primeira versão contava os golpes de verdade (clique esquerdo com o machado sacado): não reconhecia machado nenhum (o item da mão, `rightHandItem`, vem em 32 dígitos na ordem do motor do jogo, não no GUID sem os traços), e mesmo corrigido o jogo gastava o machado a cada golpe numa árvore até quebrar. Agora o golpe é a animação e o desgaste é o do servidor.
+
+**O kit** (22/10/2026: *ao receber o kit inicial aparece no chat que para cortar lenha ou minerar precisa apertar click esquerdo, mas não é assim: é só interagir com árvore ou pedra*): o aviso do `/coleta kit` e o do kit da guilda diziam o botão esquerdo, de quando era o clique; agora dizem *olhe para uma árvore ou uma pedra e aperte E; aperte E de novo, ou ande, para parar*.
+
+*Ainda não testado no jogo:* que o andar corta a animação e solta o corpo; que a picareta do cavaleiro aparece na mão na animação do pedreiro (o log diz `craft: mina: StonemasonPick com axeBattle03 (...) na mão direita` na primeira vez); que a dica aparece mirando a árvore e a pedra; que a animação do lenhador e a do pedreiro tocam com a ferramenta na mão (o log diz `craft: animação de lenha: ...` e `de mina: ...` na primeira vez; num corpo de mulher o jogo pode não ter essas animações, e o trabalho segue sem ela); que o desgaste da ferramenta é aceito. O código: `src/server/gather.ts`, `src/client/gather.ts`, `src/client/trade-rights.ts`, `/coleta`.
+
+**As sopas** (pedido de 20/10/2026: *adicione sopa nas receitas do taverneiro na profissão da guilda*). O jogo não tem sopa comum: só três sopas de missão e as panelas de ensopado, que não saem da panela. Então são **12 itens nossos** (`src/server/soups.ts`; itens e receitas vêm de `tools/make-craft-recipes.py`), na categoria **Sopas** do fogo, de Sobrevivência nível 3 a 19, de 7 a 10 s cada, **2 ou 3 pratos por panela**: sopa de repolho (3), de cebola (4), de alho (5), de urtiga (6), de legumes (8, três pratos), de ervilha com bacon (9), de cogumelos (11), de cerveja (12), caldo de galinha (13, três pratos), sopa de peixe (15), gulache (17) e sopa de lagostim (19). Cada uma pede de 4 a 7 ingredientes, **todos à venda no taberneiro** (repolho, cebola, alho, urtiga, cenoura, pastinaca, nabo, alho-poró, ervilhas assadas, bacon, pão, creme, cerveja, ovo, sal, água potável, banha, pimenta, frango, truta, carne bovina, lagostim, boletos). Na bolsa a ação do prato é **Comer** (o caldo, **Tomar**): enche de **18 a 38% do estômago** (um pão dá 19, um assado 26, as sopas de missão do jogo 30) e **tira de 10 a 20 da sede**, e o aviso diz quanto. Com o estômago cheio (97% ou mais) o servidor recusa e o prato fica na bolsa. Não dão vida, fôlego nem efeito nenhum (para não virarem poção), e não têm a animação de comer do jogo (a dele mostra um pão). O servidor registra `soups: 12 sopas nas receitas do fogo, que se comem da bolsa`.
+
+> **Ainda não testado no jogo:** que o jogo aceita os 12 itens novos (o log do servidor diz `soups: 12 ...`; se faltar, o item não existe na bolsa) e mostra o **Comer** no prato.
+
+> **Mesas de alquimia que não abriam:** o log do servidor mostrava `alchemy character unavailable: nativeModifierTieOrderRequired:f9de0477-2f59-4eec-b522-fa943f542277` para quem tinha o talento **"Secrets of matter I"** (e o **II**, e os de equilíbrio, `ca293053-...`): o servidor não consegue montar o personagem alquimista com esses talentos. Eles estão **bloqueados na tela de talentos** e, em quem já os tinha, são **tirados ao entrar, com o ponto devolvido** (`perk-guard.ts`); só esses quatro, e qualquer outro "Secrets of ..." da árvore da alquimia: as outras passivas de alquimia ficam livres. Foram liberados em 19/10/2026 (*ative de volta as passivas de alquimia*) e **bloqueados de novo em 21/10/2026** (*vamos desativar a alquimia de novo, não todas as passivas, mas tem uma que quebra a alquimia*), quando o log mostrou 17 tentativas em 4 minutos, todas da mesma conta, que tinha o "Secrets of matter I" e o "II" (os dois foram tirados e os dois pontos devolvidos). `perkGuard.enabled`, em `perk-guard.ts`, liga e desliga.
+
+### A horta e os cavalos selvagens
+
+**Duas guildas desde 25/10/2026.** *"Adicionei dentro da pasta img o brasão domador; vamos separar a mecânica de domar cavalo totalmente da guilda dos agricultores e criar a guilda de domadores, colocando a mecânica completa de domar cavalo nessa nova guilda."* As hortas continuam dos **Agricultores** (Agricolae). Os **cavalos selvagens** passaram, inteiros, para uma guilda nova, os **Domadores** (*Domitores*; brasão `guild-domador`, a arte do usuário `brasão domador.png`): o ofício `domar` de `guild-crafts.ts` é deles, e só eles veem o **[E] Domar**, são aceitos pelos cavalos, montam um cavalo selvagem depois de ganhá-lo e levam o aviso de quem pode amansar. Um Agricultor não doma mais nem tem a dica do cavalo no kit (a dica agora é só a da horta). O **kit** dos Domadores, entregue na primeira vez que entram na guilda: **6 cenouras** e **4 maçãs** (as melhores comidas de confiança) e roupas de montaria (túnica curta, calças largas, botas altas e gorro de lã para o homem; vestido, capuz e sapatos de trabalho para a mulher; bandagem de mão); a dica diz como ganhar um cavalo (devagar, E, comida). Quem é Agricultor e quer domar muda de guilda pelo painel (a troca grátis, se ainda tiver); a confiança que um jogador já tinha de um cavalo continua, porque é do jogador e não da guilda. Eram dois os Agricultores na hora da mudança.
+
+A guilda dos **Agricultores** (Agricolae; pedido de 22/10/2026: *"acha que tem como fazer uma mecânica de agricultor no jogo? Ele interage com a horta apertando e abre um menu na direita falando o que ele pode plantar, o que precisa para plantar e em quanto tempo ele pode vir colher? Seria legal ele poder plantar ingredientes que o cozinheiro precisa. Ao plantar o jogador precisa de uma pá e o jogo faz a animação de cavando. Além do agricultor ter uma mecânica de domar cavalo ... o agricultor recebe roupas do ofício, pá e mais uns recursos para plantar"*; o brasão e o título *AGRICOLA* são a arte dele em `img`).
+
+**A horta.** Os canteiros são os do próprio nível: as 118 fileiras que os lavradores do jogo capinam atrás das casas das aldeias (o jogo as marca com um objeto do ofício de agricultor), reunidas em **67 hortas** (Suchdol, Raborsch, Wysoka, Malešov, Bylany, Minas, Horschan, Miskowitz, Pschitoky, Stará Kutná, Danemark, Opatowitz, Kuttenberg), em `data/farm.json` (`tools/make-farm-data.py`). Mirando o **chão** de um canteiro, a até 2,5 m do corpo, o Agricultor vê **[E] Plantar** (livre), **[E] Plantação** (dele, crescendo: o E diz quanto falta) ou **[E] Colher** (dele, pronta); quem não é agricultor não vê nada.
+
+- **Plantar** abre a **página da horta, à direita**, a mesma dos ofícios (título *AGRICOLA*, lista de plantas por categoria, **Pede**, **Colheita**): cada planta diz o que pede (**1 semente** e **uma pá na bolsa**, a ferramenta não se gasta), o nível de Sobrevivência, quanto rende e em quanto tempo fica pronta. O botão **Plantar** cava e semeia por **9 s** (a animação de cavar do próprio jogo, `Digging`, com a pá na mão direita; para o corpo de mulher, que o jogo não tem essa, a de capinar, `Hoeing`, com a enxada) e tira a semente. *Parar* ou fechar a página dá o plantio por desistido, sem gastar nada.
+- **21 plantas** (a semente é um item nosso, `kcdc-craft:semente-...`): **legumes**, cebola (nível 0, 30 min, rende 4 a 6), repolho (0, 40 min, 2 a 3), nabo (2, 30 min), cenoura (3, 35 min), beterraba (5), alho (6), pastinaca (8), alho-poró (10), raiz-forte (12); **ervas**, urtiga (4, 25 min), hortelã (14), sálvia (16), camomila (18), calêndula (20) e papoula (22); **frutas** (24/10/2026: *nas plantações do agricultor vamos colocar pimenta e frutas*), as do próprio jogo, de mudas e arbustos que crescem devagar e dão pouco: maçã (7, 55 min, rende 3 a 5), pera (9, 60 min), ameixa (11, 65 min), pêssego (13, 70 min) e melancia (15, 80 min, rende 1 a 2); e a **pimenta**, a especiaria mais cara do jogo (a do `driedPepperSpice`, que vai nas sopas e nos embutidos), a última, a mais lenta e a mais rara (24, 90 min, rende 2 a 3). As mudas e sementes das frutas e da pimenta são vendidas pelo taberneiro; ele compra as frutas (a pimenta não, de propósito: vale 480 no preço do jogo e os cozinheiros a querem). São os **ingredientes das sopas e do fogo** do taberneiro e as ervas do alquimista: o taberneiro **compra** os legumes e o alquimista as ervas; as sementes são vendidas por eles (os legumes no taberneiro, as ervas no boticário), e a **pá** pelo ferreiro (67 no preço do jogo).
+- **A plantação cresce em tempo real**, mesmo sem ninguém no servidor: o canteiro mostra **três mudas** ao longo da fileira (os modelos de planta do próprio jogo, pequenas, depois maiores, depois, pronta, **com o que dá** aos pés dela); o dono ouve *está pronta para colher* e ganha uma marca no mapa (**Herbalist**, só dele). Pronta, o **E** colhe (6 s, o jogo de colher ervas, `PickingHerbs`) e dá o **rendimento** (+1 do nível 15 em diante), **1 ou 2 sementes de volta** (metade das vezes 2) e a **experiência** da planta; o canteiro volta a ficar livre. Só o dono colhe. Uma colheita **esquecida estraga em 48 horas** (*passou do ponto e se perdeu*): as hortas são das aldeias e poucas, e quem some uns dias devolve os canteiros.
+- **Quantos canteiros:** **4 por agricultor**, mais 1 a cada 5 níveis de Sobrevivência (`farmSettings.baseBeds`, `bedsPerLevels`). A semeadura dá 2 XP de Sobrevivência e a colheita o XP da planta (6 a 14).
+- **O kit** (ao entrar na guilda): a **pá**, **sementes** de cebola (6), repolho, nabo, cenoura e urtiga (4 de cada), e a **roupa do ofício**: o conjunto do jardineiro do jogo (`kkut_gardener_1`: chapéu de palha, avental de couro, calça costurada, botas e bandagem) ou, para uma mulher, o vestido de trabalho com o chapéu de palha e os sapatos. O aviso do kit diz como plantar e como domar.
+- **Guardado** em `playerdata/farm.json` (por Steam ID); ao reiniciar, as mudas voltam a aparecer e o relógio continua.
+- **Canteiros marcados à mão** (23/10/2026: *em Suchdol a dica não aparecia num canteiro que se via*; as 118 fileiras são as que os lavradores do jogo capinam, e nem todo canteiro visível é uma delas): o administrador fica **no meio do canteiro, olhando para onde as fileiras correm**, e usa `/horta aqui [metros]`; nasce uma horta própria, numerada depois da mais perto (`Horta de Suchdol 9`), com uma fileira de 3 m (de 1,5 a 8) e **todo agricultor já a vê**. `/horta tirar` tira a marcada mais perto (até 4 m; as do próprio jogo não se tiram) e desfaz o que nela estiver plantado. Ficam em `playerdata/farm-extra.json`, são lidas antes das plantações, e sobrevivem a reinícios.
+- **Não testado no jogo:** o E no chão do canteiro (a mira lê o terreno sob a cruz, a até 1,8 m da fileira; relatado em 23/10/2026 que em Suchdol a dica não aparecia: um administrador que usa `/oficios livre` recebia o direito mas não os canteiros, que o servidor só manda ao entrar, ao trocar de guilda e quando o cliente pergunta; agora o cliente de quem pode plantar e não tem canteiro **pergunta de novo, a cada 4 s**), a animação de cavar **com a pá na mão** (o log diz `farm: Digging com shovel na mão direita` na primeira vez, ou, se o jogo não aceitar o objeto, `farm: shovel não foi aceito como objeto da mão ...; Digging toca sem ele`; a da picareta dos Coletores já não apareceu na mão em 22/10/2026), a enxada na mulher (`Hoeing`, que no jogo tem uma fala de lavrador que num corpo de jogador pode não fazer nada), se as mudas de planta ficam bem no canteiro, e a marca no mapa.
+
+**Os cavalos selvagens.** Em **21 campos abertos** longe das aldeias (achados na malha de navegação: o ponto de nascer de caça de onde se anda 35 m livre em quase todas as direções; ficam a 300 m uns dos outros e a 250 m de qualquer horta) vivem **2 cavalos cada**, **sem sela nem arreios** (e sem poder trocá-los), de raças que o jogo vende (Pebbles, Kasztanka, Khartoum, Bill, Mark, Windwurf...). Pastam em volta do campo e **fogem**: de quem **não é domador** a partir de **14 m** (22 m se vem a cavalo), e do domador **que corre** a 9 m; de um domador que **anda devagar** (até 3,4 m/s) eles não fogem: ficam parados, olhando, e voltam a pastar 20 s depois que ele sai (`wild-horses.ts`; correm para longe da pessoa, no máximo 70 m do campo).
+
+- **Domar:** chegando a 3 m de um cavalo selvagem o Domador vê **[E] Domar**; o E abre um menu: **Oferecer** (a melhor coisa que levar na bolsa: **cenoura** +5, **maçã** +4,5, **pera** +4, **beterraba** +3, **nabo** +3, **pão** +2 de **confiança**), **Montar**, **Mandar seguir** e **Sair**. Cada oferta pede **90 s** de intervalo e o personagem faz o carinho do próprio jogo (`HorsePetting_2`, só no corpo de homem, 5 s) antes de o menu voltar, mostrando a confiança (arisco, desconfiado, atento, quase manso, *confia em você*, de 0 a 100: **vinte cenouras, meia hora**; mais difícil desde 23/10/2026: *deixe mais difícil domar um cavalo*, eram oito cenouras e oito minutos). **O cavalo pode recusar** a comida enquanto não confia (35% sem confiança nenhuma, caindo a nada na metade do caminho): a comida não sai da bolsa, mas os 90 s correm, e o menu volta com a espera. **A confiança que não é mantida cai:** depois de 20 minutos sem comida, 1 ponto a cada 6 minutos (`forgetAfterMs`, `forgetEveryMs`). Cada jogador tem a sua confiança com cada cavalo (guardada em `playerdata/wild-horses.json`, e sobrevive a reinícios).
+- **Aos 100 de confiança** o menu libera **Montar** e **Mandar seguir**: qualquer um dos dois faz o cavalo **ser do jogador**: ele entra em **Animais** (F2), sem nome (o da raça, para ele trocar), **dar** a outro jogador, trancar ou liberar, como qualquer cavalo; **já vestido** (23/10/2026: *quando um cavalo ficar 100% domado ele recebe sela e coisas básicas para poder montar já setados nele via códigos*): antes de passar para o jogador o servidor põe nele um dos conjuntos simples do próprio jogo (`horse_common01`, `02`, `05` ou `18`, sorteado: sela de Praga, rédeas de couro macio e ferraduras; a sela traz as alforjes), ou as mesmas peças pelo nome se o conjunto não existir (`wild-horses.ts`, `dress`; o log diz `amansou o cavalo de m8-2, vestido com horse_common02`). Selas melhores o ferreiro faz. *Montar* já põe o jogador na sela; *Mandar seguir* manda o cavalo atrás dele. Aquele lugar do campo tem outro cavalo, de **outra raça**, **6 horas depois** (também se o cavalo morrer; um cavalo que sumiu sem doma nem morte volta em 2 minutos).
+- **Ninguém monta um cavalo selvagem:** a subida do jogo é recusada (e o jogador é mandado descer) com o aviso de quem pode amansar.
+- **Não testado no jogo:** que os cavalos fogem e voltam a pastar na malha de navegação, a animação do carinho, o *Montar* logo depois da doma e o cavalo aparecer com a sela, as rédeas e as alforjes (e a tela do próprio jogo aceitar trocar as peças do cavalo). *A comida:* o pedido dizia *coldawn*; não há item com esse nome no jogo, então valem as comidas de cavalo do jogo (a cenoura, a que o agricultor planta, é a melhor): é o primeiro ajuste se era outra coisa.
+
+### O menu do cavalo e o assobio
+
+Pedido de 22/10/2026: *adicionamos uma nova opção no menu do cavalo, mandar seguir e mandar ficar; o mandar ficar só para de seguir e continua indo se usar o assobiar; e tem como colocar para os jogadores escutarem o assobio quando um jogador aperta X*.
+
+- **Seguir e Ficar** (`src/server/horse-follow.ts`, `src/server/horse-menu.ts`): o menu do E diante do cavalo agora é **Montar, Bolsa, Seguir (ou Ficar), Sair**, e só o dono manda. O jogo não dá ordem de seguir a um cavalo (só `moveTo`), então o servidor o **anda atrás do dono**: a cada 1,2 s, se o dono se afastou mais de 3,5 m de onde o cavalo foi mandado, manda de novo, **correndo** a mais de 14 m, **trotando** a mais de 7 m, andando perto, e parando a 3 m. Segue também o dono que anda a cavalo em outro. **Ficar** para o cavalo onde ele está; o **assobio (X) continua chamando** (`/cavalo chamar`, o painel). Acaba sozinho se o dono monta nele, morre ou sai, se o cavalo morre ou é montado por outro, se o dono vai a mais de 120 m (*ficou para trás, assobie*) ou se o cavalo não acha caminho em três ordens seguidas.
+- **O assobio que todos ouvem** (`horses.ts`, `client/whistle.ts`): o X de um jogador (a pé, com ou sem cavalo seu) é avisado a quem está a até **30 m**, e o cliente de cada um toca o **assobio de cavalo do próprio jogo** (`v_horse_whistle`) no corpo de quem assobiou, com o alcance que o jogo lhe dá (20 m). Um assobio por 2 s; a cavalo ou na carroça não vale.
+- *Ainda não testado no jogo:* o Seguir andando de verdade (e parando perto), e o som tocado no corpo dos outros.
 
 ## Idioma
 
@@ -2464,7 +3122,17 @@ O jogador escolhe o idioma na seção **Opções** do painel (*Idioma / Language
 
 ## NPCs
 
-A lista de todos os NPCs que o servidor mantém (comerciantes, mascates, banhistas, barbeiros, mestres, bandidos, animais, cães e gatos das vilas) está em **`NPCS.md`**, na mesma pasta deste arquivo.
+A lista de todos os NPCs que o servidor mantém (comerciantes, mascates, banhistas, barbeiros, mestres, bandidos, animais) está em **`NPCS.md`**, na mesma pasta deste arquivo.
+
+**Ninguém dorme na rua, nem fica no rio ou preso em casa (25/10/2026: *alguns jogadores repararam que uns NPC dormem na rua e outros bugam e caem no rio e não voltam ou se trancam em casa e não saem mais*).** Um NPC do servidor não decide nada sozinho: o que caía no rio, saía do chão andável ou acordava do lado de dentro de uma casa trancada ficava lá, porque cada ordem depois disso era planejada de onde ele estava e voltava bloqueada.
+
+- **O guarda dos NPCs** (`src/server/npc-keeper.ts`): a cada 10 s olha cada barbeiro, mestre, cocheiro, comerciante, mascate e banhista contra o seu lugar. Quem está **6 m abaixo** do chão do lugar (no leito do rio, num barranco, debaixo do chão), **longe demais** (o quanto ele anda, mais 15 m), **fora do chão andável** duas vezes seguidas (água funda) ou **sem caminho de volta** por portas destrancadas duas vezes seguidas, a cada 30 s (preso numa casa trancada) é **feito de novo no lugar**; de noite, a caminho de casa, só entra para dormir. Depois disso fica 2 minutos sem ser olhado. O log diz `npc-keeper: vendors: Boticário (Raborsch) caiu (no rio...), a N m do lugar (x, y, z): feito de novo no lugar`.
+- **A porta, por fora**: os comerciantes iam para casa até o ponto da própria casa e de manhã nasciam nele, que pode ficar do lado de dentro de uma porta trancada (um NPC do servidor abre portas destrancadas e nunca destranca). Agora vão até o **degrau de fora da porta** e saem por ele.
+- **À noite todo mundo entra**, menos os mascates, que acampam junto da fogueira: as **banhistas** entram pela porta de prédio mais perto dos banhos (até 70 m) e, sem porta perto, somem onde estão quando ninguém vê; os barbeiros, mestres e cocheiros sem porta a 70 m também somem quando ninguém está a 80 m, em vez de passar a noite em pé na rua. De manhã voltam ao lugar.
+
+**Ainda não testado no jogo.** O log do guarda vai mostrar quantos e quais caem no rio ou ficam presos, e onde.
+
+**O barulho de equipar perto dos NPCs (25/10/2026: *ao ficar parado com menu aberto ou sentado fico escutando barulho de equipando item; parece até que o servidor fica conferindo item e equipando; isso não pesa o servidor?*).** Não era o servidor conferindo item, e não pesava nada (o nosso código usa uns 2% de um núcleo). Eram os **gestos de pausa** dos comerciantes e mestres: o servidor procurava gestos por palavras, e os únicos que achava eram os de **mexer num baú** (`CheckStash`, `ChestCheckIn`, `ChestCheckOut`), cuja animação pega e solta um item da mão, com o som disso; o log do cliente mostrava até 14 por minuto em volta de um jogador parado. Agora os NPCs usam as **variações de pausa do próprio jogo** (mudar o peso de perna, olhar em volta, se espreguiçar: `MotionIdleVAR1`, `MotionIdleVAR2`, `MotionIdleVARdefault`, feitas para homem e mulher), e os gestos de baú ficam proibidos (`src/server/idle-gestures.ts`).
 
 ## Livros de habilidade
 
@@ -2477,3 +3145,84 @@ Os livros de habilidade do jogo (93 neste servidor: a arte da espada, o treiname
 - **Como o cliente sabe quais são.** Quando o jogador entra, o servidor manda a lista de GUIDs dos 93 livros (em pedaços de 20, `itemuses` com a ação `skillbook.read`, o mesmo caminho do cozinhar: `src/server/item-uses.ts` e `src/client/item-uses.ts`) e o cliente toma a ação de cada um com `Inventory.onUse` (o jogo aceita até 256 no total, livros e carnes juntos: 93 + 31). O log do cliente diz `item-uses: skillbook.read: 93 item(ns) tomado(s) pelo servidor, 0 recusado(s)` (e, para as carnes, `item-uses: cook.use: 124 ...`: a soma dos dois); o do servidor, `skillbooks: 93 livros de habilidade lidos em tempo real`. A tabela vem do jogo (`tools/make-skillbooks.py` gera `src/server/skillbook-data.ts`).
 
 > **Ainda não testado no jogo:** que o *Ler*/*Aprender* de um livro chama o servidor em vez do jogo (o log do cliente diz quantos livros foram tomados), que o livro abre e fecha como descrito, que o GUID que o jogo manda é o da tabela, e o ritmo (se 11 minutos para o menor livro for demais, `/leitura fator 0.25`).
+
+## Viagem rápida de carroça
+
+Pedido de 19/10/2026: *vamos colocar os NPC de viagem rápida fixos nos locais, junto à carroça ou cavalo deles; ao interagir com o NPC ele abre as opções de viagem rápida ao local em troca de dinheiro, quanto mais longe mais caro, e de noite o NPC vai para uma casa dormir* (`src/server/travel.ts`).
+
+- **As paradas (13):** Suchdol, Raborsch, Malešov, Wysoka, Kuttenberg, Zikmundovo, Minas, Bylany, Bohunowitz, Miskowitz, Pschitoky, Stará Kutná e Horschan. Em cada uma há um **cocheiro** ao lado da sua **carroça coberta**, com os dois cavalos atrelados (a do próprio jogo). **Onde:** na beira da estrada que sai da vila, do lado de fora, **num lugar escolhido à mão** (20/10/2026: *nem todos os fast travel ficaram em um local legal; deixei o Builder rodando e o MCP para você ir olhando cada região e achar um ponto bom para as carroças*). As versões anteriores procuraram o lugar pela malha de navegação, depois pelos pontos onde as caravanas do jogo param dentro das vilas, depois por uma leitura do chão feita pelo jogo de quem chegasse perto; nenhuma acertou todas (*a de Suchdol no meio da praça, a de Wysoka no meio do arado em cima de um bebedouro de cavalo, a de Zikmundovo no meio dos acampamentos, a de Grunta com o cavalo em cima do muro, a de Kuttenberg no meio da estrada virada errado, a de Malešov fechando uma rua*). Agora cada parada foi olhada **de cima, no World Builder** (a câmera sobre a estrada, a vila ao fundo, e a carroça, o cocheiro e a chegada desenhados nos pontos): uma grama limpa ao lado da pista, sem árvore, muro, cocho, campo arado ou água por perto, no chão plano, **ao longo da estrada e de frente para longe da vila**, com o cocheiro entre ela e a pista. A posição de cada uma está escrita no código (`STOPS`, campo `fixed`) e o servidor não lê chão nenhum para elas; só uma parada que um admin cria (`/viagem nova`) ainda usa a leitura do chão pelo jogo (`/viagem procurar`).
+- **A carroça é do serviço:** ninguém sobe nela, ninguém a registra, e perto dela não aparece **[E] Subir na carroça**; quem tenta ouve *Essa carroça é do cocheiro: fale com ele para viajar.*
+- **Falar com o cocheiro (E):** a lista de escolhas do jogo com as outras paradas, da mais perto para a mais longe, cada uma com o **preço** e a distância (*Raborsch: 18 moedas (840 m)*), cinco por página; escolhida uma, *Pagar 18 moedas e partir*.
+- **O preço:** **5 moedas mais 15 por km** da linha reta entre as paradas (de Suchdol: Wysoka 18, Zikmundovo 20, Raborsch 22, Bohunowitz 24, Miskowitz 32, Horschan 37, Pschitoky 37, Bylany 45, Minas 49, Malešov 51, Stará Kutná 53, Kuttenberg 56; a mais barata é de Kuttenberg a Stará Kutná, 8, e a mais cara de Raborsch a Malešov, 60). `/viagem preco <base> <por km>` muda.
+- **A viagem:** o dinheiro sai, a tela escurece (1,5 s), o jogador é posto ao lado da carroça da outra parada, olhando para ela (como num renascimento: o corpo espera o chão daquele lugar carregar) e a tela volta. Se o jogo não aceitar a mudança, o dinheiro volta.
+- **Quem não viaja:** quem está montado, numa carroça, carregando alguém ou alguma coisa nos braços, numa troca, numa mesa de dados, foi atingido por alguém nos últimos 30 segundos, ou com um reinício anunciado; e ninguém viaja de **noite**.
+- **De noite** (das 22h às 6h do jogo) o cocheiro anda até a porta da casa mais perto (até 70 m) e entra para dormir, e volta de manhã; a carroça fica. Quem tenta subir nela à noite ouve *O cocheiro de Suchdol foi dormir: as viagens voltam de manhã.* Um cocheiro sem casa perto fica no lugar, mas também não viaja de noite.
+- **O admin** muda as paradas com [`/viagem`](#viagem).
+
+> **Ainda não testado no jogo:** se cada carroça ficou num lugar bom (os lugares foram escolhidos olhando imagens de cima, sem andar lá; os de Minas, Horschan e Bohunowitz foram os mais difíceis de ver: se algum estiver errado, o admin vai até lá e usa `/viagem aqui <parada>`, e `/viagem original <parada>` traz de volta o lugar escolhido); se a tela escurece mesmo (o efeito `colorGrade` no mínimo de brilho); e se o cocheiro acha a casa de noite.
+
+## Móveis do World Builder
+
+As **cadeiras**, as **camas** e os **baús** que as exportações do World Builder puseram (o castelo de Raborsch) funcionam (`src/server/furniture.ts`): a mira numa cadeira mostra **[E] Sentar**, numa cama **[E] Deitar**; o corpo senta ou deita com a animação do jogo e o cansaço passa como numa cama ou cadeira do jogo. **W A S D** ou **Espaço** levantam, ou `/levantar`. Os baús abrem como os do nível. Onde o corpo fica em cada tipo de móvel se ajusta com [`/mobilia`](#mobilia).
+
+> **Ainda não testado no jogo:** as poses (um palmo fora do assento se corrige com `/mobilia ajustar`).
+
+## Quadros de avisos
+
+*"Quadro de avisos em cada vila, cidade e reino ... cada vila, cidade e castelo tem o seu (depois: nos castelos não, ver abaixo) ... o jogador paga 10 moedas para publicar três tipos de cartaz: cartas de procurado, cartaz de solicitações de recursos e cartaz de avisos ... fica lá 7 dias ... pode publicar como anônimo ou deixando o nome ... edições no texto por espaçamento, formatação, bold, fonte normal ou uma fonte mais boêmica ... filtrar por tipo, data e recentes, além de reordenar ... o dono do cartaz pode remover os cartazes dele mesmo"* (24/10/2026). E à noite do mesmo dia: *"os quadros de aviso de castelo vamos tirar, só vai ter quadro de aviso nas vilas e cidades que têm como dar viagem rápida pelo NPC e que estejam mapeadas; se tiver em uma vila que possui castelo não faz sentido ter no castelo"*; e sobre os filtros do quadro: *"botões é feio, podia ser um dropdown ou algum ícone"*.
+
+**Os quadros.** São molduras de postes de madeira com tábuas, uma cobertura e cartas pregadas, feitas no World Builder só com peças do jogo (dois postes, quatro tábuas, uma tábua de teto, oito papéis), **13 quadros em 13 lugares**: Suchdol, Raborsch, Malešov, Wysoka, Kuttenberg, Minas, Bylany, Bohunowitz, Miskowitz, Pschitoky, Stará Kutná, Horschan e Zikmundovo (o acampamento de Sigismundo, que o dono mapeou na noite de 25/10/2026: o quadro está no cruzamento do acampamento, na grama ao lado do caminho que vem da parada do cocheiro, de frente para quem chega, junto ao talude da paliçada, a 16 m do centro, como os outros ficam no coração de cada lugar). **A regra do dono (24/10/2026, à noite):** só há quadro em vila ou cidade **mapeada** (que está em `PLACES`) e **com parada de cocheiro** (`STOPS` de `travel.ts`, a viagem rápida), e **nenhum em castelo**: a vila que tem castelo usa o quadro da vila. Os seis que não cabiam na regra foram **tirados do World Builder do dono** (com o pedido dele; a cópia dos 19 ficou guardada): os dos castelos de Suchdol e de Raborsch e os de Stará Lhota, Danemark, Rabstein e Opatowitz (sem cocheiro); o do castelo de Malešov já estava na vila e ficou; depois o dono pediu um só em Malešov, no lugar que ele tinha escolhido para o do castelo (o quadro de Malešov que estava a 15 m do centro da vila saiu, e o que ficou tomou o nome `quadro-malesov`). Um teste (`tests/mural.test.cjs`) lê o arquivo e confere a regra (13 quadros, um por lugar, todos em lugares com cocheiro e mapeados). O arquivo é `worlds/quadros-de-aviso.world.json` (em `mod.world_resources`, ao lado do `raborsch.world.json`); a primeira posição de cada um fui eu que escolhi e **o dono do servidor mudou todos para lugares melhores** (o mundo dele é o que vale: o servidor lê o arquivo, não tem posição escrita em código). O que diz ao servidor que ali há um quadro é uma peça escondida, um pergaminho (`scroll_c`) **enterrado** meio metro à frente das tábuas, que é também o ponto de onde se mede o alcance (`src/server/mural-places.ts`).
+
+**Cada lugar tem a sua lista.** O nome e a lista de cartazes de um quadro vêm do **lugar onde ele está** (`placeOf`): o chão da vila ou da cidade (as mesmas caixas de `properties.ts`, que **incluem o castelo** de Suchdol, de Raborsch e de Malešov: um quadro dentro das muralhas é da vila); senão, até 30 m além. Dois quadros no mesmo lugar mostram **os mesmos cartazes** (Malešov tem dois). Um quadro que o construtor muda de lugar mantém os cartazes enquanto continuar no mesmo lugar. *Antes de 24/10/2026 à noite os castelos eram lugares próprios (`castelo-suchdol`, `castelo-raborsch`, `castelo-malesov`); já não são. Nenhum cartaz tinha sido afixado nos quadros que saíram.*
+
+**O aviso.** Diante do quadro, com a mira nele, a 3,2 m do ponto à frente das tábuas, aparece **[F] Quadro de avisos** (a tecla do fogo; não há fogo ao lado de um quadro). O servidor aceita um metro a mais (4,2 m). Quem não vê o aviso usa `/mural`.
+
+**A página** (`ui/mural.html`, `src/client/mural.ts`): um cartão de papel **no meio da tela, sem ocupá-la**, na identidade do painel (o mesmo papel, os cantos e o vermelho), com o título **MURALIS** que o dono pintou (`titulo mural.png`) e o nome do quadro. À esquerda, a **lista**: o botão *Afixar um cartaz* (10 moedas), os filtros, que são **três menus** (*Tipo*: todos, procurados, recursos, avisos; *Quando*: qualquer, hoje, 3 dias; *Ordem*: novos, antigos, por tipo; o padrão é **o mais novo primeiro**), cada um com um ícone e o valor escolhido no botão, e um **botão de ícone** *Só os meus* (pedido do dono, 24/10/2026: *botões é feio*), e os cartazes: a **figura do tipo** (os três cartazes que o dono pintou: *Procuratus*, *Petitio opportunitatum* e *Avisus*) com **o nome de quem afixou** embaixo (*Anônimo* em itálico se não quis o nome), o título e a idade. À direita, o cartaz escolhido (**o texto e as informações**: tipo, título, quem afixou, há quanto tempo, quanto falta para sair) ou o **formulário** de um cartaz novo.
+
+**O formulário.** Tipo (as três figuras), título (48 letras), o texto (900 letras, 22 linhas), uma **prévia** com a formatação, e a formatação do texto inteiro, numa barra de ícones e menus: **negrito** (botão **B**), **fonte** *Normal* ou *Boêmia* (menu; uma fonte gótica, a Grenze Gotisch, da licença livre SIL OFL, recortada para o alfabeto latino: 21 KB), **espaçamento** *Junto*, *Normal* ou *Largo* (menu) e **alinhamento** à esquerda ou ao centro (dois botões de ícone). E a opção *Afixar sem o meu nome (anônimo)*. Esc, o X ou andar para longe fecham a página; o que foi escrito e não afixado fica guardado até o jogador sair do jogo.
+
+**As regras** (`muralSettings`, em `src/server/mural.ts`): **10 moedas** por cartaz (cobradas só quando o cartaz é guardado; se o disco falhar o dinheiro volta), **7 dias** no quadro, **4 cartazes por jogador** em cada quadro, **60 por quadro**, um cartaz a cada 4 s, e só quem tem personagem afixa. O texto é limpo no servidor (sem caracteres de controle nem invisíveis, uma linha em branco no máximo em seguida) e a página o desenha como texto, nunca como marcação. **Quem afixou retira o cartaz dele** (botão com confirmação); o administrador retira qualquer um (`/mural remover`, `/mural limpar`). O servidor guarda **a conta de quem afixou** para isso e **nunca a manda à página**: o jogador só sabe se o cartaz é dele (*mine*). O nome que aparece é o do personagem no dia em que afixou.
+
+**O que é guardado.** `playerdata/mural.json` (pelo `store.ts`, que mantém uma cópia do último arquivo bom; um arquivo que não pôde ser lido **não é sobrescrito**: os cartazes novos são recusados até alguém olhar). A cada 10 minutos o servidor tira os cartazes de 7 dias (*"N cartaz(es) saíram do quadro depois de 7 dias"*) e quem está com o quadro aberto recebe a lista nova, assim como quando alguém afixa ou retira. As figuras da página (o título e os três cartazes, de 12 a 17 KB cada) ficam no servidor (`data/craft-titles.json`, feito por `tools/make-ui-images.py`) e vão uma vez por sessão; o que vai ao cliente de todos é só a página (26 KB) e a fonte (21 KB).
+
+**Inglês.** A página tem os dois idiomas; as respostas do servidor passam pelo dicionário (`lang-en-messages.ts`).
+
+> **Ainda não testado no jogo:** o aviso **[F]** (a mira no ponto enterrado, o alcance e a altura de cada quadro nas posições novas), a página dentro do jogo (o cartão no meio, o foco do teclado e o Esc), a fonte gótica no navegador do jogo, as figuras e a posição das peças de cada quadro. **Para ajustar:** `muralSettings` (preço, dias, limites), `EDGE_M.mural` (o alcance), `PLACES` e as margens em `mural-places.ts`, o `REACH` do tipo 7 em `cook-hint.ts` (a mira).
+
+## Boas-vindas e concordância
+
+*"Todo jogador que criar um personagem, ou que já tenha criado, ... vai receber um aviso, e quem já criou, ao entrar, também, até aceitar ... vamos abrir tipo um formulário no centro da tela, de forma vertical ... ao concordar você afirma que leu as regras e está ciente da lore do servidor"* (24/10/2026).
+
+**O formulário** (`ui/welcome.html`, `src/client/welcome.ts`): um cartão de papel alto no meio da tela, com o título **BENE ADVENISTI** que o dono pintou (`titulo boas vindas.png`), o texto de boas-vindas em português ou inglês (a Boêmia de 1403 e a região de Kuttenberg; o que o jogador pode ser; como começar: escolher a guilda no **F2**, conhecer a região, ver o resto do menu; agir como uma pessoa da época, ler as regras e o site) e um botão **Concordo** (*"Ao concordar, você afirma que leu as regras e que está ciente da lore do servidor"*). **Não tem saída além do botão**: sem Esc e sem X.
+
+**Quando aparece** (`src/server/welcome.ts`): para quem **tem personagem criado e ainda não concordou**, assim que está no mundo e a tela é dele (sem a câmera do criador, sem conversa, sem outra página com o teclado, vivo), e de novo a cada 20 s até concordar. Quem já tinha personagem antes disso recebe ao entrar; quem criou agora recebe logo depois de criar. **Quem recomeça do zero** (`character-reset.ts`) faz um personagem novo e **é perguntado de novo**; quem só pediu para refazer o criador (`askRedo`) é o mesmo personagem e não é.
+
+**O que é guardado:** `playerdata/welcome.json`, por Steam ID, com o momento e o `createdAt` do personagem em que concordou. Um arquivo ilegível não é sobrescrito (a concordância vale só enquanto o jogador está no servidor). Ao concordar o jogador recebe uma frase de agradecimento no chat e o servidor registra *"X concordou com as regras e a lore"*.
+
+**Se a página não abre** (o servidor avisa pelo evento `welcome.failed`), o jogador é avisado no chat de como concordar: **`/aceitar`**. O administrador vê a janela com **`/boasvindas`**.
+
+> **Ainda não testado no jogo:** como o cartão se vê e se posiciona na tela do jogo, se a janela espera a câmera do criador como deve e o tempo entre uma pergunta e outra.
+
+## O chat do T
+
+*"Além disso, as mensagens no T devem só chegar para a região, essa vila ou cidade; quem estiver mais longe não pode ver as mensagens"* (25/10/2026).
+
+**Quem lê** (`src/server/local-chat.ts`). O relé do framework, que mandava a linha escrita no T a todos os jogadores, foi **desligado** (`Chat.setDefaultRelay(false)`) e o servidor entrega cada linha só a quem, no mesmo mundo e já dentro do jogo, está:
+
+1. na **mesma região**: uma das vilas e cidades de `REGIONS` (`properties.ts`, as 17 mapeadas), pelo **contorno que o mapa do jogo dá ao lugar** (`mappedRegions`, com a mesma folga de 25 m do censo) e, onde o mapa não tem contorno, pela caixa da lista. O castelo e o moinho de uma vila são da região dela; ou
+2. a **até 30 m** de quem fala (`NEAR_M`), em região ou não: o portão da vila, a estrada logo fora; ou
+3. **no campo aberto**, quem fala e quem lê os dois fora de toda região, a **até 50 m** (`OPEN_M`, um pouco além do grito, que alcança 25 m).
+
+Quem fala lê sempre a própria linha. Quem está numa vila **não** lê quem fala do campo aberto a mais de 30 m, nem o contrário. **Os administradores seguem a mesma regra** (não ouvem de longe): assim o dono testa o alcance com a própria conta. `/me`, `/do` e `/try` continuam com o alcance deles (30 m, os nomes por apresentação); a voz também.
+
+**O nome.** A linha continua saindo com o **nome da conta**, como o relé do framework a mandava (é a lacuna conhecida do esconde-nomes, veja [Encontros entre jogadores](#encontros-entre-jogadores)); mostrar *Desconhecido* a quem não foi apresentado é trocar uma linha em `speak`, se o dono quiser. A fala de um jogador (a linha que tem autor) **não passa pelo dicionário** de tradução (`language.ts`): quem escreve "Família" diz "Família" também a quem joga em inglês; os avisos do servidor passam.
+
+**O tamanho.** A página do chat (`ui/chat.html`) não deixa escrever mais de 300 letras; o servidor entrega até **400** (`CHAT_MAX`), e uma linha maior, que só um cliente alterado consegue mandar, é **recusada só a quem a escreveu**, com a frase do `/me` (*"Muito longo: no máximo 400 letras ..."*). Os espaços e as quebras de linha são dobrados em um espaço antes de contar.
+
+**O aviso.** Na primeira linha que o jogador escreve depois de entrar, só a ele aparece: *"O chat (T) chega só a quem está na mesma vila ou cidade que você, ou a até 30 metros de você; no campo aberto, a até 50 metros."* Assim um chat vazio não é tomado por quebrado. Sai de novo se o jogador sai e volta.
+
+**O registro.** Cada linha deixa uma no log do servidor, **sem o texto**: `chat: <conta> em <lugar ou campo aberto>: lido por N de M` (M: os outros jogadores do mesmo mundo; N: os que leram). É por ela que se vê se o alcance está certo: `journalctl -u kcdc-server | grep "chat:"`.
+
+**Se algo falha.** Se o relé do framework não se desliga, o servidor diz no log e o chat **continua para todos** (nunca duas cópias de uma linha). Se o mapa não puder ser lido, vale só a distância. Se o recurso do gamemode para sozinho, o relé volta ao framework.
+
+> **Ainda não testado no jogo:** se o relé do framework entregava a linha também a quem a escreveu (aqui ela chega pelo mesmo caminho que a dos outros), se as regiões cobrem os lugares como o jogador os vê e se o cartão do chat mostra bem o autor. **Para ajustar:** `NEAR_M` e `OPEN_M` em `local-chat.ts`.

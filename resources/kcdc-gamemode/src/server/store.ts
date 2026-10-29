@@ -11,6 +11,22 @@
  */
 
 declare function require(id: string): unknown;
+declare const performance: { now(): number } | undefined;
+
+/** Times a part of a write for perf-watch (`__kcdcSection`, which exists only while it watches). */
+function part<T>(label: string, work: () => T): T {
+    const report = (globalThis as unknown as { __kcdcSection?: (name: string, took: number) => void }).__kcdcSection;
+    if (report === undefined) {
+        return work();
+    }
+    const clock = (): number => (typeof performance !== "undefined" && performance !== undefined ? performance.now() : Date.now());
+    const began = clock();
+    try {
+        return work();
+    } finally {
+        report(label, clock() - began);
+    }
+}
 
 export interface NodeFs {
     readFileSync(path: string, encoding: "utf8"): string;
@@ -79,10 +95,11 @@ export function read<T>(path: string): ReadResult<T> {
 export function write(path: string, value: unknown): void {
     const files = node();
     const temp = `${path}.tmp`;
-    files.writeFileSync(temp, JSON.stringify(value));
+    const text = part("store.json", () => JSON.stringify(value));
+    part("store.escrever", () => files.writeFileSync(temp, text));
     if (files.existsSync(path)) {
-        const current = parseFile(path);
-        files.renameSync(path, current !== null && current.ok ? `${path}.bak` : `${path}.corrupt-${Date.now()}`);
+        const current = part("store.conferir", () => parseFile(path));
+        part("store.trocar", () => files.renameSync(path, current !== null && current.ok ? `${path}.bak` : `${path}.corrupt-${Date.now()}`));
     }
-    files.renameSync(temp, path);
+    part("store.trocar", () => files.renameSync(temp, path));
 }

@@ -9,20 +9,23 @@
  * - **Jogar dados**: an invitation they answer in their own dialogue list; accepted, the two sit down at the dice table
  *   they share and agree the score (`dice.ts`). It is offered only when both stand at the same dice table.
  * - **Negociar**: the same kind of invitation; accepted, a trade opens on both screens (`trade.ts`).
+ * - **Prender** / **Soltar** (`arrest.ts`, 2026-10-29): for an officer, on somebody below them on the ladder, or somebody they may let go.
  * - **Sair**.
  *
  * Nothing happens to a player without their answer, and an unanswered invitation lapses.
  */
 
 import { introduce, knows, labelFor, nameOf } from "./acquaintances.js";
+import { choose as arrestChoose, isArrested, menuOptions as arrestOptions } from "./arrest.js";
 import { diceLobby } from "./dice.js";
 import { applyNametag, restoreNametag } from "./titles.js";
 import { trades } from "./trade.js";
+import { allowedTo, EDGE_M } from "./reach.js";
 
 const RESOURCE = "kcdc-gamemode";
 
-/** How close two players must stand to talk; a little more than the client's own reach, for the time the press takes. */
-export const TALK_REACH_M = 4;
+/** How close two players must stand to talk; a little more than the client's own reach, for the time the press takes (`reach.ts`). */
+export const TALK_REACH_M = allowedTo(EDGE_M.person);
 /** How close they must still be when an invitation is accepted. */
 export const ANSWER_REACH_M = 8;
 /** How long an invitation waits for its answer. */
@@ -85,6 +88,12 @@ export class Encounters {
         if (!knows(target, speaker)) {
             options.push({ id: "introduce", text: "Apresentar-se", enabled: true });
         }
+        // Somebody in handcuffs or in the pillory is nobody's to play dice with or to trade with: only the officers' rows, and the way out.
+        if (isArrested(target)) {
+            options.push(...arrestOptions(speaker, target));
+            options.push({ id: "leave", text: "Sair", enabled: true });
+            return { line: undefined, onRight: false, options };
+        }
         const atTable = diceLobby.sameTable(speaker, target);
         options.push(atTable ? { id: "dice", text: "Jogar dados", enabled: true } : { id: "dice", text: "Jogar dados (só junto de uma mesa de dados)", enabled: false });
         if (!atTable) {
@@ -92,6 +101,7 @@ export class Encounters {
             if (why !== null) console.log(`encounters: dados indisponíveis no menu: ${why}`);
         }
         options.push({ id: "trade", text: "Negociar", enabled: true });
+        options.push(...arrestOptions(speaker, target));
         options.push({ id: "leave", text: "Sair", enabled: true });
         return { line: undefined, onRight: false, options };
     }
@@ -101,7 +111,20 @@ export class Encounters {
         if (speaker.id === target.id || !present(speaker) || !present(target) || speaker.virtualWorld !== target.virtualWorld || apart(speaker, target) > TALK_REACH_M) {
             return false;
         }
+        // Handcuffed hands open no list (2026-10-29).
+        if (isArrested(speaker)) {
+            return false;
+        }
         if (Dialogue.sessionOf(speaker.id) !== 0 || trades.isTrading(speaker)) {
+            return false;
+        }
+        // Somebody in a dice match is nobody's to talk to (2026-10-20: "quando um jogador estiver jogando dados não deve ter como
+        // interagir com ele quem estiver por fora do jogo"): the client shows no hint either (`dice-quiet.ts`).
+        if (diceLobby.playingNow(speaker)) {
+            return false;
+        }
+        if (diceLobby.playingNow(target)) {
+            tell(speaker, `${labelFor(speaker, target)} está jogando dados.`);
             return false;
         }
         const session = Dialogue.open(speaker.id, this.menu(speaker, target));
@@ -153,6 +176,14 @@ export class Encounters {
             }
             return;
         }
+        if (option === "arrest" || option === "release") {
+            this.end(session);
+            const said = arrestChoose(speaker, target, option);
+            if (said !== null) {
+                tell(speaker, said);
+            }
+            return;
+        }
         if (option === "dice" || option === "trade") {
             this.end(session);
             this.ask(option, speaker, target);
@@ -171,7 +202,7 @@ export class Encounters {
             tell(from, "Espere um pouco antes de chamar de novo.");
             return;
         }
-        if (Dialogue.sessionOf(to.id) !== 0 || trades.isTrading(to) || trades.isTrading(from)) {
+        if (isArrested(to) || isArrested(from) || Dialogue.sessionOf(to.id) !== 0 || trades.isTrading(to) || trades.isTrading(from) || diceLobby.playingNow(to) || diceLobby.playingNow(from)) {
             tell(from, `${labelFor(from, to)} não pode agora.`);
             return;
         }
@@ -242,7 +273,7 @@ export class Encounters {
     /** What `viewer` calls the player with network id `id`, for the label over the talk hint. Empty for nobody there. */
     peek(viewer: Player, id: number): string {
         const target = Player.getById(id);
-        if (target === null || target.id === viewer.id || !target.ready) {
+        if (target === null || target.id === viewer.id || !target.ready || diceLobby.playingNow(target)) {
             return "";
         }
         return labelFor(viewer, target);

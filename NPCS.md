@@ -1,24 +1,24 @@
 # NPCs do servidor
 
-Lista de todos os NPCs que o gamemode `kcdc-gamemode` mantém, gerada a partir do código, dos dados e do log de início do servidor (17/10/2026).
+Lista de todos os NPCs que o gamemode `kcdc-gamemode` mantém, gerada a partir do código, dos dados e do log de início do servidor (17/10/2026; vilas e cocheiros atualizados em 21/10/2026).
 
 ## Resumo
 
 | Grupo | Quantos | Onde / como vivem |
 | --- | ---: | --- |
-| Comerciantes de Suchdol | 5 | cada um na sua loja, dia e noite em casa |
-| Ferreiro, boticário e taberneiro das vilas | 9 | Malešov, Raborsch, Wysoka: fora de uma casa livre da vila, de dia pela vila e à noite na cama |
+| Comerciantes de Suchdol | 5 | cada um na sua loja, à noite em casa (entram e saem pelo degrau de fora da porta) |
+| Ferreiro, boticário e taberneiro das vilas | 27 | Malešov, Raborsch, Wysoka, Bylany, Bohunowitz, Minas, Kuttenberg, Miskowitz, Pschitoky: fora de uma casa livre da vila, de dia pela vila e à noite na cama (sem casa livre, ficam no lugar) |
+| Cocheiros da viagem rápida | 13 | ao lado da carroça de cada parada; de noite vão dormir na casa mais perto |
 | Mascates (e bufarinheiras) | 13 | uma em cada fogueira de beira de estrada |
-| Banhistas | 8 | nos banhos de Suchdol, Zikmundovo, Grunta, Kuttenberg e Malešov |
+| Banhistas | 8 | nos banhos de Suchdol, Zikmundovo, Minas, Kuttenberg e Malešov; à noite entram pela porta de prédio mais perto (ou somem onde estão, sem ninguém vendo) |
 | Barbeiros | 5 | um em cada vila grande, com cadeira |
 | Mestres de habilidade | 38 | onde o jogo os põe; ensinam por moedas |
 | Bandidos de acampamento | 25 em 5 acampamentos | os do nível, com baús de saque |
 | Bandidos de esconderijo | 53 em 14 esconderijos | na mata, a mais de 300 m de qualquer lugar com gente |
 | Salteadores de estrada | até 4 bandos de cada vez | aparecem nas estradas diante de quem viaja (sem lugar fixo) |
 | Animais selvagens e de fazenda | até 700 corpos ao mesmo tempo | 4796 vagas nos pontos do nível; só existem perto de jogadores |
-| Cães e gatos das vilas | 15 cães, 10 gatos | os cães do jogo (gatos só se o jogo oferecer um) |
 
-Fixos (lojas, mascates, banhos, barbeiros, mestres e vilas): **78**. Com os bandidos de lugar fixo, **156**. Os animais vêm e vão com os jogadores.
+Fixos (lojas, vilas, mascates, banhos, barbeiros, mestres e cocheiros): **109**. Com os bandidos de lugar fixo, **187**. Os animais vêm e vão com os jogadores.
 
 ## Comerciantes de Suchdol
 
@@ -32,11 +32,25 @@ Fixos (lojas, mascates, banhos, barbeiros, mestres e vilas): **78**. Com os band
 
 ## Vilas: ferreiro, boticário e taberneiro
 
-| Vila | Casas no censo | Casas livres | Observação |
+Uma vila é uma região mapeada com **três casas ou mais** no censo ("Casa 01"...). Em 20/10/2026 o mapa passou de 6 para 17 regiões (veja `/propriedade` em `COMANDOS.md`), e as vilas novas ganharam os seus vendedores; cada um mora na casa livre mais perto de onde fica (a do taberneiro passa a se chamar "Taverna de <vila>", e ele prefere uma taverna do censo, se houver uma livre); sem casa livre ao alcance, fica no lugar, dia e noite. O log do início diz `vendors: N vendedor(es) de vilas`.
+
+| Vila | Casas no censo | Moram em casa | Observação |
 | --- | ---: | ---: | --- |
-| Malešov | 6 | 6 | tem os três; cada um mora numa casa livre |
+| Bohunowitz | 3 | 2 | ferreiro e boticário em casa; o taberneiro fica no lugar (nenhuma casa livre ao alcance) |
+| Bylany | 6 | 3 | os três, cada um numa casa livre |
+| Minas | 6 | 3 | os três, cada um numa casa livre |
+| Kuttenberg | 84 | 3 | só os três, apesar do tamanho da cidade |
+| Malešov | 6 | 0 | todas as casas têm dono (a conta de administração): os três ficam no lugar |
+| Miskowitz | 8 | 3 | os três, cada um numa casa livre |
+| Pschitoky | 4 | 2 | ferreiro e boticário em casa; o taberneiro fica no lugar (nenhuma casa livre ao alcance) |
 | Raborsch | 4 | 0 | todas as casas têm dono (a conta de administração): os três ficam no lugar, sem casa, até haver casa livre |
-| Wysoka | 5 | 5 | tem os três; cada um mora numa casa livre |
+| Wysoka | 4 | 2 | ferreiro e boticário em casa; o taberneiro fica no lugar (nenhuma casa livre ao alcance) |
+
+Sem vendedores por terem menos de três casas: Stará Kutná (2), Stará Lhota (2), Horschan (2), Danemark (1), Opatowitz (1), Estalagem de Pschitoky (1) e Rabstein (0). O Devil's Den e o acampamento do exército (Zikmundovo) não foram mapeados.
+
+## Cocheiros da viagem rápida
+
+Um cocheiro ao lado da carroça de cada uma das 13 paradas, postas à mão em 20/10/2026 (`src/server/travel.ts`): Suchdol, Raborsch, Malešov, Wysoka, Kuttenberg, Zikmundovo, Minas, Bylany, Bohunowitz, Miskowitz, Pschitoky, Stará Kutná e Horschan. Falar com o cocheiro (E) lista as outras paradas com o preço (5 moedas mais 15 por km); de noite ele vai dormir na casa mais perto e as viagens param. Veja "Viagem rápida de carroça" em `COMANDOS.md`.
 
 ## Mascates das fogueiras
 
@@ -65,8 +79,8 @@ Cada um fica a poucos passos da fogueira (que o servidor acende), olha e cumprim
 | 1 | Dona dos Banhos | Suchdol | 741, 3348 |
 | 2 | Dona dos Banhos | Zikmundovo | 1740, 2806 |
 | 3 | Banhista | Zikmundovo | 1739, 2805 |
-| 4 | Banhista | Grunta | 3208, 2168 |
-| 5 | Banhista | Grunta | 3210, 2167 |
+| 4 | Banhista | Minas | 3208, 2168 |
+| 5 | Banhista | Minas | 3210, 2167 |
 | 6 | Administradora dos Banhos | Kuttenberg | 3083, 465 |
 | 7 | Banhista | Kuttenberg | 3082, 466 |
 | 8 | Banhista | Malešov | 564, 256 |
@@ -176,17 +190,6 @@ A agressividade é uma escolha da administração (`/bandidos agressividade baix
 | Cão selvagem (`WildDog`) | 202 |
 
 Cada ponto do nível guarda 1,6 vez o rebanho que o nível previu (lobos e cães selvagens 1,3; bichos de fazenda 1; **lebres só 0,3** e sem rebanhos extras: eram 36% das vagas e as mais difíceis de acertar). Só existem corpos perto de jogadores (até 150 m) e, somando tudo o que o jogo do jogador já roda a 120 m (bandidos, gente das vilas, animais), no máximo 24 por jogador: o servidor entrega cada corpo ao jogo do jogador mais próximo, e um corpo que ninguém roda fica parado e não leva golpe. Lebres, corças e veados fogem de quem chega perto. Só lobos e cães selvagens atacam (é o único ataque de animal que o mod aceita). Um animal de caça ferido além de 65% da vida é abatido na hora, com a morte do próprio jogo.
-
-## Cães e gatos das vilas
-
-| Vila | Cães |
-| --- | ---: |
-| Bohounovice | 1 |
-| Malešov | 4 |
-| Suchdol | 6 |
-| Zikmundovo | 4 |
-
-Gatos: 10 lugares do nível (`CatHolder`); o servidor só os faz aparecer se o jogo tiver um gato para oferecer.
 
 ## Não são NPCs, mas andam pelo mundo
 

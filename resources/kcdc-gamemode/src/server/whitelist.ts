@@ -17,6 +17,8 @@
  * all. An account from Epic is turned away like one not on the list, until the saves learn another key.
  */
 
+import { readRequired } from "./steam-gate.js";
+
 declare function require(id: string): unknown;
 
 interface NodeFs {
@@ -94,6 +96,12 @@ export function installWhitelist(): void {
         if (list.state === "broken") {
             console.error(describeList(list));
             connection.reject(UNAVAILABLE);
+            return;
+        }
+        // A join that reports no Steam account at all is the Steam gate's to turn away, with the words that say what to do (steam-gate.ts): this list could only say
+        // "not approved", which is not true of an account that is on it, and a player who read that (2026-10-29, lerolero, whose account was approved) went on being
+        // told his Steam was refused. Only with the gate off does the list answer for a join with no Steam.
+        if (connection.steamId === "" && readRequired(read).required) {
             return;
         }
         const who = `${connection.nickname} (${connection.steamId !== "" ? `Steam ${connection.steamId}` : connection.epicId !== "" ? "conta Epic, sem Steam" : "sem Steam"})`;

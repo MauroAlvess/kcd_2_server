@@ -3,13 +3,13 @@ import { retarget } from "../players.js";
 import { getSocialStatus, SOCIAL_STATUS, type SocialStatus, setSocialStatus } from "../status.js";
 
 function isSocialStatus(value: string | undefined): value is SocialStatus {
-    return value === "plebeius" || value === "nobilis";
+    return value === "plebeius" || value === "minor" || value === "nobilis";
 }
 
 export const socialStatusCommand: Command = {
     name: "socialstatus",
-    summary: "Reads or sets a player's social status (plebeius or nobilis), shown in the status panel (F2).",
-    usage: ["/socialstatus [@player]", "/socialstatus <plebeius|nobilis> [@player]"],
+    summary: "Reads or sets a player's social status (plebeius, minor or nobilis), shown in the status panel (F2).",
+    usage: ["/socialstatus [@player]", "/socialstatus <plebeius|minor|nobilis> [@player]"],
 
     run(context: CommandContext): void {
         const { player, args, reply, usage } = context;

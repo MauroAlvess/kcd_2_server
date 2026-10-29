@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const inventoryAdd = require("./inventory-add-module.cjs");
 
 const MONEY = "5ef63059-322e-4e1b-abe8-926e100c770e";
 
@@ -52,6 +53,7 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
 
     const moneySandbox = {
         exports: {},
+        require: (id) => (id === "./inventory-add.js" ? inventoryAdd(moneySandbox) : assert.fail(`unexpected require ${id}`)),
         Inventory: {
             get: (holder) => ({ items: inventory(holder).map((row) => ({ ...row })) }),
             remove: (holder, request) => {
@@ -92,6 +94,9 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
             say(text) { this.said.push(text); return true; },
             attack(target) { this.orders.push(["attack", target.id]); return true; },
             flee(from) { this.orders.push(["flee"]); return true; },
+            moveTo(goal, how) { this.orders.push(["moveTo", Math.round(goal.x), Math.round(goal.y), how.speed]); return true; },
+            pin(player) { this.pinnedTo = player === null ? null : typeof player === "number" ? player : player.id; },
+            simulator: null,
             remove() { this.removed = true; npcs.delete(this.id); for (const fn of handlers.get("npcDestroy") ?? []) fn(this); },
         };
         npcs.set(npc.id, npc);
@@ -107,7 +112,7 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
             if (id === "./bandits.js") {
                 return {
                     banditSettings: { health: 180, damageMultiplier: 1.6 },
-                    banditCamps: { camps, souls: () => ["soul-a", "soul-b"], dress: (npc, archer) => dressed.push({ id: npc.id, archer }) },
+                    banditCamps: { camps, souls: () => ["soul-a", "soul-b"], dress: (npc, archer) => dressed.push({ id: npc.id, archer }), dressCuman: (npc, archer) => dressed.push({ id: npc.id, archer, cuman: true }) },
                 };
             }
             if (id === "./place.js") {
@@ -469,4 +474,100 @@ test("their blows weigh what the camps' bandits' do, and nobody else's change", 
     for (const fn of sut.handlers.get("playerHit")) fn(hans, { id: 99999 }, other);
     assert.equal(other.damage, 10);
     assert.ok(sut.logs.some((line) => /salteadores nas estradas ligados/.test(line)));
+});
+
+test("the gang is run by the victim's own game from the start, and handed back when it leaves", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 100);
+    assert.equal(ambushes.start(hans), true);
+    const gang = [...sut.npcs.values()];
+    assert.ok(gang.length >= 2 && gang.every((npc) => npc.pinnedTo === hans.id), "pinned to the victim");
+    ambushes.gone(hans);
+    assert.ok(gang.every((npc) => npc.pinnedTo === null), "handed back to the election as they go");
+    assert.ok(gang.every((npc) => npc.orders.at(-1)[0] === "flee"));
+});
+
+test("a bandit who stands still for three seconds away from his target is sent running at it; an order that ended is given again", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 100);
+    const gang = demanding(sut, ambushes, hans);
+    ambushes.tick();
+    ambushes.choose(sut.sessionOf(hans), hans, "fight");
+    ambushes.tick();
+    assert.ok(gang.every((npc) => npc.orders.at(-1)[0] === "attack"));
+    assert.ok(sut.logs.some((line) => /ambush: salteador \d+ e Hans, a 5 m: ataque ordenado; running, PARADO/.test(line)), sut.logs.join("|"));
+
+    // The victim steps back 20 m; the gang stands where it was.
+    hans.position = { x: 0, y: 20, z: 0 };
+    ambushes.tick();
+    sut.state.now += 3_500;
+    ambushes.tick();
+    for (const npc of gang) assert.deepEqual(npc.orders.at(-1), ["moveTo", 0, 20, "run"], "run at him by the server's route");
+    assert.ok(sut.logs.some((line) => /parado há \d+ s: mandado correr até ele \(aceito\)/.test(line)));
+
+    // Arrived (the walk is over): the order to fight is given again.
+    for (const npc of gang) {
+        npc.position = { x: 0, y: 19, z: 0 };
+        npc.status = "reached";
+    }
+    ambushes.tick();
+    sut.state.now += 4_000;
+    ambushes.tick();
+    assert.ok(gang.every((npc) => npc.orders.at(-1)[0] === "attack" && npc.orders.at(-1)[1] === hans.id));
+});
+
+// 2026-10-19: "não encontrei bandidos nas estradas; seria legal alguns cumanos pela estrada além dos bandidos de assalto".
+
+test("the countryside's names do not make a village: only a named outline the size of one keeps the road bandits away", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 50);
+    sut.state.areas.push({ x: 0, y: 0, location: "Ratboricko", labels: [], bounds: { min: { x: -2000, y: -2000 }, max: { x: 2000, y: 2000 } } });
+    assert.equal(ambushes.reasonNotTo(hans, 100), "", "a road in the named countryside");
+    sut.state.areas.push({ x: 60, y: 0, location: "Suchdol", labels: [], bounds: { min: { x: 0, y: -150 }, max: { x: 370, y: 230 } } });
+    assert.equal(ambushes.reasonNotTo(hans, 100), "perto de um povoado");
+});
+
+test("a gang of Cumans: three or four, dressed as Cumans, the last with a bow, and they strike without a word", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 50, { x: 0, y: 0, z: 0 });
+    sut.state.rolls.push(0.1, 0.9); // Cumans; four of them
+    assert.equal(ambushes.start(hans), true);
+    const gang = [...sut.npcs.values()];
+    assert.equal(gang.length, 4);
+    assert.ok(gang.every((npc) => npc.options.name === "Cumano"));
+    assert.deepEqual(sut.dressed.map((entry) => [entry.cuman, entry.archer]), [[true, false], [true, false], [true, false], [true, true]]);
+    assert.ok(sut.logs.some((line) => /ambush: 4 cumano\(s\) atrás de Hans/.test(line)));
+    for (const npc of gang) npc.position = { x: 0, y: -5, z: 0 };
+    ambushes.tick();
+    assert.equal(sut.sessionOf(hans), 0, "no demand on the screen");
+    assert.deepEqual(gang[0].said, ["Hayde! Hayde!"]);
+    assert.ok(sut.chat.some((entry) => entry.to === "Hans" && /Cumanos! Eles atacam sem dizer palavra\./.test(entry.text)));
+    ambushes.tick();
+    assert.ok(gang.every((npc) => npc.orders.some((order) => order[0] === "attack" && order[1] === hans.id)), "all of them at him");
+});
+
+test("highwaymen are still the most of them: a roll above the Cumans' share is a gang that asks for the purse", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 50);
+    sut.state.rolls.push(0.9);
+    demanding(sut, ambushes, hans);
+    ambushes.tick();
+    assert.ok(sut.sessionOf(hans) !== 0, "the demand is on the screen");
+    assert.ok([...sut.npcs.values()].every((npc) => npc.options.name === "Salteador"));
+});
+
+test("why nobody was stopped is written to the log every ten minutes, and kept per player for /emboscada", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 50);
+    ambushes.look();
+    sut.state.now += 11 * 60_000;
+    ambushes.look();
+    assert.ok(sut.logs.some((line) => /^ambush: em 2 olhada\(s\): parado 2; chão lido: nenhum; gangues desde o início: 0$/.test(line)), sut.logs.join(" | "));
+    assert.equal(ambushes.lastReason.get(hans.id), "parado");
 });

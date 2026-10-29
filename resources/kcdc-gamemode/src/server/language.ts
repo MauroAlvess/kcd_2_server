@@ -144,7 +144,8 @@ export function installLanguage(): void {
 
     const original = Chat.sendToPlayer.bind(Chat);
     try {
-        Chat.sendToPlayer = (player, text, options): void => original(player, translate(text, languageOf(player as Player)), options);
+        // A line with an author is somebody's own words (`local-chat.ts`), never put through the dictionary: a player who types "Família" says it.
+        Chat.sendToPlayer = (player, text, options): void => original(player, typeof options?.author === "string" && options.author !== "" ? text : translate(text, languageOf(player as Player)), options);
     } catch (error: unknown) {
         console.log(`language: não consegui traduzir o chat (${error instanceof Error ? error.message : String(error)}); só o painel e as mensagens dele serão traduzidos`);
         return;

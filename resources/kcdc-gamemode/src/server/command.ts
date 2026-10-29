@@ -46,6 +46,17 @@ export interface Command {
     run(context: CommandContext): void | Promise<void>;
 }
 
+/**
+ * A reason a player may not run a command at this moment, or null: the gates every command goes through after the administrator check (2026-10-29, `arrest.ts`: somebody in
+ * handcuffs or in the pillory is held to speaking, so `/preso` -- "Fiquei preso", which takes a player to a church -- is no way out of them).
+ */
+type CommandGate = (player: Player, name: string) => string | null;
+const gates: CommandGate[] = [];
+
+export function addCommandGate(gate: CommandGate): void {
+    gates.push(gate);
+}
+
 export class CommandRegistry {
     private readonly commands = new Map<string, Command>();
 
@@ -75,6 +86,13 @@ export class CommandRegistry {
         if (!canRun(player, command.name)) {
             reply.line(`/${command.name} é um comando de administrador.`);
             return true;
+        }
+        for (const gate of gates) {
+            const why = gate(player, command.name);
+            if (why !== null) {
+                reply.line(why);
+                return true;
+            }
         }
 
         const context: CommandContext = {

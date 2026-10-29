@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const inventoryAdd = require("./inventory-add-module.cjs");
 
 const MONEY_GUID = "5ef63059-322e-4e1b-abe8-926e100c770e";
 const DIE = "65ccc0cd-de18-4305-9d64-42bb3c6d8d30";
@@ -20,6 +21,7 @@ function load({ file = undefined } = {}) {
     const context = {
         exports: {},
         require: (id) => {
+            if (id === "./inventory-add.js") return inventoryAdd(context);
             assert.equal(id, "./store.js");
             return {
                 ensureDir() {},
@@ -217,4 +219,21 @@ test("dice that will not leave the inventory are left there, and the log says th
     assert.deepEqual(JSON.parse(JSON.stringify(pot.seats[0].items)), []);
     assert.equal(sut.items("ana", DIE), 6);
     assert.ok(sut.state.logs.some((line) => /os dados de ana não saíram do inventário/.test(line)));
+});
+
+test("a match the server stops on its way down hands nothing over: the pot stays written, owed at the next start", () => {
+    const sut = load();
+    const ana = sut.player("ana", [sut.money(20), { item: DIE, amount: 6 }]);
+    const bia = sut.player("bia", [sut.money(20)]);
+    const pot = sut.pots.hold(ana, bia, 10);
+    sut.pots.bind(pot, 7);
+    sut.pots.stop();
+    assert.equal(sut.pots.settle(7, ana, bia, 0, 2000, 900), null);
+    assert.equal(sut.items("ana", DIE), 0, "the dice are not handed back after the stop's save");
+    assert.equal(sut.coins("ana"), 10);
+    assert.equal(sut.state.stored.pots.length, 1, "still written down");
+
+    const next = load({ file: sut.state.stored });
+    next.pots.load();
+    assert.deepEqual(Array.from(next.pots.owes("ana"), (row) => row.amount).sort((a, b) => a - b), [6, 100], "the stake and the dice, owed at the next start");
 });

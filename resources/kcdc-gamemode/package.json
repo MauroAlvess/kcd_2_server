@@ -19,7 +19,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "devDependencies": {
-    "@kingdomsconnected/types": "1.6.9",
+    "@kingdomsconnected/types": "1.7.3",
     "terser": "5.31.6",
     "typescript": "^5.9.2"
   },

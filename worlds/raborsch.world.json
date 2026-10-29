@@ -1,0 +1,723 @@
+{
+  "areas": [],
+  "effects": [],
+  "format": "kcdc.world",
+  "level": "kutnohorsko",
+  "lights": [],
+  "objects": [
+    {
+      "model": "objects/manmade/common_furniture/tables/table_fancy_a_long.cgf",
+      "physics": "static",
+      "position": [
+        1425.4639892578125,
+        3820.098388671875,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/tables/table_fancy_a_long.cgf",
+      "physics": "static",
+      "position": [
+        1427.696044921875,
+        3820.61328125,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1424.7850341796875,
+        3820.4853515625,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1425.02294921875,
+        3819.452392578125,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9935718774795532,
+        -0.11320321261882782
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1425.9000244140625,
+        3820.742431640625,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1426.1390380859375,
+        3819.71044921875,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9935718774795532,
+        -0.11320321261882782
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1427.02099609375,
+        3821.00146484375,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1427.259033203125,
+        3819.96826171875,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9935718774795532,
+        -0.11320321261882782
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1428.136962890625,
+        3821.25927734375,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chairs/high/chair_fancy_a.cgf",
+      "physics": "static",
+      "position": [
+        1428.375,
+        3820.226318359375,
+        125.05999755859375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9935718774795532,
+        -0.11320321261882782
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/beds/high/bed_double_royal_a.cgf",
+      "physics": "static",
+      "position": [
+        1442.20703125,
+        3824.1484375,
+        125.0999984741211
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        -0.6225146651268005,
+        0.782608151435852
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chests/chest_fancy_d_big.cgf",
+      "physics": "static",
+      "position": [
+        1440.989013671875,
+        3823.867431640625,
+        125.0999984741211
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.782608151435852,
+        0.6225146651268005
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/beds/high/bed_double_royal_a.cgf",
+      "physics": "static",
+      "position": [
+        1438.8299560546875,
+        3827.309326171875,
+        125.0999984741211
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/common_furniture/chests/chest_fancy_d_big.cgf",
+      "physics": "static",
+      "position": [
+        1439.240966796875,
+        3825.5263671875,
+        125.0999984741211
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.11320321261882782,
+        0.9935718774795532
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "patrolRoutes": [],
+  "version": 2,
+  "world": [
+    {
+      "at": [
+        1426.114990234375,
+        3853.60693359375,
+        130.17100524902344
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_lid.cgf"
+    },
+    {
+      "at": [
+        491.36578369140625,
+        397.49566650390625,
+        110.73450469970703
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/hangers/hanger_wall_hook.cgf"
+    },
+    {
+      "at": [
+        491.97564697265625,
+        396.96551513671875,
+        110.73450469970703
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/hangers/hanger_wall_hook.cgf"
+    },
+    {
+      "at": [
+        491.2102966308594,
+        397.6308288574219,
+        110.73450469970703
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/hangers/hanger_wall_hook.cgf"
+    },
+    {
+      "at": [
+        490.603515625,
+        398.1582946777344,
+        110.72450256347656
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/hangers/hanger_wall_hook.cgf"
+    },
+    {
+      "at": [
+        1442.7469482421875,
+        3826.97509765625,
+        127.51809692382812
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_decorations/interior_deco/curtain_on_the_wall.cgf"
+    },
+    {
+      "at": [
+        1443.0479736328125,
+        3825.5791015625,
+        127.51809692382812
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_decorations/interior_deco/curtain_on_the_wall.cgf"
+    },
+    {
+      "at": [
+        1443.22705078125,
+        3823.952880859375,
+        125.09700012207031
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/shelves/shelf_royal_b.cgf"
+    },
+    {
+      "at": [
+        1443.3310546875,
+        3823.4541015625,
+        125.09700012207031
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/household/cooking_eating/bowls/bowl_b.cgf"
+    },
+    {
+      "at": [
+        1435.9849853515625,
+        3819.10888671875,
+        125.09700012207031
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_fixtures/fireplaces/stove_tiled_b.cgf"
+    },
+    {
+      "at": [
+        1427.7740478515625,
+        3818.9970703125,
+        120.4354019165039
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1427.4749755859375,
+        3820.280029296875,
+        120.4354019165039
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1427.56494140625,
+        3819.972900390625,
+        121.01129913330078
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1427.7049560546875,
+        3819.6630859375,
+        120.43620300292969
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1427.85205078125,
+        3820.375,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1428.0140380859375,
+        3819.718017578125,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1427.7010498046875,
+        3819.35595703125,
+        121.01129913330078
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_a.cgf"
+    },
+    {
+      "at": [
+        1427.866943359375,
+        3818.6708984375,
+        120.96369934082031
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1428.012939453125,
+        3818.31298828125,
+        120.43569946289062
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1428.1719970703125,
+        3819.072998046875,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1428.072021484375,
+        3817.9990234375,
+        121.01139831542969
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1428.35498046875,
+        3818.39990234375,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1427.7099609375,
+        3819.659912109375,
+        120.74949645996094
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_plank1.cgf"
+    },
+    {
+      "at": [
+        1428.175048828125,
+        3817.3740234375,
+        121.01100158691406
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1428.094970703125,
+        3817.660888671875,
+        120.43509674072266
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1428.7989501953125,
+        3817.822021484375,
+        120.74410247802734
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_plank1.cgf"
+    },
+    {
+      "at": [
+        1428.2760009765625,
+        3817.02197265625,
+        120.4354019165039
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/barrels/barrel_b.cgf"
+    },
+    {
+      "at": [
+        1429.282958984375,
+        3817.135986328125,
+        120.50759887695312
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/crates/crate_small.cgf"
+    },
+    {
+      "at": [
+        1429.2979736328125,
+        3817.138916015625,
+        120.07230377197266
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/crates/crate_small.cgf"
+    },
+    {
+      "at": [
+        1428.5179443359375,
+        3817.763916015625,
+        121.34359741210938
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/common_furniture/crates/crate_box_a_lid.cgf"
+    },
+    {
+      "at": [
+        1428.2130126953125,
+        3817.68505859375,
+        120.74949645996094
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_plank1.cgf"
+    },
+    {
+      "at": [
+        1428.5159912109375,
+        3817.742919921875,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1428.675048828125,
+        3817.097900390625,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/food_processing/winemaking/wine_barrel_stand.cgf"
+    },
+    {
+      "at": [
+        1428.9720458984375,
+        3817.173095703125,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_lid.cgf"
+    },
+    {
+      "at": [
+        1429.072998046875,
+        3817.403076171875,
+        120.07029724121094
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/entertainment/tavern/stein_wood_c.cgf"
+    },
+    {
+      "at": [
+        1429.0040283203125,
+        3817.5869140625,
+        120.0197982788086
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/household/cooking_eating/cups/cup_a.cgf"
+    },
+    {
+      "at": [
+        1428.3480224609375,
+        3817.72900390625,
+        121.36160278320312
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/household/cooking_eating/scuttles/scuttle_a.cgf"
+    },
+    {
+      "at": [
+        1428.2960205078125,
+        3819.797119140625,
+        120.74410247802734
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/religious/graveyard_keeping/coffin_a_plank1.cgf"
+    },
+    {
+      "at": [
+        1429.3389892578125,
+        3817.22509765625,
+        120.55709838867188
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/household/cooking_eating/demijohns/demijohn_a.cgf"
+    },
+    {
+      "at": [
+        1429.218994140625,
+        3817.06201171875,
+        120.55709838867188
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "Objects/manmade/task_specific_props/household/cooking_eating/demijohns/demijohn_a.cgf"
+    },
+    {
+      "at": [
+        1500.1046142578125,
+        3770.8017578125,
+        116.11514282226562
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "objects/natural/vegetation/bushes/prunus_spinosa/prunus_spinosa_e.cgf"
+    },
+    {
+      "at": [
+        1501.633544921875,
+        3770.63134765625,
+        116.1684341430664
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "objects/natural/vegetation/bushes/prunus_spinosa/prunus_spinosa_b.cgf"
+    },
+    {
+      "at": [
+        1502.5904541015625,
+        3770.670654296875,
+        116.19599151611328
+      ],
+      "hidden": true,
+      "kind": "brush",
+      "name": "objects/natural/vegetation/bushes/prunus_spinosa/prunus_spinosa_b.cgf"
+    }
+  ]
+}

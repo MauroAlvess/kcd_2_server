@@ -27,6 +27,11 @@
  * para ele aprovar ou recusar"). The relative is in the tree at once, as a name; the link to the other player waits in
  * that player's Família section (`invite`), and only their yes makes it, with its other side, as above. A no leaves the
  * relative a name. Until then nothing follows the link: no heir, no marriage, no mirror.
+ *
+ * The tree reaches the other side of a marriage and the step-families (user, 2026-10-25: "a árvore de família deve se estender a cunhado, genro e
+ * coisa do tipo, e conexão de família, caso haja casamento e uniões"): in-laws (sogro, sogra, genro, nora, cunhado, cunhada), step-parents and
+ * step-children (padrasto, madrasta, enteado, enteada), and the partner of a union that is not a marriage (companheiro, companheira). They are
+ * relatives of the tree and nothing more: none of them is an heir, none raises with a noble, and only the union changes the marital status ("em união").
  */
 
 declare function require(id: string): unknown;
@@ -55,9 +60,9 @@ export interface RowInfo {
 export const ROWS: readonly RowInfo[] = [
     { id: "bisavos", title: "Bisavós" },
     { id: "avos", title: "Avós" },
-    { id: "pais", title: "Pais e tios" },
-    { id: "geracao", title: "Cônjuge, irmãos e primos" },
-    { id: "filhos", title: "Filhos e sobrinhos" },
+    { id: "pais", title: "Pais, sogros e tios" },
+    { id: "geracao", title: "Cônjuge, irmãos, primos e cunhados" },
+    { id: "filhos", title: "Filhos, genros e sobrinhos" },
     { id: "netos", title: "Netos" },
     { id: "bisnetos", title: "Bisnetos" },
 ];
@@ -81,12 +86,20 @@ export const RELATIONS: readonly RelationInfo[] = [
     { id: "mae", label: "Mãe", row: "pais", female: true },
     { id: "tio", label: "Tio", row: "pais" },
     { id: "tia", label: "Tia", row: "pais", female: true },
+    { id: "sogro", label: "Sogro", row: "pais" },
+    { id: "sogra", label: "Sogra", row: "pais", female: true },
+    { id: "padrasto", label: "Padrasto", row: "pais" },
+    { id: "madrasta", label: "Madrasta", row: "pais", female: true },
     { id: "esposo", label: "Esposo", row: "geracao" },
     { id: "esposa", label: "Esposa", row: "geracao", female: true },
+    { id: "companheiro", label: "Companheiro", row: "geracao" },
+    { id: "companheira", label: "Companheira", row: "geracao", female: true },
     { id: "irmao", label: "Irmão", row: "geracao" },
     { id: "irma", label: "Irmã", row: "geracao", female: true },
     { id: "primo", label: "Primo", row: "geracao", degree: true },
     { id: "prima", label: "Prima", row: "geracao", degree: true, female: true },
+    { id: "cunhado", label: "Cunhado", row: "geracao" },
+    { id: "cunhada", label: "Cunhada", row: "geracao", female: true },
     { id: "filho", label: "Filho", row: "filhos" },
     { id: "filha", label: "Filha", row: "filhos", female: true },
     { id: "filho_adotivo", label: "Filho adotivo", row: "filhos" },
@@ -95,6 +108,10 @@ export const RELATIONS: readonly RelationInfo[] = [
     { id: "filha_bastarda", label: "Filha bastarda", row: "filhos", female: true },
     { id: "sobrinho", label: "Sobrinho", row: "filhos" },
     { id: "sobrinha", label: "Sobrinha", row: "filhos", female: true },
+    { id: "genro", label: "Genro", row: "filhos" },
+    { id: "nora", label: "Nora", row: "filhos", female: true },
+    { id: "enteado", label: "Enteado", row: "filhos" },
+    { id: "enteada", label: "Enteada", row: "filhos", female: true },
     { id: "neto", label: "Neto", row: "netos" },
     { id: "neta", label: "Neta", row: "netos", female: true },
     { id: "bisneto", label: "Bisneto", row: "bisnetos" },
@@ -103,8 +120,14 @@ export const RELATIONS: readonly RelationInfo[] = [
 
 const SPOUSES: ReadonlySet<string> = new Set(["esposo", "esposa"]);
 
+/** The partner of a union that is no marriage: the marital status says "em união" for a living one, and no more than that follows from it. */
+const PARTNERS: ReadonlySet<string> = new Set(["companheiro", "companheira"]);
+
 /** The legitimate line of descent: who rises with a player raised to the nobility. Adopted children and bastards do not. */
 const LEGITIMATE_LINE: ReadonlySet<string> = new Set(["filho", "filha", "neto", "neta", "bisneto", "bisneta"]);
+
+/** The adopted children and the bastards: of a noble's house, they are of the lesser nobility (user, 2026-10-19). */
+const BASE_LINE: ReadonlySet<string> = new Set(["filho_adotivo", "filha_adotiva", "filho_bastardo", "filha_bastarda"]);
 
 interface StoredPerson {
     readonly id: string;
@@ -274,6 +297,20 @@ const INVERSE: Readonly<Record<string, readonly [male: string, female: string]>>
     mae: ["filho", "filha"],
     tio: ["sobrinho", "sobrinha"],
     tia: ["sobrinho", "sobrinha"],
+    // The other side of a marriage: the parents-in-law and the child-in-law turn into each other, the brothers-in-law and the partners into themselves.
+    sogro: ["genro", "nora"],
+    sogra: ["genro", "nora"],
+    genro: ["sogro", "sogra"],
+    nora: ["sogro", "sogra"],
+    cunhado: ["cunhado", "cunhada"],
+    cunhada: ["cunhado", "cunhada"],
+    companheiro: ["companheiro", "companheira"],
+    companheira: ["companheiro", "companheira"],
+    // A step-family: the step-parent has the step-child for what the one adding is.
+    padrasto: ["enteado", "enteada"],
+    madrasta: ["enteado", "enteada"],
+    enteado: ["padrasto", "madrasta"],
+    enteada: ["padrasto", "madrasta"],
     esposo: ["esposo", "esposa"],
     esposa: ["esposo", "esposa"],
     irmao: ["irmao", "irma"],
@@ -460,6 +497,27 @@ export function removePersonDetailed(steamId: string, id: unknown): { readonly r
     return { removed: true, mirror };
 }
 
+/**
+ * A player starts again (`character-reset.ts`): their tree goes, the requests they made are cancelled, and whoever had them
+ * as a linked relative keeps the name and loses the link.
+ */
+export function forgetFamily(steamId: string): void {
+    const store = load();
+    delete store[steamId];
+    for (const record of Object.values(store)) {
+        record.persons = record.persons
+            .filter((person) => person.invite?.steamId !== steamId)
+            .map((person) => {
+                if (person.steamId !== steamId && person.mirrorOf?.owner !== steamId) {
+                    return person;
+                }
+                const { steamId: _linked, mirrorOf: _mirror, mirrored: _mirrored, ...plain } = person;
+                return plain;
+            });
+    }
+    persist(store);
+}
+
 export function removePerson(steamId: string, id: unknown): boolean {
     return removePersonDetailed(steamId, id).removed;
 }
@@ -599,6 +657,20 @@ export function answerInvite(steamId: string, key: unknown, accept: boolean): An
 }
 
 /**
+ * Whether two players are of one family: either has the other in their tree as a living relative linked to them (a link the other
+ * accepted; a request not answered yet is no link). Taking from a relative's chest is no theft (user, 2026-10-18: "se o jogador for
+ * da mesma família e usar o baú de alguém da família, aí não conta como roubo e o título não aparece").
+ */
+export function sameFamily(a: string, b: string): boolean {
+    if (a === "" || b === "" || a === b) {
+        return false;
+    }
+    const store = load();
+    const names = (owner: string, other: string): boolean => (store[owner]?.persons ?? []).some((person) => person.steamId === other && person.deceased !== true);
+    return names(a, b) || names(b, a);
+}
+
+/**
  * The players who share `steamId`'s social standing when it changes: the living spouse and the living legitimate line
  * (children, grandchildren, great-grandchildren) linked in their tree, and whoever names them as their living spouse in
  * their own. Adopted children, bastards, siblings, cousins and ancestors never do.
@@ -617,6 +689,20 @@ export function familyHeirs(steamId: string): readonly Heir[] {
     for (const [owner, record] of Object.entries(store)) {
         if (owner !== steamId && !found.has(owner) && record.persons.some((person) => person.steamId === steamId && SPOUSES.has(person.relation) && person.deceased !== true && !echoOf(person, steamId))) {
             found.set(owner, "");
+        }
+    }
+    return [...found].map(([id, name]) => ({ steamId: id, name }));
+}
+
+/** The living adopted children and bastards linked in `steamId`'s tree: of a noble's house, they are of the lesser nobility. */
+export function familyBaseHeirs(steamId: string): readonly Heir[] {
+    if (steamId === "") {
+        return [];
+    }
+    const found = new Map<string, string>();
+    for (const person of load()[steamId]?.persons ?? []) {
+        if (person.steamId !== undefined && person.steamId !== "" && person.steamId !== steamId && person.deceased !== true && BASE_LINE.has(person.relation)) {
+            found.set(person.steamId, person.name);
         }
     }
     return [...found].map(([id, name]) => ({ steamId: id, name }));
@@ -657,12 +743,56 @@ export function backfillMirrors(infoFor: (steamId: string) => Mirroring | null):
     return made;
 }
 
-/** Whether somebody else's tree names `steamId` as their living spouse, of its own accord: not just as the other side of a link `steamId` made. */
-function namedAsSpouse(steamId: string): boolean {
+/** Whether somebody else's tree names `steamId` as their living spouse (or, with `kinds`, their living partner), of its own accord: not just as the other side of a link `steamId` made. */
+function namedAsSpouse(steamId: string, kinds: ReadonlySet<string> = SPOUSES): boolean {
     return (
         steamId !== "" &&
-        Object.entries(load()).some(([owner, record]) => owner !== steamId && record.persons.some((person) => person.steamId === steamId && SPOUSES.has(person.relation) && person.deceased !== true && !echoOf(person, steamId)))
+        Object.entries(load()).some(([owner, record]) => owner !== steamId && record.persons.some((person) => person.steamId === steamId && kinds.has(person.relation) && person.deceased !== true && !echoOf(person, steamId)))
     );
+}
+
+/** One living spouse of somebody, as the trees have them. */
+export interface SpouseRef {
+    /** The player, when the spouse is one linked in the tree, or whose own tree names this player; null for a name only. */
+    readonly steamId: string | null;
+    /** The name this player's tree gives them ("" when it is another player's tree that names them: the character's own name is what to show). */
+    readonly name: string;
+    /** "esposo" or "esposa" as this player's tree writes it; null when it is somebody else's tree that names them. */
+    readonly relation: "esposo" | "esposa" | null;
+}
+
+/**
+ * The living spouses of `steamId` (user, 2026-10-25: the lord's wife is a Lady, and stands beside him in the hierarchy and in the town's page): the
+ * ones in their own tree, linked to a player or only a name, and the players whose trees name them as their living spouse of their own accord.
+ * Nobody is listed twice, and one marked dead is not listed. A union's partner is not a spouse.
+ */
+export function spousesOf(steamId: string): readonly SpouseRef[] {
+    if (steamId === "") {
+        return [];
+    }
+    const store = load();
+    const found: SpouseRef[] = [];
+    const seen = new Set<string>();
+    for (const person of store[steamId]?.persons ?? []) {
+        if (!SPOUSES.has(person.relation) || person.deceased === true) {
+            continue;
+        }
+        const linked = typeof person.steamId === "string" && person.steamId !== "" && person.steamId !== steamId ? person.steamId : null;
+        if (linked !== null) {
+            if (seen.has(linked)) {
+                continue;
+            }
+            seen.add(linked);
+        }
+        found.push({ steamId: linked, name: person.name, relation: person.relation === "esposa" ? "esposa" : "esposo" });
+    }
+    for (const [owner, record] of Object.entries(store)) {
+        if (owner !== steamId && !seen.has(owner) && record.persons.some((person) => person.steamId === steamId && SPOUSES.has(person.relation) && person.deceased !== true && !echoOf(person, steamId))) {
+            seen.add(owner);
+            found.push({ steamId: owner, name: "", relation: null });
+        }
+    }
+    return found;
 }
 
 export function getSurname(steamId: string): string | null {
@@ -699,10 +829,15 @@ export function setSurname(steamId: string, raw: unknown): SurnameResult {
  * Portuguese worded for the character's gender.
  */
 export function maritalStatus(steamId: string, gender: "male" | "female" | null): MaritalView {
-    const spouses = (load()[steamId]?.persons ?? []).filter((person) => SPOUSES.has(person.relation));
+    const persons = load()[steamId]?.persons ?? [];
+    const spouses = persons.filter((person) => SPOUSES.has(person.relation));
     const feminine = gender === "female";
     if (spouses.some((person) => person.deceased !== true) || namedAsSpouse(steamId)) {
         return { label: feminine ? "Coniugata" : "Coniugatus", gloss: feminine ? "casada" : "casado" };
+    }
+    // A living partner of a union (user, 2026-10-25: "casamento e uniões"): not married, and not alone either.
+    if (persons.some((person) => PARTNERS.has(person.relation) && person.deceased !== true) || namedAsSpouse(steamId, PARTNERS)) {
+        return { label: feminine ? "Coniuncta" : "Coniunctus", gloss: "em união" };
     }
     if (spouses.length > 0) {
         return { label: feminine ? "Vidua" : "Viduus", gloss: feminine ? "viúva" : "viúvo" };

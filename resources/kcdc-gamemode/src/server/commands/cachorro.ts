@@ -8,7 +8,8 @@ export const cachorroCommand: Command = {
     usage: [
         "/cachorro  -- chama o seu cão (se ele sumiu, vem de novo)",
         `/cachorro nome <nome>  -- dá um nome ao cão (até ${DOG_NAME_MAX} letras); sem nome, ele volta ao nome de antes`,
-        `/cachorro <${Object.keys(DOG_ORDERS).join("|")}>  -- manda o cão seguir você ou esperar onde está`,
+        `/cachorro <${Object.keys(DOG_ORDERS).join("|")}>  -- manda o cão seguir você, esperar (sentar) onde está, ou andar solto`,
+        "E diante do cão  -- abre o menu: Fazer carinho, Mandar ficar (ou Mandar seguir) e Sair",
     ],
 
     run({ player, args, reply, usage }: CommandContext): void {

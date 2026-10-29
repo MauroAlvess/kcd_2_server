@@ -26,6 +26,13 @@ function loadModule(name, sandbox) {
     return sandbox.exports;
 }
 
+/** The game's skill books (the real table), and those of some tracks, as the vendors stock them. */
+const SKILLBOOKS = loadModule("skillbook-data", { exports: {} }).SKILLBOOKS;
+const skillGuids = (...tracks) => Array.from(SKILLBOOKS.filter((book) => tracks.includes(book.track)), (book) => book.guid);
+const SKILL_GUIDS = new Set(SKILLBOOKS.map((book) => book.guid));
+/** The real recipes and crops: the shops sell the Agricultores' seeds (2026-10-22). */
+const craftData = loadModule("craft-data", { exports: {} });
+
 const BUYS = {
     ferreiro: ["bsmt_ironBad", "daggerCommon", "huntingSwordBasic", "unknownBlade"],
     alquimista: ["herb_marigold", "potion_marigold"],
@@ -39,7 +46,7 @@ class FakeVector3 {
 }
 
 /** unknownItems are names the fake game does not know; the rest are worth 100 each. */
-function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed = {}, houses = [], hour = 12, buys = BUYS, gestures = [], now = 1_760_000_000_000, doorsByGuid = {} } = {}) {
+function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed = {}, houses = [], hour = 12, buys = BUYS, gestures = [], now = 1_760_000_000_000, doorsByGuid = {}, doors = [] } = {}) {
     const disk = fakeDisk(seed);
     const store = loadModule("store", { exports: {}, require: () => disk.fs });
     const books = loadModule("books", { exports: {}, console: { log() {} }, Items: { register: (id) => `guid:${id}` }, Events: { on() {} } });
@@ -63,14 +70,20 @@ function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed =
     let nextNpc = 100;
     let nextVendor = 1;
 
-    // The shared body and spot helpers are the real ones, over the same fakes.
+    // The shared body and spot helpers are the real ones, over the same fakes, and so is the keeper (src/server/npc-keeper.ts).
     let townsfolk;
+    let keeper;
     const context = {
         exports: {},
         require: (id) => {
             if (id === "./books.js") return books;
+            if (id === "./craft-items.js") return { craftItemGuid: (item) => (item.startsWith("kcdc-craft:") ? `guid:${item}` : null) };
+            if (id === "./craft-data.js") return craftData;
             if (id === "./store.js") return store;
             if (id === "./townsfolk.js") return townsfolk;
+            if (id === "./npc-keeper.js") return keeper;
+            if (id === "./idle-gestures.js") return { maybeGesture: () => false };
+            if (id === "./skillbook-data.js") return { SKILLBOOKS };
             if (id === "./properties.js") {
                 return {
                     listProperties: () => catalog,
@@ -108,9 +121,10 @@ function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed =
             get ready() { return navigationReady; },
             closestPoint: (point) => new FakeVector3(point.x, point.y, point.z + 0.5),
             randomPoint: (center, radius) => new FakeVector3(center.x + radius / 2, center.y, center.z),
+            canReach: () => true,
         },
         World: world,
-        Door: { find: (guid) => doorsByGuid[guid] ?? null },
+        Door: { find: (guid) => doorsByGuid[guid] ?? null, all: () => doors },
         Player: { all: () => players },
         Animations: { list: (term) => gestures.filter((row) => row.fragment.toLowerCase().includes(term.toLowerCase())) },
         Inventory: {
@@ -159,18 +173,20 @@ function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed =
             open: (vendor, player, npc) => { opened.push({ vendor, player, npc }); return 1; },
         },
     };
-    townsfolk = (() => {
+    const real = (name) => {
         const realm = { ...context, exports: {} };
-        vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/townsfolk.js"), "utf8"), realm);
+        vm.runInNewContext(fs.readFileSync(path.join(__dirname, `../dist/server/${name}.js`), "utf8"), realm);
         return realm.exports;
-    })();
+    };
+    keeper = real("npc-keeper");
+    townsfolk = real("townsfolk");
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/vendors.js"), "utf8"), context);
     context.exports.installVendors();
 
     const emit = (name, ...args) => (handlers.get(name) ?? []).forEach((fn) => fn(...args));
     return {
         api: context.exports,
-        world, players, clock, disk, npcs, vendors, fires, opened, logs, handlers, timers, intervals, emit, reservations, released,
+        world, players, clock, disk, npcs, vendors, fires, opened, logs, handlers, timers, intervals, emit, reservations, released, catalog,
         spawn: () => timers[0].fn(),
         byName: (name) => [...npcs.values()].find((npc) => npc.options.name === name),
         shop: (name) => [...vendors.values()].filter((vendor) => !vendor.destroyed).find((vendor) => vendor.options.name === name),
@@ -218,26 +234,57 @@ test("eight bath attendants stand where the level has its baths, with no house a
         const line = sut.line(id);
         return /lugar em (\d+) (\d+) (\d+)/.exec(line).slice(1).map(Number);
     };
-    assert.deepEqual([at("banho-1"), at("banho-4"), at("banho-6"), at("banho-8")], [[741, 3348, 142], [3208, 2168, 95], [3083, 465, 36], [564, 256, 110]], "Suchdol, Grunta, Kuttenberg and Malešov");
+    assert.deepEqual([at("banho-1"), at("banho-4"), at("banho-6"), at("banho-8")], [[741, 3348, 142], [3208, 2168, 95], [3083, 465, 36], [564, 256, 110]], "Suchdol, Minas, Kuttenberg and Malešov");
     assert.equal(sut.fires.length, 13, "a bath has no camp fire: only the pedlars' are lit");
     assert.ok(!/sem casa|mora em/.test(sut.line("banho-1")) && /nos banhos/.test(sut.line("banho-1")));
-    assert.ok(sut.logs.some((line) => /vendors: 8 banhista\(s\) nos banhos: Suchdol, Zikmundovo, Grunta, Kuttenberg, Malešov/.test(line)));
+    assert.ok(sut.logs.some((line) => /vendors: 8 banhista\(s\) nos banhos: Suchdol, Zikmundovo, Minas, Kuttenberg, Malešov/.test(line)));
 
     const shop = sut.shop("Banhos (Suchdol)");
-    assert.deepEqual(shop.stock.map((row) => row.item), ["soap", "soap_kcd", "perfume_longWeak", "perfume_longWeak_medium", "perfume_longWeak_high", "perfume_shortStrong", "perfume_shortStrong_medium", "perfume_shortStrong_high", "bandage_classic", "guid:kcdc:book:alquimia-perfumaria"]);
-    assert.ok(shop.stock.filter((row) => !row.item.startsWith("guid:kcdc:book:")).every((row) => row.price === 120), "the game's price plus a fifth, like everybody's; the book at its own");
+    assert.deepEqual(shop.stock.map((row) => row.item), ["soap", "soap_kcd", "perfume_longWeak", "perfume_longWeak_medium", "perfume_longWeak_high", "perfume_shortStrong", "perfume_shortStrong_medium", "perfume_shortStrong_high", "bandage_classic"], "no recipe book any more (2026-10-18)");
+    assert.ok(shop.stock.every((row) => row.price === 120), "the game's price plus a fifth, like everybody's");
     assert.ok(shop.buyPrices.some((row) => row.item === "soap") && shop.buyPrices.length === 9, "and buys what the baths sell, at a third of its worth");
 });
 
-test("a bath attendant keeps to the baths by day and by night, never farther than a pedlar from the fire", () => {
-    const sut = load({ hour: 23, navigationReady: true });
+test("a bath attendant keeps to the baths by day, never farther than a pedlar from the fire, and goes in at night (2026-10-25: nobody sleeps in the street)", () => {
+    const sut = load({ hour: 12, navigationReady: true });
     sut.spawn();
     const maid = attendants(sut)[0];
-    assert.ok(maid, "no house to sleep in");
+    assert.ok(maid, "about by day");
     sut.api.liveDay(sut.clock.now + 60_000);
     const spot = maid.walks.at(-1);
-    assert.ok(spot, "walks about at night too");
+    assert.ok(spot, "walks about");
     assert.ok(Math.hypot(spot.x - maid.options.position.x, spot.y - maid.options.position.y) <= sut.api.vendorLife.campRoamM + 0.01);
+
+    // No door near the baths: at night she goes in where she stands, once nobody sees it.
+    sut.world.hour = 23;
+    const t0 = sut.clock.now + 70_000;
+    sut.api.liveDay(t0);
+    assert.equal(maid.removed, false, "not at once");
+    sut.api.liveDay(t0 + 25_000);
+    assert.equal(maid.removed, true, "in for the night");
+    assert.equal(attendants(sut).length, 0, "nobody at the baths at night");
+    sut.world.hour = 7;
+    sut.api.liveDay(t0 + 30_000);
+    assert.equal(attendants(sut).length, 8, "all out again in the morning");
+});
+
+test("a bath attendant with a door of a building near the baths goes in by it at night and comes out of it in the morning", () => {
+    const baths = [741, 3348, 142];
+    const door = { position: { x: baths[0] - 20, y: baths[1], z: baths[2] }, areas: [{ contains: (point) => point.x < baths[0] - 21 }] };
+    const sut = load({ hour: 12, navigationReady: true, doors: [door] });
+    sut.spawn();
+    const maid = [...sut.npcs.values()].find((npc) => Math.hypot(npc.options.position.x - baths[0], npc.options.position.y - baths[1]) < 5);
+    assert.ok(maid);
+    sut.world.hour = 23;
+    sut.api.liveDay(sut.clock.now + 60_000);
+    const step = maid.walks.at(-1);
+    assert.ok(Math.hypot(step.x - door.position.x, step.y - door.position.y) <= 3.6 && !door.areas[0].contains(step), "to the step outside the door");
+    sut.emit("npcIntentDone", maid, "reached");
+    assert.equal(maid.removed, true, "in by the door");
+    sut.world.hour = 7;
+    sut.api.liveDay(sut.clock.now + 70_000);
+    const morning = [...sut.npcs.values()].find((npc) => npc.options.name === maid.options.name && Math.hypot(npc.position.x - step.x, npc.position.y - step.y) < 1);
+    assert.ok(morning, "out of the same door");
 });
 
 test("each wears the outfit of its trade, and a clothier may keep the dress of her soul", () => {
@@ -250,13 +297,35 @@ test("each wears the outfit of its trade, and a clothier may keep the dress of h
     assert.equal(sut.byName("Bufarinheira").options.soul, "townswoman");
 });
 
-test("each sells its trade's goods at the game's price plus a margin, and the smiths their books at the book's price", () => {
+test("each sells its trade's goods at the game's price plus a margin, and the skill books of its trade, never a recipe", () => {
     const sut = load();
     sut.spawn();
     const smith = sut.shop("Ferreiro (Suchdol)");
     assert.ok(smith.stock.some((row) => row.item === "bsmt_ironBad" && row.price === 120));
-    assert.ok(smith.stock.some((row) => row.item.startsWith("guid:kcdc:book:ferreiro-")));
-    assert.deepEqual(sut.shop("Taberneiro (Suchdol)").stock.map((row) => row.item), ["beef", "pigMeat", "lambMeat", "chicken", "guid:kcdc:book:alquimia-tonicos", "guid:kcdc:book:alquimia-medicina"], "meat, and the books of drinks and remedies");
+    assert.ok(["bsmt_guardSpecial", "bsmt_woodExotic", "special_attire", "special_featherRooster", "guid:kcdc-craft:madeira"].every((item) => smith.stock.some((row) => row.item === item)), "the rest of what the forge's recipes take, bow wood and feathers too");
+    const tavern = sut.shop("Taberneiro (Suchdol)").stock.map((row) => row.item);
+    assert.deepEqual(
+        tavern.filter((item) => !SKILL_GUIDS.has(item)),
+        ["beef", "pigMeat", "lambMeat", "chicken", "guid:kcdc-craft:farinha", "guid:kcdc-craft:malte", "guid:kcdc-craft:lupulo", "egg", "water", "milk", "loot_salt", "honey", "special_lard", "cabbage", "garlic", "plums", "pear", "walnuts", "driedPepperSpice",
+            "wine", "pigTenderloin", "beefTenderloin", "salami", "cheeseQuarter", "curdCheese", "perch", "trout", "onion", "carrot", "beet", "apple", "boletus", "lepiota", "horseradish", "crayfish", "cowKidney", "cowTongue", "pigLiver", "lambStomach", "crayfishBlue",
+            "parsnip", "turnip", "leek", "roastedPeas", "herb_urticaria", "bread", "bacon", "cream", "beer",
+            // The seeds of the garden vegetables (2026-10-22), and the saplings, seeds and pepper of the fruit and the spice (2026-10-24), in the order of the
+            // crops (by level), our own items by the GUID the game gave them.
+            ...["cebola", "repolho", "nabo", "cenoura", "beterraba", "alho", "maca", "pastinaca", "pera", "alho-poro", "ameixa", "raiz-forte", "ervilha", "pessego", "uva", "melancia", "pimenta"].map((crop) => `guid:kcdc-craft:semente-${crop}`)],
+        "meat, what the kitchen's recipes take (our own flour, malt and hops by the GUID the game gave them), wine, cuts, cheese, fish, offal, roots and mushrooms, what the soups take, and the garden vegetables', fruits' and pepper's seeds",
+    );
+    assert.deepEqual(Array.from(tavern.filter((item) => SKILL_GUIDS.has(item))), skillGuids("drinking", "speech"), "and the books of drinking and speech");
+    const apothecary = sut.shop("Boticário (Suchdol)").stock.map((row) => row.item);
+    assert.ok(["wine", "special_sulfur", "special_saltpeter", "special_charcoalImproved", "herb_dried_poppy", "special_mushroomAmanita", "maliruvLek_mandrakeRoot", "maliruvLek_freshwaterPearl"].every((item) => apothecary.includes(item)));
+    assert.deepEqual(
+        apothecary.filter((item) => item.startsWith("guid:kcdc-craft:semente-")),
+        ["urtiga", "dente-de-leao", "cardo", "confrei", "sabugueiro", "absinto", "valeriana", "hortela", "hiperico", "salvia", "eufrasia", "camomila", "tanaceto", "calendula", "beladona", "papoula", "meimendro", "paris", "gengibre"].map((crop) => `guid:kcdc-craft:semente-${crop}`),
+        "and the seeds of the garden herbs, the apothecary being who buys what they give (2026-10-22; twelve more of the wild ones, 2026-10-27)",
+    );
+    assert.ok(smith.stock.some((row) => row.item === "player_shovel"), "the smith sells the shovel the Agricultores dig with");
+    for (const shop of sut.vendors.values()) {
+        assert.ok(shop.stock.length <= 128, `${shop.options.name}: ${shop.stock.length} kinds`);
+    }
 });
 
 test("a pedlar sells a few odd things of each kind, a different few at every camp, always with plain dice", () => {
@@ -265,14 +334,20 @@ test("a pedlar sells a few odd things of each kind, a different few at every cam
     const shops = [...sut.vendors.values()].filter((vendor) => vendor.options.name.startsWith("Mascate ("));
     assert.equal(shops.length, 13);
     const first = shops[0].stock.map((row) => row.item);
-    assert.equal(first.length, 11, "plain dice, three dice, two badges, three things to wear and two odd things");
+    const road = new Set(Array.from(sut.api.ROAD_GOODS, (item) => (item.startsWith("kcdc-craft:") ? `guid:${item}` : item)));
+    const trinkets = first.filter((item) => !SKILL_GUIDS.has(item) && !road.has(item));
+    assert.equal(trinkets.length, 11, "plain dice, three dice, two badges, three things to wear and two odd things");
+    assert.equal(first.filter((item) => road.has(item)).length, 8, "and eight of the guilds' goods");
+    assert.ok(shops.every((shop) => shop.stock.some((row) => SKILL_GUIDS.has(row.item))), "and a book of the road's skills at every camp");
+    const carried = new Set(shops.flatMap((shop) => shop.stock.map((row) => row.item)));
+    assert.ok([...road].every((item) => carried.has(item)), "every one of the guilds' goods at some camp");
     assert.equal(first[0], "dieNormal");
     assert.ok(first.includes("Spectacles01_m01") || shops.some((shop) => shop.stock.some((row) => row.item === "Spectacles01_m01")), "spectacles at some camp");
     assert.ok(shops.some((shop) => shop.stock.some((row) => row.item === "EyepatchZizka_m01")), "an eye patch at some camp");
     assert.ok(shops.every((shop) => shop.stock.every((row) => row.price === 120)), "the game's price plus a fifth, like everybody's");
     assert.notDeepEqual(shops[1].stock.map((row) => row.item), first, "the next camp has other things");
     assert.ok(shops[0].buyPrices.some((row) => row.item === "loot_rosary" && row.price === 35), "and buys trinkets at a third of their worth");
-    assert.deepEqual(Array.from(sut.api.waresOf(0)).map((line) => line.item), first);
+    assert.deepEqual(Array.from(sut.api.waresOf(0)).map((line) => (line.item.startsWith("kcdc-craft:") ? `guid:${line.item}` : line.item)), first);
 });
 
 test("each buys only its own trade's goods, at a third of what the game says they are worth", () => {
@@ -280,7 +355,9 @@ test("each buys only its own trade's goods, at a third of what the game says the
     sut.spawn();
     const smith = sut.shop("Ferreiro (Suchdol)");
     assert.equal(smith.options.buys, true);
-    assert.deepEqual(smith.buyPrices, [{ item: "bsmt_ironBad", price: 35 }, { item: "daggerCommon", price: 35 }, { item: "huntingSwordBasic", price: 35 }], "an item the game does not know is left out");
+    // The Coletores' finds and the forge's silver come first (2026-10-21), our own items by the GUID the game gave them.
+    const finds = ["guid:kcdc-craft:lenha", "guid:kcdc-craft:minerio-prata", "guid:kcdc-craft:barra-prata", "loot_silverCup", "loot_silverChalice", "ring_silver_engraved", "ring_silver_gem", "brooch_silver_enamel"];
+    assert.deepEqual(smith.buyPrices, [...finds.map((item) => ({ item, price: 35 })), { item: "bsmt_ironBad", price: 35 }, { item: "daggerCommon", price: 35 }, { item: "huntingSwordBasic", price: 35 }], "an item the game does not know is left out");
     assert.deepEqual(sut.shop("Caçador (Suchdol)").buyPrices.map((row) => row.item), ["arrow_normal", "bow_b", "deerMeat"]);
     assert.deepEqual(sut.shop("Alfaiate (Suchdol)").buyPrices.map((row) => row.item), ["TunicShort01_m01_D"]);
     assert.equal(sut.api.BUY_SHARE, 0.35);
@@ -299,36 +376,37 @@ test("at most 128 kinds of goods per vendor, which is all the game takes", () =>
     assert.equal(sut.shop("Boticário (Suchdol)").buyPrices.length, 128);
 });
 
-test("a purse of five hundred coins as the game shows them: what is spent is kept across a restart, and it is full again a day after", () => {
+test("a vendor has 300 coins a day to buy with: what it pays out stays paid, what a player pays is taken back out, and a full purse comes back a day later", () => {
     const sut = load();
     sut.spawn();
     const smith = sut.shop("Ferreiro (Suchdol)");
-    assert.equal(smith.purse, 5_000, "500 on screen");
-    smith.purse = 4_100;
+    assert.equal(sut.api.PURSE, 3000);
+    assert.equal(smith.purse, 3000, "300 on screen");
+    // The smith bought a player's goods for 80 coins.
+    smith.purse = 2200;
     sut.emit("vendorTrade", smith.id, { id: 7 }, [], [], 9000);
+    assert.equal(smith.purse, 2200);
+    // A player bought something: the game put the price in the purse, and it is taken back out.
+    smith.purse = 3100;
+    sut.emit("vendorTrade", smith.id, { id: 7 }, [], [], 9000);
+    assert.equal(smith.purse, 2200, "selling to a vendor and buying back does not make it richer");
     sut.timers.filter((timer) => timer.ms === 3000 && !timer.done).forEach((timer) => timer.fn());
     const saved = JSON.parse(sut.disk.files.get("playerdata/vendor-purses.json"));
-    assert.equal(saved.ferreiro.purse, 4_100);
-
-    const again = load({ seed: { "playerdata/vendor-purses.json": JSON.stringify(saved) }, now: sut.clock.now + 60_000 });
-    again.spawn();
-    assert.equal(again.shop("Ferreiro (Suchdol)").purse, 4_100, "a restart does not fill it early");
-    // Every purse was filled at the first start, and all of them were kept.
+    assert.equal(saved.ferreiro.purse, 2200);
+    assert.equal(saved.ferreiro.size, 3000);
     assert.equal(Object.keys(saved).length, 26);
-    assert.equal(again.api.refillPurses(saved.ferreiro.refilledAt + 23 * 3600_000), 0);
-    assert.equal(again.api.refillPurses(saved.ferreiro.refilledAt + 24 * 3600_000), 26, "a day after they were filled");
-    assert.equal(again.api.refillPurses(saved.ferreiro.refilledAt + 25 * 3600_000), 0, "and not again until the next day");
-    assert.equal(again.shop("Ferreiro (Suchdol)").purse, 5_000);
+    sut.api.refillPurses(sut.clock.now + 25 * 3600_000);
+    assert.equal(smith.purse, 3000, "full again a day later");
 
-    const later = load({ seed: { "playerdata/vendor-purses.json": JSON.stringify(saved) }, now: sut.clock.now + 25 * 3600_000 });
-    later.spawn();
-    assert.equal(later.shop("Ferreiro (Suchdol)").purse, 5_000, "a restart a day later finds it full");
-
-    // A purse saved while it was bigger comes down to the new size, but one below it is kept as it was.
-    const bigger = load({ seed: { "playerdata/vendor-purses.json": JSON.stringify({ ferreiro: { purse: 41_000, refilledAt: sut.clock.now }, alquimista: { purse: 1_230, refilledAt: sut.clock.now } }) }, now: sut.clock.now + 60_000 });
-    bigger.spawn();
-    assert.equal(bigger.shop("Ferreiro (Suchdol)").purse, 5_000, "41.000 saved, 500 allowed");
-    assert.equal(bigger.shop("Boticário (Suchdol)").purse, 1_230);
+    // Purses saved under the old size (nothing, or 500 coins) start full under the new one, at once.
+    const older = load({ seed: { "playerdata/vendor-purses.json": JSON.stringify({ ferreiro: { purse: 0, refilledAt: sut.clock.now }, alquimista: { purse: 41_000, refilledAt: sut.clock.now } }) }, now: sut.clock.now + 60_000 });
+    older.spawn();
+    assert.equal(older.shop("Ferreiro (Suchdol)").purse, 3000);
+    assert.equal(older.shop("Boticário (Suchdol)").purse, 3000);
+    // One saved under this size keeps what was left in it.
+    const kept = load({ seed: { "playerdata/vendor-purses.json": JSON.stringify({ ferreiro: { purse: 1_500, refilledAt: sut.clock.now, size: 3000 } }) }, now: sut.clock.now + 60_000 });
+    kept.spawn();
+    assert.equal(kept.shop("Ferreiro (Suchdol)").purse, 1500);
 });
 
 test("talking to a trade NPC opens its shop with that NPC behind the counter; other NPCs are left alone", () => {
@@ -347,7 +425,7 @@ test("the shelves are filled again on a timer", () => {
     sut.spawn();
     sut.shop("Taberneiro (Suchdol)").stock = [];
     sut.intervals.find((interval) => interval.ms === 15 * 60_000).fn();
-    assert.equal(sut.shop("Taberneiro (Suchdol)").stock.length, 6);
+    assert.equal(sut.shop("Taberneiro (Suchdol)").stock.length, 66 + skillGuids("drinking", "speech").length, "six more since 2026-10-24: the fruits' and the pepper's seeds, and the grapes' (2026-10-27)");
 });
 
 test("an administrator moves a vendor's place, and it is remembered", () => {
@@ -360,21 +438,21 @@ test("an administrator moves a vendor's place, and it is remembered", () => {
     sut.api.moveVendor("cacador", { x: 580, y: 3270, z: 147 }, 90);
     assert.deepEqual(JSON.parse(sut.disk.files.get("playerdata/vendors.json"))["cacador"], { x: 580, y: 3270, z: 147, yaw: 90 });
     assert.match(sut.line("cacador"), /Mestre Caçador \(Suchdol\), lugar em 580 3270 147 \(escolhido\)/);
-    assert.match(sut.line("ferreiro"), /bolsa 500 moedas -- andando pela vila/);
+    assert.match(sut.line("ferreiro"), /bolsa 300 moedas -- andando pela vila/);
     assert.match(sut.line("mascate-1"), /Mascate \(Bohounovice, à beira d'água\).* -- junto da fogueira/);
 });
 
 test("stopping the resource takes the NPCs, shops and fires away and keeps what is in the purses", () => {
     const sut = load();
     sut.spawn();
-    sut.shop("Boticário (Suchdol)").purse = 12_340;
+    sut.shop("Boticário (Suchdol)").purse = 2_340;
     sut.emit("resourceStop", "another-resource");
     assert.equal(sut.npcs.size, 26);
     sut.emit("resourceStop", "kcdc-gamemode");
     assert.equal(sut.npcs.size, 0);
     assert.ok([...sut.vendors.values()].every((vendor) => vendor.destroyed));
     assert.ok(sut.fires.every((fire) => fire.destroyed));
-    assert.equal(JSON.parse(sut.disk.files.get("playerdata/vendor-purses.json"))["alquimista"].purse, 12_340);
+    assert.equal(JSON.parse(sut.disk.files.get("playerdata/vendor-purses.json"))["alquimista"].purse, 2_340);
 });
 
 test("one somehow brought down is back at their place a moment later", () => {
@@ -512,7 +590,7 @@ test("at night a vendor walks home on a route the server plans and goes in; out 
     const smith = sut.byName("Mestre Ferreiro");
     sut.world.hour = 22.5;
     sut.api.liveDay(sut.clock.now);
-    assert.deepEqual(smith.walks.at(-1), { x: 660, y: 3270, pathfinding: "server" }, "to the door of Casa 01, around what is in the way");
+    assert.deepEqual(smith.walks.at(-1), { x: 662.5, y: 3270, pathfinding: "server" }, "to the step outside the door of Casa 01 (never its spot, which can lie behind a locked door), around what is in the way");
     assert.match(sut.line("ferreiro"), /indo para casa/);
     sut.emit("npcIntentDone", smith, "reached");
     assert.equal(smith.removed, true, "in through the door");
@@ -521,7 +599,7 @@ test("at night a vendor walks home on a route the server plans and goes in; out 
     sut.world.hour = 6.2;
     sut.api.liveDay(sut.clock.now + 1000);
     const morning = sut.byName("Mestre Ferreiro");
-    assert.deepEqual({ x: morning.position.x, y: morning.position.y }, { x: 660, y: 3270 }, "out of the door");
+    assert.deepEqual({ x: morning.position.x, y: morning.position.y }, { x: 662.5, y: 3270 }, "out of the door, on its outside step");
     assert.match(sut.line("ferreiro"), /andando pela vila/);
 });
 
@@ -562,14 +640,14 @@ test("a vendor nobody can see finishing the walk home goes in anyway; with someb
     assert.equal(theirs.removed, true);
 });
 
-test("a server that starts at night has the vendors with a house asleep, and those without one, and the pedlars, about", () => {
+test("a server that starts at night has everybody in but the pedlars by their fires, house or none (2026-10-25: nobody sleeps in the street)", () => {
     const sut = load({ houses: [house("casa-01", "Casa 01", "Suchdol", 660, 3270)], hour: 23 });
     sut.spawn();
     assert.equal(sut.byName("Mestre Ferreiro"), undefined, "the smith sleeps in Casa 01");
-    assert.ok(sut.byName("Costureira"), "the clothier has no house: she stays");
+    assert.equal(sut.byName("Costureira"), undefined, "the clothier has no house: in all the same");
     assert.ok(sut.shop("Ferreiro (Suchdol)"), "his shop is still there for the morning");
     assert.equal(pedlars(sut).length, 13);
-    assert.equal(attendants(sut).length, 8);
+    assert.equal(attendants(sut).length, 0);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -649,15 +727,70 @@ test("village vendors are made again at the next look, in place of the old ones,
     assert.equal([...sut.api.vendorIds()].filter((id) => id === "ferreiro").length, 1);
 });
 
-test("each trade's vendor offers the recipes of its own trade: the smith's, the apothecary's, the tavern's, the hunter's and the baths'", () => {
+test("a village the census files after the first look gets its vendors in the same start, and the ones already out stay as they are (2026-10-20)", () => {
+    const sut = load({ houses: [...SUCHDOL_HOUSES, ...WYSOKA] });
+    sut.spawn();
+    assert.equal(sut.line("ferreiro-miskowitz"), undefined, "not filed yet when the vendors are first made, 12 s in");
+    const wysoka = sut.shop("Ferreiro (Wysoka)");
+    const before = [...sut.api.vendorIds()].length;
+    const timer = sut.timers.find((one) => one.ms === sut.api.NEW_VILLAGES_AFTER_MS);
+    assert.ok(timer, "a look is set for after the census");
+    assert.ok(timer.ms > 20_000, "after the census, which maps a new region 20 s in");
+
+    // The census files Miskowitz and Kuttenberg, a village and a town.
+    ["01", "02", "03", "04"].forEach((n, index) => sut.catalog.push(house(`miskowitz-casa-${n}`, `Casa ${n}`, "Miskowitz", 1500 + index * 10, 1950 + index * 12)));
+    ["01", "02", "03", "04", "05", "06", "07"].forEach((n, index) => sut.catalog.push(house(`kuttenberg-casa-${n}`, `Casa ${n}`, "Kuttenberg", 3000 + index * 9, 700 + index * 11)));
+    timer.fn();
+    const ids = [...sut.api.vendorIds()];
+    assert.equal(ids.length, before + 6, "a smith, an apothecary and a tavern keeper for each");
+    for (const id of ["ferreiro-miskowitz", "alquimista-miskowitz", "taberneiro-miskowitz", "ferreiro-kuttenberg", "alquimista-kuttenberg", "taberneiro-kuttenberg"]) {
+        assert.ok(sut.line(id), `${id} is a vendor`);
+        assert.doesNotMatch(sut.line(id), /ausente/, `${id} is out in the world`);
+    }
+    assert.ok(sut.shop("Ferreiro (Miskowitz)") !== undefined && sut.shop("Taberneiro (Kuttenberg)") !== undefined, "each with its shop");
+    assert.ok(sut.logs.some((line) => /vendors: 6 vendedor\(es\) de vilas novas, mapeadas neste início: Kuttenberg, Miskowitz|vendors: 6 vendedor\(es\) de vilas novas, mapeadas neste início: Miskowitz, Kuttenberg/.test(line)), sut.logs.slice(-4).join(" | "));
+    assert.equal(sut.shop("Ferreiro (Wysoka)"), wysoka, "Wysoka's smith was not made again");
+    assert.equal(wysoka.destroyed, false);
+    assert.equal([...sut.api.vendorIds()].filter((id) => id === "ferreiro").length, 1, "and Suchdol's five are never doubled");
+
+    // A second look finds nothing new, and says nothing.
+    const logged = sut.logs.length;
+    timer.fn();
+    assert.equal(sut.api.addNewVillages(), 0);
+    assert.equal(sut.logs.length, logged);
+
+    // The timer goes with the resource.
+    sut.emit("resourceStop", "kcdc-gamemode");
+    assert.equal(timer.done, true);
+});
+
+test("no vendor sells a recipe any more; each trade sells the game's skill books of its own skills", () => {
     const sut = load();
     sut.spawn();
-    const books = (name) => sut.shop(name).stock.map((row) => row.item).filter((item) => item.startsWith("guid:kcdc:book:")).map((item) => item.replace("guid:kcdc:book:", ""));
-    assert.deepEqual(books("Ferreiro (Suchdol)").filter((id) => id.startsWith("ferreiro-")), ["ferreiro-machados", "ferreiro-ferraduras", "ferreiro-cacadores", "ferreiro-curtas", "ferreiro-sabres", "ferreiro-longas", "ferreiro-nobres", "ferreiro-raras"], "every smithing book the server has but the two the guild kits hand out");
-    assert.deepEqual(books("Boticário (Suchdol)"), ["alquimia-tonicos", "alquimia-vigor", "alquimia-cacador", "alquimia-medicina", "alquimia-perfumaria", "alquimia-venenos", "alquimia-astucia", "alquimia-polvora"]);
-    assert.deepEqual(books("Taberneiro (Suchdol)"), ["alquimia-tonicos", "alquimia-medicina"]);
-    assert.deepEqual(books("Caçador (Suchdol)"), ["alquimia-cacador", "alquimia-vigor"]);
-    assert.deepEqual(books("Banhos (Suchdol)"), ["alquimia-perfumaria"]);
-    assert.deepEqual(books("Alfaiate (Suchdol)"), [], "the game has no tailor's recipes to teach");
-    assert.deepEqual(books("Mascate (Bohounovice, à beira d'água)"), []);
+    for (const shop of sut.vendors.values()) {
+        assert.ok(shop.stock.every((row) => !row.item.startsWith("guid:kcdc:book:")), `${shop.options.name} sells no recipe`);
+    }
+    const books = (name) => Array.from(sut.shop(name).stock.map((row) => row.item).filter((item) => SKILL_GUIDS.has(item)));
+    assert.deepEqual(books("Ferreiro (Suchdol)"), skillGuids("craftsmanship", "weapon_sword", "heavy_weapons", "weapon_large", "strength"));
+    assert.deepEqual(books("Boticário (Suchdol)"), skillGuids("alchemy", "scholarship", "vitality"));
+    assert.deepEqual(books("Caçador (Suchdol)"), skillGuids("survival", "marksmanship", "houndmaster", "stealth"));
+    assert.deepEqual(books("Alfaiate (Suchdol)"), skillGuids("agility", "horse_riding"));
+    assert.deepEqual(books("Banhos (Suchdol)"), []);
+    assert.ok(books("Ferreiro (Suchdol)").length > 0 && sut.shop("Ferreiro (Suchdol)").stock.filter((row) => SKILL_GUIDS.has(row.item)).every((row) => row.amount === 2));
+});
+
+test("a vendor found in the river by day is made again at their place, and the log says why (2026-10-25)", () => {
+    const sut = load({ houses: HOUSES, hour: 12, navigationReady: true });
+    sut.spawn();
+    const smith = sut.byName("Mestre Ferreiro");
+    const t0 = sut.clock.now;
+    sut.api.liveDay(t0);
+    smith.position = { x: smith.position.x + 5, y: smith.position.y, z: smith.position.z - 9 };
+    sut.api.liveDay(t0 + 11_000);
+    assert.equal(smith.removed, true, "the body in the river is taken away");
+    const again = sut.byName("Mestre Ferreiro");
+    assert.ok(again && again !== smith);
+    assert.deepEqual([again.position.x, again.position.y], [smith.options.position.x, smith.options.position.y], "made again at the shop");
+    assert.ok(sut.logs.some((line) => /^npc-keeper: vendors: Mestre Ferreiro \(Suchdol\) caiu .*: feito de novo no lugar$/.test(line)), sut.logs.filter((line) => /npc-keeper/.test(line)).join("\n"));
+    assert.match(sut.line("ferreiro"), /andando pela vila/);
 });

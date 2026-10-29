@@ -67,17 +67,22 @@ function load({ files = {} } = {}) {
     const online = new Map();
     const chat = [];
     const logs = [];
-    const calls = { set: [], add: [], restoreProgression: [], setKnowledge: [], vitals: [] };
+    const calls = { set: [], add: [], restoreProgression: [], setKnowledge: [], vitals: [], combos: [] };
+    const COMBOS = ["C01 (longsword)", "C02 (longsword)"];
     const clock = { now: 1_000_000 };
     const state = { setRefuses: () => false, addOk: true, inventoryReady: true };
     const inventories = new Map();
 
     const perkGuardSandbox = { exports: {}, Progression: { blockPerks() {} }, console: { log() {} } };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/perk-guard.js"), "utf8"), perkGuardSandbox);
+    // The guard is off by default since 2026-10-19; these tests are of it switched on.
+    perkGuardSandbox.exports.perkGuard.enabled = true;
     const context = {
         exports: {},
         require: (id) => {
             if (id === "./perk-guard.js") return perkGuardSandbox.exports;
+            // The combos are the Esgrima's (esgrima.ts): taken out of what is restored, written down there. This stub takes out the ones of this test's list.
+            if (id === "./esgrima.js") return { takeOutCombos: (steamId, snapshot) => { calls.combos.push([steamId, snapshot.perks.filter((perk) => COMBOS.includes(perk))]); return { ...snapshot, perks: snapshot.perks.filter((perk) => !COMBOS.includes(perk)) }; }, leaveOutCombos: (snapshot) => ({ ...snapshot, perks: snapshot.perks.filter((perk) => !COMBOS.includes(perk)) }) };
             assert.equal(id, "./store.js");
             return storeSandbox.exports;
         },
@@ -123,6 +128,7 @@ function load({ files = {} } = {}) {
         clock,
         inventories,
         fire,
+        timeouts,
         tick: () => intervals[0].fn(),
         flushTimeouts: () => { while (timeouts.length) timeouts.shift().fn(); },
         stored: (steamId = STEAM) => JSON.parse(disk.files.get(`playerdata/characters/${steamId}.json`)),
@@ -511,3 +517,263 @@ test("a character without those perks is restored exactly as it was saved", () =
     assert.ok(!sut.chat.some((line) => /alquimia/.test(line)));
 });
 
+// ---------------------------------------------------------------------------------------------
+// Levels only climb (2026-10-23: a player's whole progression read as a fresh character's).
+
+const CLIMBER = () =>
+    record({
+        progression: {
+            tracks: { alchemy: { level: 20, xp: 0 }, weapon_sword: { level: 10, xp: 5 }, fencing: { level: 9, xp: 0 }, survival: { level: 5, xp: 0 } },
+            perks: ["p1", "p2"],
+            perkPoints: { alchemy: 2, main: 1 },
+        },
+    });
+const FRESH = () => ({ tracks: { alchemy: { level: 5, xp: 0 }, weapon_sword: { level: 5, xp: 0 }, fencing: { level: 5, xp: 0 }, survival: { level: 5, xp: 0 } }, perks: [], perkPoints: {} });
+
+test("keepClimbs puts back each track that reads lower than it was saved, and nothing else; the fencing, which the game computes, is not compared", () => {
+    const sut = load();
+    const saved = CLIMBER().progression;
+    const live = { tracks: { alchemy: { level: 5, xp: 0 }, weapon_sword: { level: 10, xp: 5.5 }, fencing: { level: 5, xp: 0 }, survival: { level: 6, xp: 1 }, speech: { level: 7, xp: 0 } }, perks: ["x"], perkPoints: { main: 9 } };
+    const kept = sut.api.keepClimbs(live, saved);
+    assert.deepEqual(JSON.parse(JSON.stringify(kept.kept)), ["alchemy"], "only the alchemy fell behind; sword is higher in XP, fencing is derived, survival climbed");
+    assert.deepEqual(JSON.parse(JSON.stringify(kept.snapshot.tracks)), { alchemy: { level: 20, xp: 0 }, weapon_sword: { level: 10, xp: 5.5 }, fencing: { level: 5, xp: 0 }, survival: { level: 6, xp: 1 }, speech: { level: 7, xp: 0 } });
+    assert.deepEqual(JSON.parse(JSON.stringify(kept.snapshot.perks)), ["x"], "the live perks and points are the live ones");
+    assert.equal(sut.api.keepClimbs(live, null).snapshot, live, "nothing saved, nothing to keep");
+    const same = sut.api.keepClimbs(saved, saved);
+    assert.deepEqual(JSON.parse(JSON.stringify(same.kept)), []);
+    assert.equal(same.snapshot, saved);
+    const missing = sut.api.keepClimbs({ tracks: {}, perks: [], perkPoints: {} }, saved);
+    assert.deepEqual(JSON.parse(JSON.stringify(missing.kept)), ["alchemy", "weapon_sword", "survival"], "a track the live one has not even got is a track lost");
+    const rounding = sut.api.keepClimbs({ ...saved, tracks: { ...saved.tracks, alchemy: { level: 20, xp: -0.5 } } }, saved);
+    assert.deepEqual(JSON.parse(JSON.stringify(rounding.kept)), [], "a fraction of XP is rounding, not a loss");
+});
+
+test("a restore that did not hold: the file keeps the levels, and the game is asked again, whole, after five and twenty seconds, and the log says so", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const player = sut.join();
+    player.progression = FRESH();
+    bring(sut, player);
+    assert.equal(sut.calls.restoreProgression.length, 1);
+    sut.tick();
+    sut.leave(player);
+    const saved = sut.stored();
+    assert.equal(saved.progression.tracks.alchemy.level, 20, "not written over by a fresh character's");
+    assert.equal(saved.progression.tracks.weapon_sword.level, 10);
+    assert.equal(saved.progression.tracks.fencing.level, 5, "the derived one is the live one's");
+
+    const again = load({ files: { [STEAM]: CLIMBER() } });
+    const second = again.join();
+    second.progression = FRESH();
+    bring(again, second);
+    assert.deepEqual(again.calls.restoreProgression.length, 1);
+    again.flushTimeouts();
+    assert.equal(again.calls.restoreProgression.length, 3, "once at the start and once at each of the two looks");
+    const repair = again.calls.restoreProgression[1];
+    assert.deepEqual(repair.perks, ["p1", "p2"], "the perks of the file come back with the levels");
+    assert.deepEqual(repair.perkPoints, { alchemy: 2, main: 1 });
+    assert.equal(repair.tracks.alchemy.level, 20);
+    assert.equal(repair.tracks.weapon_sword.level, 10);
+    assert.ok(again.logs.some((line) => /Mauro: 2 trilha\(s\) abaixo do salvo \(alchemy 5 < 20, weapon_sword 5 < 10\); restaurei de novo \(5 s depois, vez 1\)/.test(line)), again.logs.join(" | "));
+    assert.ok(again.logs.some((line) => /vez 2/.test(line) && /20 s depois/.test(line)));
+});
+
+test("a restore that holds the second time is not asked a third; a character that did not lag is never asked again", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    let asks = 0;
+    const player = sut.join({
+        restoreProgression(snapshot) {
+            sut.calls.restoreProgression.push(JSON.parse(JSON.stringify(snapshot)));
+            asks += 1;
+            if (asks >= 2) this.progression = JSON.parse(JSON.stringify(snapshot));
+            return true;
+        },
+    });
+    player.progression = FRESH();
+    bring(sut, player);
+    sut.flushTimeouts();
+    assert.equal(sut.calls.restoreProgression.length, 2, "asked at the start, again at five seconds, and at twenty it held");
+    assert.equal(player.progression.tracks.alchemy.level, 20);
+
+    const fine = load({ files: { [STEAM]: CLIMBER() } });
+    const kept = fine.join();
+    kept.progression = JSON.parse(JSON.stringify(CLIMBER().progression));
+    bring(fine, kept);
+    fine.flushTimeouts();
+    fine.tick();
+    assert.equal(fine.calls.restoreProgression.length, 1, "it came back as saved: nothing to repeat");
+});
+
+test("at most three times in a session, and a track that lags later is put back alone, leaving the live perks as they are", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const player = sut.join();
+    player.progression = FRESH();
+    bring(sut, player);
+    sut.flushTimeouts();
+    assert.equal(sut.calls.restoreProgression.length, 3);
+    // Later in the session the periodic look puts back the tracks alone: the live perks are what they are now.
+    sut.clock.now += 60_000;
+    player.progression = { tracks: { alchemy: { level: 20, xp: 0 }, weapon_sword: { level: 5, xp: 0 }, fencing: { level: 9, xp: 0 }, survival: { level: 5, xp: 0 } }, perks: ["p1", "p2", "bought"], perkPoints: { main: 0 } };
+    sut.tick();
+    assert.equal(sut.calls.restoreProgression.length, 4);
+    const last = sut.calls.restoreProgression.at(-1);
+    assert.equal(last.tracks.weapon_sword.level, 10);
+    assert.equal(last.perks, undefined, "the perks are not sent back: a restore replaces the set and, since KCDC 1.7.2, leaves a blocked perk (a combo) out");
+    assert.equal(last.perkPoints, undefined);
+    sut.clock.now += 60_000;
+    player.progression = FRESH();
+    sut.tick();
+    assert.equal(sut.calls.restoreProgression.length, 4, "three is the limit");
+    assert.equal(sut.stored().progression.tracks.weapon_sword.level, 10, "and the file still has it");
+});
+
+test("a character who starts again is not given its levels back by the guard", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const player = sut.join();
+    bring(sut, player);
+    sut.api.discardCharacter(STEAM);
+    player.progression = FRESH();
+    sut.flushTimeouts();
+    sut.tick();
+    sut.leave(player);
+    assert.equal(sut.stored().progression, null, "the record is the empty one the reset wrote");
+});
+
+test("an administrator raises a track in the file of a character who is not in: the track alone, with no XP into the next, and only upward; the rest of the file is as it was", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const before = sut.stored();
+    assert.equal(sut.api.raiseSavedTrack(STEAM, "survival", 12), "feito");
+    const after = sut.stored();
+    assert.deepEqual(after.progression.tracks.survival, { level: 12, xp: 0 });
+    assert.deepEqual(after.progression.tracks.alchemy, before.progression.tracks.alchemy, "the other tracks are as they were");
+    assert.deepEqual(after.progression.perks, before.progression.perks);
+    assert.deepEqual(after.inventory, before.inventory);
+    assert.deepEqual(after.kits, before.kits);
+    assert.equal(sut.api.raiseSavedTrack(STEAM, "survival", 12), "já está", "the same level");
+    assert.equal(sut.api.raiseSavedTrack(STEAM, "alchemy", 7), "já está", "a lower one");
+    assert.equal(sut.api.raiseSavedTrack(STEAM, "dancing", 7), "sem trilha");
+    assert.equal(sut.api.raiseSavedTrack("12345678901234567", "survival", 7), "sem personagem", "no such file");
+    assert.equal(sut.api.raiseSavedTrack("../../etc", "survival", 7), "sem personagem", "a hostile id");
+
+    const levels = sut.api.savedProgression(STEAM);
+    assert.equal(levels.tracks.survival.level, 12);
+    assert.equal(sut.api.savedProgression("12345678901234567"), null);
+    assert.equal(sut.api.savedProgression("../../etc"), null);
+});
+
+test("a level raised in the file is what the character gets back at the next entry, and the guard keeps it", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    assert.equal(sut.api.raiseSavedTrack(STEAM, "survival", 12), "feito");
+    const player = sut.join();
+    player.progression = FRESH();
+    bring(sut, player);
+    assert.equal(sut.calls.restoreProgression[0].tracks.survival.level, 12);
+    sut.tick();
+    sut.leave(player);
+    assert.equal(sut.stored().progression.tracks.survival.level, 12);
+});
+
+test("the combos of a saved character are left out of what the game is asked to restore, and handed to the Esgrima (2026-10-26)", () => {
+    const base = record();
+    const sut = load({ files: { [STEAM]: { ...base, progression: { tracks: {}, perks: ["Ascetic", "C01 (longsword)", "C02 (longsword)"], perkPoints: { main: 2 } } } } });
+    const player = sut.join();
+    bring(sut, player);
+    assert.deepEqual(sut.calls.restoreProgression[0].perks, ["Ascetic"], "the game restores the other perks");
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.calls.combos)), [[STEAM, ["C01 (longsword)", "C02 (longsword)"]]], "the Esgrima is told which combos it held");
+    assert.deepEqual(sut.calls.restoreProgression[0].perkPoints, { main: 2 }, "the points are as they were");
+});
+
+test("what is saved of a progression carries no combo: what the game holds of them is the Esgrima's or an administrator's loan, never the character file's (2026-10-26)", () => {
+    const sut = load({ files: { [STEAM]: record() } });
+    const player = sut.join();
+    bring(sut, player);
+    player.progression = { tracks: { alchemy: { level: 5, xp: 1 } }, perks: ["p1", "C01 (longsword)", "C02 (longsword)"], perkPoints: { main: 0 } };
+    sut.clock.now += 20_000;
+    sut.leave(player);
+    const saved = sut.stored();
+    assert.deepEqual(saved.progression.perks, ["p1"], "the other perks are saved as ever");
+    assert.equal(saved.progression.tracks.alchemy.level, 5, "and the levels");
+});
+
+test("early saves of one player are at least eight seconds apart, and the leaving still saves at once (2026-10-26)", () => {
+    const sut = load({ files: { [STEAM]: record() } });
+    const player = sut.join();
+    bring(sut, player);
+    sut.flushTimeouts();
+    sut.api.markKit(player, "kit-a");
+    assert.equal(sut.timeouts.at(-1).ms, 2_500, "the first early save is at the usual delay");
+    sut.flushTimeouts();
+    assert.ok(sut.stored().kits.includes("kit-a"));
+
+    sut.clock.now += 1_000;
+    sut.api.markKit(player, "kit-b");
+    assert.equal(sut.timeouts.at(-1).ms, 7_000, "the next waits for the gap since the last one");
+    sut.api.markKit(player, "kit-c");
+    assert.equal(sut.timeouts.length, 1, "and a change in the meantime joins the save that is waiting");
+    sut.flushTimeouts();
+    assert.ok(sut.stored().kits.includes("kit-b") && sut.stored().kits.includes("kit-c"));
+
+    sut.clock.now += 100;
+    sut.api.markKit(player, "kit-d");
+    sut.leave(player);
+    assert.ok(sut.stored().kits.includes("kit-d"), "leaving does not wait for the gap");
+    const again = sut.join({ id: 5 });
+    bring(sut, again);
+    sut.api.markKit(again, "kit-e");
+    assert.equal(sut.timeouts.at(-1).ms, 2_500, "a player who comes back has no gap to wait for");
+});
+
+// Two hundred players looked at in one breath would stop the server for a third of a second every half minute (a look is about a millisecond and a half,
+// 17 at the worst, 2026-10-27, when the server was asked to be ready for two hundred): past four characters the looks are spread over the interval.
+
+// Steam ids written out: seventeen digits do not survive being added to as numbers.
+const steamOf = (i) => `7656119800000${String(i).padStart(4, "0")}`;
+
+function crowd(sut, count) {
+    const players = [];
+    for (let i = 1; i <= count; i += 1) {
+        const player = sut.join({ id: i, steamId: steamOf(i), nickname: `P${i}` });
+        bring(sut, player);
+        sut.inventories.set(player.id, [{ id: `n${i}`, item: "guid-bread", name: "bread", amount: i, metadata: {}, equipped: 0 }]);
+        players.push(player);
+    }
+    sut.timeouts.length = 0;
+    return players;
+}
+
+test("a few characters are all looked at in the tick itself", () => {
+    const sut = load();
+    crowd(sut, 4);
+    sut.tick();
+    assert.equal(sut.timeouts.length, 0, "no timer: everybody was looked at there and then");
+    for (let i = 1; i <= 4; i += 1) assert.equal(sut.has(steamOf(i)), true, `character ${i} saved`);
+});
+
+test("past four characters the looks are spread over the interval, a quarter of a second apart at most, and every character is still looked at", () => {
+    const sut = load();
+    crowd(sut, 12);
+    sut.tick();
+    assert.deepEqual(sut.timeouts.map((timer) => timer.ms), Array.from({ length: 12 }, (_, i) => i * 250));
+    assert.equal(sut.has(steamOf(1)), false, "nothing is written in the tick itself");
+
+    sut.flushTimeouts();
+    for (let i = 1; i <= 12; i += 1) assert.equal(sut.stored(steamOf(i)).inventory.items[0].amount, i, `character ${i} saved`);
+});
+
+test("two hundred characters are spread so that the last look still falls inside the interval", () => {
+    const sut = load();
+    crowd(sut, 200);
+    sut.tick();
+    const delays = sut.timeouts.map((timer) => timer.ms);
+    assert.equal(delays.length, 200);
+    assert.equal(delays[0], 0);
+    assert.equal(delays[1], 120, "a hundred and twenty milliseconds apart: 24 s over 200");
+    assert.ok(Math.max(...delays) < 30_000 * 0.8 + 1, "all within the first 80% of the half minute");
+});
+
+test("a character who left before its look came is not looked at, and nothing throws", () => {
+    const sut = load();
+    const players = crowd(sut, 6);
+    sut.tick();
+    sut.leave(players[3]);
+    assert.doesNotThrow(() => sut.flushTimeouts());
+});

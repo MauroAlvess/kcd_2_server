@@ -1,5 +1,6 @@
 /**
- * Carts and wagons that belong to players (user, 2026-10-17: "tornar as carroças funcionais e integradas ao sistema de
+ * Carts and wagons that belong to players, and those left standing in the world for everybody (see "World carts" below).
+ * (user, 2026-10-17: "tornar as carroças funcionais e integradas ao sistema de
  * propriedades ... interagir com a carroça utilizando a tecla E, escolher o assento ... permanecer salva no mundo ... dar um nome ...
  * o brasão da carroça").
  *
@@ -8,7 +9,7 @@
  * restarts, in `playerdata/carts.json`, and the owner names it, brings it to where they stand and reads where it is in the
  * "Animais" section of the panel. A player has at most two.
  *
- * Getting on: a player near a cart (within 5 m) is shown the game's own "[E] Subir na carroça" hint (`src/client/carts.ts`,
+ * Getting on: a player near a cart (within 6 m of its body) is shown the game's own "[E] Subir na carroça" hint (`src/client/carts.ts`,
  * told by `cart.near`), and E asks for the seats on the game's dialogue list: the reins, the bench beside them, the rails,
  * each shown taken or free; and "Descer" when they are already on. The game's own prompt at a bench or a rail still works
  * and reaches the same rule (`cartEntering`): the reins of a cart that has an owner are the owner's (and an administrator's);
@@ -18,6 +19,7 @@
 import { isAdmin } from "./auth.js";
 import { yawOf } from "./position.js";
 import { ensureDir, read, write } from "./store.js";
+import { allowedTo, EDGE_M, reachTo } from "./reach.js";
 
 const DIR = "playerdata";
 const FILE = `${DIR}/carts.json`;
@@ -29,9 +31,48 @@ export const CART_NAME_MAX = 24;
 /** How many carts a player may own. */
 export const MAX_CARTS = 2;
 
-/** How near a cart a player is asked about its seats, and how near they must still be when they choose. */
-export const NEAR_M = 5;
-export const CHOOSE_M = 9;
+/**
+ * World carts (user, 2026-10-18: "as carroças sumiram do mundo"): the carts an administrator puts down with `/cart` are the
+ * game's own and are gone at every restart, and nobody had ever been given one (`carts.json` was empty). `/carroca colocar`
+ * leaves a cart that is nobody's and everybody's, kept in the same file with an owner of "" and put back where it stood after
+ * each restart. This many at most.
+ */
+export const MAX_WORLD_CARTS = 40;
+
+/**
+ * How near a cart a player is asked about its seats, and how near they must still be when they choose, from the cart's BODY: a cart
+ * is not a point (`cart.position` is its front axle, and a wagon runs some six metres behind it, the nomad wagon longer). Measured from
+ * the axle alone, a player who climbed down at the back stood out of reach of their own wagon and the "[E] Subir na carroça" never
+ * came back (user, 2026-10-18 night: "só dá para usar uma vez; ao descer não tem como subir de novo", mended by a longer reach
+ * from the axle; and 2026-10-20: "andei na carroça de um amigo como admin, depois que larguei ela, ao chegar perto o E não apareceu
+ * para entrar"). Now the distance is to the body itself, the stretch of its heading from the tail to just past the driver's bench
+ * (`BODY_BACK_M`, `BODY_FRONT_M`). The first try measured to five points along it, 6 m from the nearest, which reached 12 m from the
+ * axle and offered the seats to players who were nowhere near (2026-10-21: "carroças está dando para interagir de muito distante"):
+ * the reach is now 3.5 m from the body, and 5 m still to choose a seat.
+ */
+export const NEAR_M = reachTo(EDGE_M.cart);
+/** What an E at a cart is believed from: the prompt's reach and a metre more (`reach.ts`, 2026-10-22). */
+export const PRESS_M = allowedTo(EDGE_M.cart);
+export const CHOOSE_M = 5;
+
+/** The body of a cart along its heading, from the front axle (ahead is positive, where the horses are): the tail and the driver's bench. */
+export const BODY_BACK_M = 5.5;
+export const BODY_FRONT_M = 1.5;
+
+/**
+ * A player the server still has on a cart that is this far from them is not on it (teleported by an administrator, or let out by the
+ * game unheard): they are let out, so the seat is free and the hint comes back.
+ */
+export const STALE_SEAT_M = 30;
+
+/**
+ * Carts of the server's own services (the coaches of `travel.ts`), by id, with what a player who tries to get on one is told:
+ * nobody gets on one, nobody registers one, and no "[E] Subir na carroça" is offered beside one.
+ */
+export const reservedCarts = new Map<number, () => string>();
+
+/** A player beside a cart is told so again this often, so a hint the game took down comes back. */
+export const NEAR_AGAIN_MS = 5_000;
 
 /** `/carroca trazer` puts the cart this far in front of the owner, and no more often than this. */
 export const BRING_DISTANCE_M = 9;
@@ -171,6 +212,10 @@ function spawnSaved(record: SavedCart): boolean {
 }
 
 export function cartsOf(steamId: string): OwnedCart[] {
+    // Nobody owns the world's carts: a player without a Steam id is not their owner (they showed up in an administrator's Animais).
+    if (steamId === "") {
+        return [];
+    }
     return [...records.values()]
         .filter((record) => record.owner === steamId)
         .map((record) => {
@@ -198,13 +243,38 @@ export function recordOfCart(cart: Cart): SavedCart | null {
  */
 export function mayDrive(player: Player, cart: Cart): boolean {
     const record = recordOfCart(cart);
-    return record === null || record.owner === player.steamId || record.shared === true || isAdmin(player);
+    return record === null || record.owner === "" || record.owner === player.steamId || record.shared === true || isAdmin(player);
+}
+
+/** Gives a cart of `steamId`'s to another player (the panel's Animais, "Dar"): theirs from then on, where it stands, locked to them. */
+export function giveCartTo(steamId: string, key: string, target: Player): Outcome {
+    const record = records.get(key);
+    if (steamId === "" || record === undefined || record.owner !== steamId) {
+        return { ok: false, message: "Essa carroça não é sua." };
+    }
+    if (target.steamId === steamId) {
+        return { ok: false, message: "Essa carroça já é sua." };
+    }
+    if (!STEAM_ID.test(target.steamId)) {
+        return { ok: false, message: `${target.nickname} entrou sem identificação Steam: não há como guardar a carroça para ele.` };
+    }
+    if (cartsOf(target.steamId).length >= MAX_CARTS) {
+        return { ok: false, message: `${target.nickname} já tem ${MAX_CARTS} carroças, o máximo.` };
+    }
+    const label = record.name !== "" ? record.name : cartName(record.blueprint);
+    const from = record.ownerName;
+    record.owner = target.steamId;
+    record.ownerName = target.nickname;
+    delete record.shared;
+    persist();
+    console.log(`carts: ${from} deu a carroça ${record.name || record.key} a ${target.nickname}`);
+    return { ok: true, message: `${label} agora é de ${target.nickname}.` };
 }
 
 /** Leaves a cart of `steamId`'s free for anybody to ride and drive, or locks it again. */
 export function setCartShared(steamId: string, key: string, shared: boolean): Outcome {
     const record = records.get(key);
-    if (record === undefined || record.owner !== steamId) {
+    if (steamId === "" || record === undefined || record.owner !== steamId) {
         return { ok: false, message: "Essa carroça não é sua." };
     }
     if (shared) {
@@ -258,7 +328,7 @@ function loneCartNear(player: Player, within: number): Cart | null {
     let best = within;
     for (const cart of Cart.all(player.virtualWorld)) {
         const distance = flat(cart.position, player.position);
-        if (distance <= best && !keyByLive.has(cart.id)) {
+        if (distance <= best && !keyByLive.has(cart.id) && !reservedCarts.has(cart.id)) {
             best = distance;
             found = cart;
         }
@@ -266,7 +336,29 @@ function loneCartNear(player: Player, within: number): Cart | null {
     return found;
 }
 
-/** Registers the cart nobody owns that stands beside `target` as theirs. */
+/** The world's cart (kept in the world for everybody, nobody's) nearest `player`, within `within` metres. */
+function worldCartNear(player: Player, within: number): SavedCart | null {
+    let found: SavedCart | null = null;
+    let best = within;
+    for (const record of records.values()) {
+        const id = record.owner === "" ? liveByKey.get(record.key) : undefined;
+        const cart = id === undefined ? null : Cart.getById(id);
+        if (cart !== null && cart.virtualWorld === player.virtualWorld) {
+            const distance = flat(cart.position, player.position);
+            if (distance <= best) {
+                best = distance;
+                found = record;
+            }
+        }
+    }
+    return found;
+}
+
+/**
+ * Registers the cart nobody owns that stands beside `target` as theirs: one the level or the world left standing, or, failing that, one
+ * an administrator left in the world for everybody (`/carroca colocar`), which stops being the world's and is locked to its new owner
+ * (2026-10-20: a cart put in the world and then "given" to Jaromir the Just).
+ */
 export function registerCart(target: Player): Outcome {
     if (!STEAM_ID.test(target.steamId)) {
         return { ok: false, message: `${target.nickname} entrou sem identificação Steam: não há como guardar a carroça.` };
@@ -276,7 +368,15 @@ export function registerCart(target: Player): Outcome {
     }
     const cart = loneCartNear(target, 15);
     if (cart === null) {
-        return { ok: false, message: "Nenhuma carroça sem dono a até 15 m de quem vai recebê-la." };
+        const world = worldCartNear(target, 15);
+        if (world === null) {
+            return { ok: false, message: "Nenhuma carroça sem dono a até 15 m de quem vai recebê-la." };
+        }
+        world.owner = target.steamId;
+        world.ownerName = target.nickname;
+        delete world.shared;
+        persist();
+        return { ok: true, message: `${cartName(world.blueprint)}, que era do mundo, agora é de ${target.nickname}.` };
     }
     const record: SavedCart = { key: newKey(), owner: target.steamId, ownerName: target.nickname, blueprint: cart.blueprint, name: "", x: 0, y: 0, z: 0, yaw: 0, savedAt: 0 };
     snapshot(cart, record);
@@ -286,21 +386,66 @@ export function registerCart(target: Player): Outcome {
     return { ok: true, message: `${cartName(cart.blueprint)} agora é de ${target.nickname}.` };
 }
 
-/** Lets a cart go: it is nobody's any more and is not kept. */
+/** Lets a cart go: it is nobody's any more -- a world cart, kept where it stands for everybody (`placeCart`). False when it was nobody's already. */
 export function releaseCart(key: string): boolean {
-    if (!records.has(key)) {
+    const record = records.get(key);
+    if (record === undefined || record.owner === "") {
         return false;
     }
-    records.delete(key);
-    unlink(key);
+    record.owner = "";
+    record.ownerName = "";
+    delete record.shared;
     persist();
     return true;
 }
 
+/** Whether a record is a world cart (nobody's, everybody's). */
+export const isWorldCart = (record: SavedCart): boolean => record.owner === "";
+
+/** Takes a cart out of the world and forgets it, whoever it belonged to. False when no such cart is kept. */
+export function removeCart(key: string): boolean {
+    if (!records.has(key)) {
+        return false;
+    }
+    const id = liveByKey.get(key);
+    // Forgotten first, so that its `cartDestroy` is not taken for a loss.
+    records.delete(key);
+    unlink(key);
+    persist();
+    if (id !== undefined) {
+        Cart.getById(id)?.destroy();
+    }
+    return true;
+}
+
+/** Leaves a cart standing in front of an administrator, for everybody and for good (it is put back after every restart). */
+export function placeCart(admin: Player, blueprint = "wagon_b_covered"): Outcome {
+    if (!admin.ready) {
+        return { ok: false, message: "Você ainda está entrando no mundo." };
+    }
+    if (!Cart.blueprints().includes(blueprint)) {
+        return { ok: false, message: `Não existe o modelo '${blueprint}'. /cart list mostra os modelos.` };
+    }
+    if ([...records.values()].filter(isWorldCart).length >= MAX_WORLD_CARTS) {
+        return { ok: false, message: `Já são ${MAX_WORLD_CARTS} carroças do mundo, o máximo. /carroca remover tira uma.` };
+    }
+    const place = frontOf(admin, BRING_DISTANCE_M - 2);
+    const cart = Cart.spawn(blueprint, place.position, place.rotation, admin.virtualWorld);
+    const record: SavedCart = { key: newKey(), owner: "", ownerName: "", blueprint, name: "", x: 0, y: 0, z: 0, yaw: 0, savedAt: 0 };
+    snapshot(cart, record);
+    records.set(record.key, record);
+    link(record.key, cart);
+    persist();
+    return { ok: true, message: `${cartName(blueprint)} ficou aqui, para todos: qualquer um sobe nela, e ela volta a este lugar depois de cada reinício. /carroca listar mostra as do mundo; /carroca remover n tira uma.` };
+}
+
+/** What the player who was given a cart is told. */
+export const cartGiftNote = (giver: string): string => `${giver} deu a você uma carroça. /carroca mostra onde ela está; a seção Animais do painel (F2) a mostra também, e E perto dela escolhe o assento.`;
+
 /** Names a cart of `steamId`'s. An empty name gives it back the plain one. */
 export function renameCart(steamId: string, key: string, raw: unknown): Outcome {
     const record = records.get(key);
-    if (record === undefined || record.owner !== steamId) {
+    if (steamId === "" || record === undefined || record.owner !== steamId) {
         return { ok: false, message: "Essa carroça não é sua." };
     }
     if (typeof raw !== "string") {
@@ -328,8 +473,8 @@ export function whereIs(player: Player, cart: Cart | null, direction: (from: { x
     return distance < 8 ? "aqui, ao seu lado" : `a ${distance.toFixed(0)} m, a ${direction(player.position, cart.position)}`;
 }
 
-/** Brings the owner's cart (this one, or the nearest) to a spot in front of them, if nobody is on it. */
-export function bringCart(player: Player, key: string | null, now = Date.now()): Outcome {
+/** Brings the owner's cart (this one, or the nearest) to a spot in front of them, if nobody is on it. `force` skips the wait between two brings (the "Animal preso" button, `animal-stuck.ts`, has its own). */
+export function bringCart(player: Player, key: string | null, now = Date.now(), force = false): Outcome {
     const mine = cartsOf(player.steamId).filter((owned) => owned.cart !== null && (key === null || owned.record.key === key));
     mine.sort((a, b) => flat((a.cart as Cart).position, player.position) - flat((b.cart as Cart).position, player.position));
     const owned = mine[0];
@@ -344,7 +489,7 @@ export function bringCart(player: Player, key: string | null, now = Date.now()):
         return { ok: false, message: `${label} está com gente: espere que desçam.` };
     }
     const wait = (broughtAt.get(owned.record.key) ?? -Infinity) + BRING_COOLDOWN_MS - now;
-    if (wait > 0) {
+    if (wait > 0 && !force) {
         return { ok: false, message: `${label} acabou de ser trazida: de novo em ${Math.ceil(wait / 60_000)} min.` };
     }
     const place = frontOf(player, BRING_DISTANCE_M);
@@ -360,18 +505,59 @@ export function bringCart(player: Player, key: string | null, now = Date.now()):
 // ---------------------------------------------------------------------------------------------
 // Getting on.
 
-/** The cart nearest the player within reach, or null. */
-export function cartNear(player: Player, within = NEAR_M): Cart | null {
+/**
+ * A cart as one round of looks saw it: where its front axle is and which way it heads. A read of either is a call into the engine, and the round that tells
+ * every player of the cart beside them (`tellNear`, every second) measured every player against every cart with six of them each time (2026-10-25, the
+ * round of the perf-watch survey): now a cart is looked at once for the round and the players are measured against what was seen.
+ */
+interface Stand {
+    readonly cart: Cart;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+    /** The unit vector of its heading on the ground plane. */
+    readonly ax: number;
+    readonly ay: number;
+}
+
+function standOf(cart: Cart): Stand {
+    const radians = (yawOf(cart.rotation) * Math.PI) / 180;
+    const at = cart.position;
+    return { cart, x: at.x, y: at.y, z: at.z, ax: -Math.sin(radians), ay: Math.cos(radians) };
+}
+
+function distanceFromBody(stand: Stand, at: { x: number; y: number }): number {
+    const dx = at.x - stand.x;
+    const dy = at.y - stand.y;
+    const along = Math.max(-BODY_BACK_M, Math.min(BODY_FRONT_M, dx * stand.ax + dy * stand.ay));
+    return Math.hypot(dx - stand.ax * along, dy - stand.ay * along);
+}
+
+/** How far a point is from a cart's body, the stretch of its heading from the tail to the bench (`BODY_BACK_M`, `BODY_FRONT_M`), on the ground plane. */
+export function bodyDistance(cart: Cart, at: { x: number; y: number }): number {
+    return distanceFromBody(standOf(cart), at);
+}
+
+/** Of the carts looked at, the one nearest `at` within reach, or null. */
+function nearestStand(stands: readonly Stand[], at: { x: number; y: number; z: number }, within: number): Cart | null {
     let found: Cart | null = null;
     let best = within;
-    for (const cart of Cart.all(player.virtualWorld)) {
-        const distance = Math.hypot(cart.position.x - player.position.x, cart.position.y - player.position.y);
-        if (distance <= best && Math.abs(cart.position.z - player.position.z) <= 5) {
+    for (const stand of stands) {
+        if (reservedCarts.has(stand.cart.id)) {
+            continue;
+        }
+        const distance = distanceFromBody(stand, at);
+        if (distance <= best && Math.abs(stand.z - at.z) <= 5) {
             best = distance;
-            found = cart;
+            found = stand.cart;
         }
     }
     return found;
+}
+
+/** The cart nearest the player within reach, or null. */
+export function cartNear(player: Player, within = NEAR_M): Cart | null {
+    return nearestStand(Cart.all(player.virtualWorld).filter((cart) => !reservedCarts.has(cart.id)).map(standOf), player.position, within);
 }
 
 /** The cart a player is in, or null. */
@@ -395,7 +581,7 @@ function tell(player: Player, text: string): void {
 function titleOf(cart: Cart): string {
     const record = recordOfCart(cart);
     const base = record !== null && record.name !== "" ? record.name : cartName(cart.blueprint);
-    return record === null ? base : `${base}, de ${record.ownerName || "um dono"}`;
+    return record === null || record.owner === "" ? base : `${base}, de ${record.ownerName || "um dono"}`;
 }
 
 /** The page of seats: each shown taken or free, the reins only to who may take them, "Descer" when already on. */
@@ -427,7 +613,7 @@ export function useCart(player: Player): void {
     if (!player.ready || !player.alive) {
         return;
     }
-    const cart = cartOf(player) ?? cartNear(player);
+    const cart = cartOf(player) ?? cartNear(player, PRESS_M);
     if (cart === null) {
         return;
     }
@@ -466,7 +652,7 @@ function chose(session: number, player: Player, option: string): void {
     if (!cart.seats.includes(seat)) {
         return;
     }
-    if (flat(cart.position, player.position) > CHOOSE_M || !player.alive) {
+    if (bodyDistance(cart, player.position) > CHOOSE_M || !player.alive) {
         tell(player, "Você se afastou demais da carroça.");
         return;
     }
@@ -497,18 +683,66 @@ function tick(): void {
     persist();
 }
 
-/** The cart each player stands beside, told to their client so it can show "[E] Subir na carroça". */
-const toldNear = new Map<number, number>();
+/** Lets a player out of a cart the server still has them in when they are nowhere near it (`STALE_SEAT_M`). True when they were let out. */
+function releaseStale(player: Player, stand: Stand, at: { x: number; y: number }): boolean {
+    const away = distanceFromBody(stand, at);
+    if (away <= STALE_SEAT_M) {
+        return false;
+    }
+    const cart = stand.cart;
+    const seat = cart.seatOf(player);
+    if (cart.removePlayer(player)) {
+        console.log(`carts: ${player.nickname} constava no assento ${seat ?? "?"} da carroça ${cart.id} mas estava a ${away.toFixed(0)} m dela: foi tirado, e o assento ficou livre`);
+        return true;
+    }
+    return false;
+}
 
-function tellNear(): void {
-    for (const player of Player.all()) {
-        if (!player.ready) {
-            continue;
+/**
+ * The cart each player stands beside, told to their client so it can show "[E] Subir na carroça": when it changes, and again
+ * every few seconds while they stand there, so a hint the game took down is put back.
+ */
+const toldNear = new Map<number, { id: number; at: number }>();
+
+function tellNear(now = Date.now()): void {
+    const players = Player.all().filter((player) => player.ready);
+    if (players.length === 0) {
+        return;
+    }
+    // Each world's carts are looked at once for the round, not once for each player: where they stand, which way they head, and who sits in them.
+    const worlds = new Map<number, { readonly stands: Stand[]; readonly aboard: Map<number, Stand> }>();
+    const look = (world: number): { readonly stands: Stand[]; readonly aboard: Map<number, Stand> } => {
+        let seen = worlds.get(world);
+        if (seen === undefined) {
+            seen = { stands: [], aboard: new Map() };
+            for (const cart of Cart.all(world)) {
+                const stand = standOf(cart);
+                seen.stands.push(stand);
+                for (const seat of cart.seats) {
+                    const rider = cart.getOccupant(seat);
+                    if (rider !== null) {
+                        seen.aboard.set(rider.id, stand);
+                    }
+                }
+            }
+            worlds.set(world, seen);
         }
-        const near = player.alive && cartOf(player) === null ? cartNear(player) : null;
+        return seen;
+    };
+    for (const player of players) {
+        const seen = look(player.virtualWorld);
+        // In plain numbers: each `.x` of an engine's vector is a call into the engine, and it was read for every cart (2026-10-28).
+        const place = player.position;
+        const at = { x: place.x, y: place.y, z: place.z };
+        let aboard = seen.aboard.get(player.id);
+        if (aboard !== undefined && releaseStale(player, aboard, at)) {
+            aboard = undefined;
+        }
+        const near = player.alive && aboard === undefined ? nearestStand(seen.stands, at, NEAR_M) : null;
         const id = near === null ? 0 : near.id;
-        if ((toldNear.get(player.id) ?? 0) !== id) {
-            toldNear.set(player.id, id);
+        const told = toldNear.get(player.id);
+        if ((told?.id ?? 0) !== id || (id !== 0 && now - (told?.at ?? 0) >= NEAR_AGAIN_MS)) {
+            toldNear.set(player.id, { id, at: now });
             player.emit(`${RESOURCE}:cart.near`, JSON.stringify({ id }));
         }
     }
@@ -525,6 +759,11 @@ export function installCarts(): void {
 
     // The reins of a cart that has an owner are the owner's, however the player came to be at them.
     Events.on("cartEntering", (cart, player) => {
+        const reserved = reservedCarts.get(cart.id);
+        if (reserved !== undefined) {
+            tell(player, reserved());
+            return false;
+        }
         if (!mayDrive(player, cart)) {
             tell(player, "Essa carroça está trancada: só o dono sobe nela.");
             return false;
@@ -583,5 +822,6 @@ export function installCarts(): void {
         }
     });
 
-    console.log(`carts: ${records.size} carroça(s) com dono guardada(s); ${restored} de volta ao mundo`);
+    const world = [...records.values()].filter(isWorldCart).length;
+    console.log(`carts: ${records.size} carroça(s) guardada(s) (${world} do mundo, ${records.size - world} com dono); ${restored} de volta ao mundo`);
 }

@@ -6,7 +6,7 @@ import { findPlayer } from "../players.js";
 export const cidadaniaCommand: Command = {
     name: "cidadania",
     summary: "(admin) Mostra as cidades e os cidadãos, ou define a cidadania de um jogador (que, depois, só o senhor das terras depõe).",
-    usage: ["/cidadania  -- as cidades e quantos cidadãos cada uma tem", "/cidadania ver <jogador>  -- a cidade dele", "/cidadania definir <jogador> <cidade>  -- faz dele cidadão da cidade (suchdol, raborsch, malesov)", "/cidadania limpar <jogador>  -- tira a cidadania, para que ele escolha de novo"],
+    usage: ["/cidadania  -- as cidades e quantos cidadãos cada uma tem", "/cidadania ver <jogador>  -- a cidade dele", "/cidadania definir <jogador> <cidade>  -- faz dele cidadão da cidade ou terra (sedes: suchdol, raborsch, malesov, kuttenberg, pschitoky; terras: wysoka, bohunowitz, horschan, bylany, stara-kutna, miskowitz)", "/cidadania limpar <jogador>  -- tira a cidadania, para que ele escolha de novo"],
 
     run({ args, reply, usage }: CommandContext): void {
         const [sub, who, townWord] = args;

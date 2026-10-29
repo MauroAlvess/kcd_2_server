@@ -12,6 +12,7 @@ function load({ navigationReady = true, floor = (point) => ({ x: point.x + 1, y:
     const logs = [];
     const context = {
         exports: {},
+        require: (id) => (id === "./heal.js" ? { cure: (player, what) => { player.cures.push(what); return true; } } : assert.fail(`unexpected require ${id}`)),
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
         setTimeout: (fn, ms) => { timers.push({ fn, ms, done: false }); return timers.length; },
         clearTimeout: (id) => cleared.push(id),
@@ -34,6 +35,11 @@ function load({ navigationReady = true, floor = (point) => ({ x: point.x + 1, y:
             notes: [],
             revived: 0,
             spawned: [],
+            stats: [],
+            cures: [],
+            health: 100,
+            maxHealth: 100,
+            setStat(stat, value) { this.stats.push([stat, value]); return true; },
             reviveAnswer: true,
             revive() { this.revived += 1; return this.reviveAnswer; },
             spawn(point) { this.spawned.push({ ...point }); return true; },
@@ -72,7 +78,7 @@ test("a player who dies is told where they will wake, revived after a while, the
     const hans = sut.makePlayer(4, "76561198000000001", { x: 700, y: 3300, z: 140 });
     sut.die(hans);
 
-    assert.match(hans.chat[0], /Você morreu\. Em 8 segundos você acorda na igreja de Suchdol\./);
+    assert.match(hans.chat[0], /Você caiu gravemente ferido\. Em 8 segundos você é levado para a igreja de Suchdol\./);
     assert.equal(sut.timers[1].ms, 8000);
     assert.equal(hans.revived, 0, "the body stays down for the delay");
 
@@ -82,8 +88,10 @@ test("a player who dies is told where they will wake, revived after a while, the
     assert.equal(hans.spawned.length, 1, "moved once");
     const at = hans.spawned[0];
     assert.ok(Math.abs(at.x - 748.97) < 1e-6 && Math.abs(at.y - 3246.3) < 1e-6 && Math.abs(at.z - 139.09) < 1e-6, "on the floor the navigation found next to the box");
-    assert.match(hans.chat.at(-1), /Você acordou na igreja de Suchdol\./);
-    assert.ok(hans.notes.some((note) => /acordou na igreja/.test(note.payload.text)), "also on the game's notification line");
+    assert.match(hans.chat.at(-1), /Você foi ferido e sobreviveu: foi arrastado até a igreja de Suchdol\. Procure um médico alquimista o mais rápido possível para curar as suas feridas\./);
+    assert.ok(hans.notes.some((note) => /arrastado até a igreja/.test(note.payload.text)), "also on the game's notification line");
+    assert.deepEqual(hans.stats, [["health", 30]], "and wakes hurt: 30% of the health");
+    assert.deepEqual(hans.cures, ["sangramento"], "but not bleeding: one who died bleeding woke and died again (Garcia, 2026-10-19)");
 });
 
 test("without a navigation mesh the player wakes just above the box's spot", () => {
@@ -155,14 +163,14 @@ test("a citizen wakes in their town, said so; somebody the resolver knows nothin
     const other = sut.makePlayer(2, "other", { x: 749, y: 3247, z: 140 });
 
     sut.die(citizen);
-    assert.match(citizen.chat[0], /acorda em Raborsch, a sua cidade\./, "told where, before it happens");
+    assert.match(citizen.chat[0], /é levado para Raborsch, a sua cidade\./, "told where, before it happens");
     sut.runTimers();
     assert.deepEqual(citizen.spawned, [{ x: 5, y: 6, z: 7 }]);
-    assert.match(citizen.chat.at(-1), /Você acordou em Raborsch, a sua cidade\./);
+    assert.match(citizen.chat.at(-1), /arrastado até Raborsch, a sua cidade\. Procure um médico alquimista/);
 
     sut.die(other);
-    assert.match(other.chat[0], /acorda na igreja de Suchdol/);
+    assert.match(other.chat[0], /levado para a igreja de Suchdol/);
     sut.runTimers();
-    assert.match(other.chat.at(-1), /Você acordou na igreja de Suchdol/);
+    assert.match(other.chat.at(-1), /arrastado até a igreja de Suchdol/);
     assert.equal(other.spawned.length, 1);
 });

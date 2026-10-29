@@ -1,12 +1,12 @@
 import type { Command } from "../command.js";
 import { animalPopulation, animalPopulationSettings } from "../animals.js";
+import { carcassSettings } from "../carcass.js";
 import { hasPose, NO_POSE_YET, distanceBetween } from "../place.js";
-import { petsEnabled, setPetsEnabled, villagePets } from "../village-pets.js";
 
 export const animalsCommand: Command = {
     name: "animals",
     summary: "Runs animal populations at the level's spawnpoints.",
-    usage: ["/animals list", "/animals start <spawnpointGuid>", "/animals stop", "/animals status", "/animals max <0-2000>", "/animals vila [ligar|desligar]  -- os cães e gatos das vilas: quantos há e onde, ou ligar e desligar"],
+    usage: ["/animals list", "/animals start <spawnpointGuid>", "/animals stop", "/animals status", "/animals max <0-2000>", "/animals carne [0.1-1]  -- quanto da carne de um animal abatido o caçador fica (metade, no mínimo uma de cada)"],
     run({ player, args, reply, usage }): void {
         if (args[0] === "status") {
             const { bodies, sites } = animalPopulation.standing();
@@ -23,17 +23,18 @@ export const animalsCommand: Command = {
             reply.line(`No máximo ${wanted} animais ao mesmo tempo, até o servidor reiniciar (o fixo está em src/server/animals.ts). Os que já existem não somem de uma vez: deixam de voltar quando morrem ou quando o jogador se afasta.`);
             return;
         }
-        if (args[0] === "vila") {
-            if (args[1] === "ligar" || args[1] === "desligar") {
-                setPetsEnabled(args[1] === "ligar");
-                reply.line(args[1] === "ligar" ? "Cães e gatos das vilas ligados: voltam no próximo início do servidor." : "Cães e gatos das vilas desligados: saíram agora e não voltam até ligar de novo.");
+        if (args[0] === "carne") {
+            if (args[1] === undefined) {
+                reply.line(`O caçador fica com ${Math.round(carcassSettings.meatShare * 100)}% da carne de cada animal abatido (no mínimo uma de cada). Troque com /animals carne <0.1 a 1>.`);
                 return;
             }
-            if (villagePets === null) {
-                reply.line("Os animais das vilas ainda não foram montados.");
+            const share = Number(args[1].replace(",", "."));
+            if (!Number.isFinite(share) || share < 0.1 || share > 1) {
+                usage();
                 return;
             }
-            reply.lines([`Animais das vilas ${petsEnabled() ? "ligados" : "desligados"}: ${villagePets.count("dog")} cão(ães) e ${villagePets.count("cat")} gato(s).`, ...villagePets.describe()]);
+            carcassSettings.meatShare = share;
+            reply.line(`O caçador fica com ${Math.round(share * 100)}% da carne de cada animal abatido, até o servidor reiniciar (o fixo está em src/server/carcass.ts). Vale para os próximos abates.`);
             return;
         }
         if (args[0] === "stop") {

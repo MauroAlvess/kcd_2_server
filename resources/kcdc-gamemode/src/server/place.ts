@@ -39,8 +39,15 @@ export function inFrontOf(player: Player, distance: number, lift: number = 0): P
     };
 }
 
+/** A point as plain numbers: an engine `Vector3` is one (every `.x` of it is a call into the engine), and so is a copy of its three numbers. */
+export interface Point3 {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+}
+
 /** Distance between two world points. */
-export function distanceBetween(a: Vector3, b: Vector3): number {
+export function distanceBetween(a: Point3, b: Point3): number {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
     const dz = a.z - b.z;

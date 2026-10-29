@@ -13,6 +13,7 @@
  * Anything that cannot be handed back (a player who left, a full inventory) is owed, and given at the owner's next entry.
  */
 
+import { addUnits } from "./inventory-add.js";
 import { ensureDir, read, write } from "./store.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -113,6 +114,8 @@ export class DicePots {
     private readonly pots = new Set<Pot>();
     private readonly rolls = new Map<number, number>();
     private owed: Record<string, PotRow[]> = {};
+    /** The server is going down: what a match holds stays written down, and is owed back at the next start. */
+    private stopping = false;
 
     // -----------------------------------------------------------------------------------------
     // The file.
@@ -210,7 +213,7 @@ export class DicePots {
         let given = 0;
         const left: PotRow[] = [];
         for (const row of rows) {
-            if (player !== null && player.steamId === steamId && Inventory.add(player, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
+            if (player !== null && player.steamId === steamId && addUnits(player, { item: row.item, amount: row.amount, metadata: row.metadata }).ok) {
                 given += 1;
             } else {
                 left.push(row);
@@ -282,10 +285,22 @@ export class DicePots {
         return this.rolls.get(match) ?? 0;
     }
 
+    /**
+     * The server is stopping (2026-10-19: Elisabeth's six dice were handed back after her character had been saved for the
+     * stop, and were lost). From now on a match's end hands nothing over: the pot stays in the file, owed at the next entry.
+     */
+    stop(): void {
+        this.stopping = true;
+    }
+
     /** The match is over: the stake to the winner, or back to each; the dice back to their owners. */
     settle(match: number, first: Player | null, second: Player | null, winner: number, firstScore: number, secondScore: number): Settled | null {
         const rolls = this.rolls.get(match) ?? 0;
         this.rolls.delete(match);
+        if (this.stopping) {
+            console.log(`dice: partida ${match} parou com o servidor: o que estava guardado volta na próxima entrada`);
+            return null;
+        }
         const pot = [...this.pots].find((candidate) => candidate.match === match && match !== 0);
         if (pot === undefined) {
             return null;

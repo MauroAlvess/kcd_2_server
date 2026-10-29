@@ -3,23 +3,77 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+require("./reachpatch.cjs");
 
 /** Every player a test has made since the last load(), for Player.all / Player.getById. */
 const online = [];
 let nextId = 1;
 
-/** roles maps steamId -> "player" | "admin"; anyone not listed is a player, matching auth.ts's own default. */
-function load(roles = {}, catalog = [], characters = {}, seed = {}) {
+/**
+ * The real place hints (`place-hints.ts`), over the game's real map places and the real list of regions, read out of the source as plain literals: for the
+ * tests that follow a hint into the payload. The rest of the tests leave them out, as a panel does when the module cannot be loaded.
+ */
+let placeHints = null;
+function placeHintsModule() {
+    if (!placeHints) {
+        const run = (file, requires = {}) => {
+            const sandbox = { exports: {}, require: (id) => requires[id] ?? assert.fail(`unexpected require ${id}`) };
+            vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server", file), "utf8"), sandbox);
+            return sandbox.exports;
+        };
+        const source = fs.readFileSync(path.join(__dirname, "../src/server/properties.ts"), "utf8");
+        const from = source.indexOf("export const REGIONS: readonly Region[] = [");
+        const REGIONS = vm.runInNewContext("(" + source.slice(source.indexOf("[", from), source.indexOf("\n];", from) + 2) + ")");
+        const places = run("map-places.js", { "./map-places-data.js": run("map-places-data.js") });
+        placeHints = run("place-hints.js", { "./properties.js": { REGIONS }, "./map-places.js": places });
+    }
+    return placeHints;
+}
+
+/** roles maps steamId -> "player" | "admin"; anyone not listed is a player, matching auth.ts's own default. `extras.placeHints` brings the real place hints. */
+function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, extras = {}) {
+    // The one free change of guild and of citizenship (src/server/free-changes.ts): spent unless a test gives it.
+    const freeLeft = new Set();
+    const freeChanges = {
+        freeChangeLeft: (steamId, kind) => freeLeft.has(`${steamId}:${kind}`),
+        useFreeChange: (steamId, kind) => freeLeft.delete(`${steamId}:${kind}`),
+        freeChangesOf: (steamId) => ({ guild: freeLeft.has(`${steamId}:guild`), citizenship: freeLeft.has(`${steamId}:citizenship`) }),
+        CHANGE_PRICE_COINS: 100,
+    };
+    // What a change costs once the free one is spent (src/server/change-fee.ts, 2026-10-26): a purse of coins by Steam id, empty unless a test fills it.
+    const purse = new Map();
+    const fees = {
+        chargeForChange: (player, kind) => {
+            if (freeLeft.delete(`${player.steamId}:${kind}`)) return { ok: true, free: true, message: "", refund() {} };
+            const have = purse.get(player.steamId) ?? 0;
+            if (have < 100) return { ok: false, free: false, message: `Trocar custa 100 moedas (a sua troca gratuita já foi usada) e você tem ${have} moedas.`, refund() {} };
+            purse.set(player.steamId, have - 100);
+            return { ok: true, free: false, message: "", refund: () => purse.set(player.steamId, (purse.get(player.steamId) ?? 0) + 100) };
+        },
+    };
     online.length = 0;
     const grants = [];
     const edits = [];
+    /** What the access functions of the property module were asked, in order. */
+    const accessCalls = [];
     const labels = {};
+    /** The lord of each region ceded whole, by region (`regions.json`): { steamId, name }; none unless a test sets one. */
+    const lords = {};
     /** What the world says of a door or chest's lock right now; unknown when left out. */
     const worldLocks = {};
     const kitCalls = [];
     const kit = { handed: [], colours: [] };
     const benefits = [];
+    const revoked = [];
     const supporterSummaries = {};
+    /** The accounts banned (`bans.ts`) by Steam id, who was put out, and what is reserved for an account that is not in the game (`supporters.queue`). */
+    const banned = new Map();
+    const kicked = [];
+    const queued = [];
+    /** When each account was last seen in the world, by Steam id (`position.ts`). */
+    const seenAt = {};
+    /** The server's own thirst (`thirst.ts`) by player id; the full measure for the rest. */
+    const thirstOf = {};
     /** The language each Steam id chose; Portuguese for the rest. */
     const languages = {};
     /** The ids of the titles each Steam id holds, and the one each chose to wear. */
@@ -79,11 +133,29 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
         }
         return rosterRules;
     };
+    // The real rooms, over the fake catalog below and the same files.
+    let rooms = null;
+    const roomsModule = () => {
+        if (!rooms) {
+            const store = {
+                ensureDir() {},
+                read: (file) => (files.has(file) ? { status: "ok", value: JSON.parse(files.get(file)), fromBackup: false } : { status: "missing" }),
+                write: (file, value) => files.set(file, JSON.stringify(value)),
+            };
+            const sandbox = { exports: {}, require: (id) => (id === "./store.js" ? store : context.require(id)) };
+            vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/rooms.js"), "utf8"), sandbox);
+            rooms = sandbox.exports;
+        }
+        return rooms;
+    };
     const context = {
         exports: {},
         require: (id) => {
             if (id === "node:fs") {
                 return fakeFs;
+            }
+            if (id === "./rooms.js") {
+                return roomsModule();
             }
             if (id === "./roster.js") {
                 return rosterModule();
@@ -111,7 +183,44 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
                 return nobilityModule();
             }
             if (id === "./characters.js") {
-                return { getCharacter: (steamId) => characters[steamId] ?? null };
+                return {
+                    getCharacter: (steamId) => characters[steamId] ?? null,
+                    allCharacters: () => Object.entries(characters).map(([steamId, saved]) => ({ steamId, name: saved.name ?? saved.nickname, epithet: saved.epithet ?? "", nickname: saved.nickname, named: Boolean(saved.name) })),
+                };
+            }
+            if (id === "./bans.js") {
+                return {
+                    bans: {
+                        isBanned: (steamId) => banned.has(steamId),
+                        get: (steamId) => banned.get(steamId) ?? null,
+                        list: () => [...banned.values()],
+                        ban: (steamId, name, by) => {
+                            if (banned.has(steamId)) return { ok: false, message: `${name} já está banido.` };
+                            banned.set(steamId, { steamId, name, by });
+                            return { ok: true, message: `${name} foi banido do servidor.` };
+                        },
+                        unban: (steamId, name) => {
+                            if (!banned.has(steamId)) return { ok: false, message: `${name} não está banido.` };
+                            banned.delete(steamId);
+                            return { ok: true, message: `${name} foi desbanido.` };
+                        },
+                    },
+                    kickBanned: () => {
+                        for (const player of online) {
+                            if (banned.has(player.steamId)) kicked.push(player.steamId);
+                        }
+                        return kicked.length;
+                    },
+                };
+            }
+            if (id === "./position.js") {
+                return { getSavedPlace: (steamId) => (seenAt[steamId] === undefined ? null : { savedAt: seenAt[steamId] }) };
+            }
+            if (id === "./big-emit.js") {
+                return { emitLarge: (player, name, json) => { player.emit(`kcdc-gamemode:${name}`, json); return 1; } };
+            }
+            if (id === "./citizenship.js") {
+                return { townOf: (steamId) => (towns[steamId] ? { name: towns[steamId] } : null) };
             }
             if (id === "./auth.js") {
                 return {
@@ -123,7 +232,8 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
                 const find = (propertyId) => catalog.find((property) => property.id === propertyId) ?? null;
                 const done = (kind, extra) => { edits.push({ kind, ...extra }); return { ok: true, message: `${kind} ok` }; };
                 return {
-                    NAME_MIN: 2, NAME_MAX: 60, DESCRIPTION_MAX: 240, REGION_MIN: 2, REGION_MAX: 40, OWNER_KEY_LIMIT: 8,
+                    NAME_MIN: 2, NAME_MAX: 60, DESCRIPTION_MAX: 240, REGION_MIN: 2, REGION_MAX: 40, OWNER_KEY_LIMIT: 8, ACCESS_LIMIT: 12,
+                    gatesOpen: () => null, castleGates: () => [], mayWorkGates: () => false, setCastleGates: () => ({ ok: false, message: "sem portões" }),
                     listProperties: () => catalog,
                     propertiesOwnedBy: (steamId) => catalog.filter((property) => property.ownerSteamId === steamId),
                     getProperty: find,
@@ -138,7 +248,16 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
                     lockedByUs: (guid) => (guid in worldLocks ? worldLocks[guid] === true && !levelLocks.has(guid) : null),
                     previewRegion: (region) => ({ given: catalog.filter((property) => property.region === region && !property.ownerSteamId && !property.npc && !property.parentId).length, chests: 0, npc: 0, kept: 0 }),
                     regionNamed: (query) => (catalog.some((property) => property.region === query) ? query : null),
-                    cedeRegion: (giver, query, target) => { edits.push({ kind: "cede", region: query, to: target.steamId }); return { ok: true, message: `${query} agora é de ${target.nickname}`, given: 1, chests: 0, npc: 0, kept: 0 }; },
+                    cedeRegion: (giver, query, target) => { edits.push({ kind: "cede", region: query, to: target.steamId }); lords[query] = { steamId: target.steamId, name: target.nickname }; return { ok: true, message: `${query} agora é de ${target.nickname}`, given: 1, chests: 0, npc: 0, kept: 0 }; },
+                    regionLordOf: (region) => lords[region] ?? null,
+                    previewRelease: (region) => ({ lord: lords[region] ?? null, released: 1, kept: 2 }),
+                    releaseRegion: (query) => {
+                        const lord = lords[query] ?? null;
+                        if (lord === null) return { ok: false, message: `${query} não tem senhor.`, lord: null, released: 0, kept: 0 };
+                        edits.push({ kind: "release", region: query });
+                        delete lords[query];
+                        return { ok: true, message: `${query} deixou de ser de ${lord.name}: 1 propriedade(s) dele ficaram sem dono e 2 de outros donos continuam.`, lord, released: 1, kept: 2 };
+                    },
                     setDoorLocked: (propertyId, index, locked) => done("door", { id: propertyId, index, locked }),
                     propertyOfGuid: (guid) => catalog.find((property) => (property.doors ?? []).includes(guid) || property.stashGuid === guid) ?? null,
                     lockedInWorld: (guid) => (guid in worldLocks ? worldLocks[guid] : null),
@@ -149,11 +268,52 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
                     renameProperty: (propertyId, name) => done("name", { id: propertyId, name }),
                     describeProperty: (propertyId, text) => done("description", { id: propertyId, text }),
                     setRegion: (propertyId, region) => done("region", { id: propertyId, region }),
+                    displayName: (property) => property.name,
+                    // Access (2026-10-28): the list is in the catalog's `access`; a chest follows its house.
+                    accessOf: (property) => (property.parentId ? (find(property.parentId) ?? property) : property).access ?? [],
+                    hasAccess: (steamId, property) => steamId !== "" && ((property.parentId ? (find(property.parentId) ?? property) : property).access ?? []).some((grant) => grant.steamId === steamId),
+                    propertiesSharedWith: (steamId) => {
+                        const homes = catalog.filter((property) => !property.parentId && (property.access ?? []).some((grant) => grant.steamId === steamId));
+                        return [...homes, ...catalog.filter((property) => property.parentId && homes.some((home) => home.id === property.parentId))];
+                    },
+                    grantAccess: (giver, propertyId, target, admin) => {
+                        accessCalls.push({ kind: "grant", by: giver.steamId, id: propertyId, to: target.steamId, admin });
+                        return { ok: true, message: "acesso dado", steamId: target.steamId, name: target.nickname };
+                    },
+                    revokeAccess: (giver, propertyId, index, name, admin) => {
+                        const property = find(propertyId);
+                        const holder = property === null ? null : property.parentId ? (find(property.parentId) ?? property) : property;
+                        const grant = holder === null ? undefined : (holder.access ?? [])[index];
+                        accessCalls.push({ kind: "revoke", by: giver.steamId, id: propertyId, index, name, admin });
+                        if (grant === undefined) return { ok: false, message: "Essa pessoa não tem mais acesso." };
+                        holder.access = holder.access.filter((_, position) => position !== index);
+                        return { ok: true, message: "acesso tirado", steamId: grant.steamId, name: grant.name };
+                    },
+                    leaveAccess: (steamId, propertyId) => {
+                        accessCalls.push({ kind: "leave", by: steamId, id: propertyId });
+                        const property = find(propertyId);
+                        if (property !== null) property.access = (property.access ?? []).filter((grant) => grant.steamId !== steamId);
+                        return { ok: true, message: "deixou o acesso", steamId, name: "" };
+                    },
                 };
+            }
+            if (id === "./place-hints.js" && extras.placeHints === true) {
+                return placeHintsModule();
+            }
+            if (id === "./free-changes.js") {
+                return freeChanges;
+            }
+            if (id === "./change-fee.js") {
+                return fees;
+            }
+            if (id === "./thirst.js") {
+                // The server's own thirst: a measure of a hundred for whoever is asked after.
+                return { thirstPace: { value: (player) => thirstOf[player.id] ?? 100 } };
             }
             if (id === "./kits.js") {
                 return {
                     grantGuildKit: (player, guildId) => { kitCalls.push({ steamId: player.steamId, guildId }); return kit.handed; },
+                    guildKitHint: (guildId) => (guildId === "collectores" ? "Para cortar lenha ou minerar: E." : ""),
                     grantFactionColours: (player, factionId) => { kitCalls.push({ steamId: player.steamId, factionId }); return kit.colours; },
                 };
             }
@@ -161,10 +321,20 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
                 return {
                     supporters: {
                         summary: (steamId) => supporterSummaries[steamId] ?? null,
+                        queue: (action, steamId, name, by) => {
+                            queued.push({ action, steamId, name, by });
+                            return { ok: true, message: `${name} não está no jogo: reservado (${action})` };
+                        },
                         grant: (admin, target) => {
                             benefits.push({ by: admin.steamId, to: target.steamId });
                             supporterSummaries[target.steamId] = { since: "14/10/2026", last: "14/10/2026", times: 1 };
                             return { ok: true, message: `Benefícios entregues a ${target.nickname}` };
+                        },
+                        revoke: (admin, target) => {
+                            if (!supporterSummaries[target.steamId]) return { ok: false, message: `${target.nickname} não é apoiador` };
+                            revoked.push({ by: admin.steamId, from: target.steamId });
+                            delete supporterSummaries[target.steamId];
+                            return { ok: true, message: `Benefícios retirados de ${target.nickname}` };
                         },
                     },
                 };
@@ -172,18 +342,18 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}) {
             assert.fail(`unexpected require ${id}`);
         },
         console: { log() {} },
-        Events: { onClient: (name, fn) => handlers.set(name, fn) },
+        Events: { onClient: (name, fn) => handlers.set(name, fn), on: (name, fn) => handlers.set(`local:${name}`, fn) },
         Chat: { sendToPlayer: (player, text) => chat.push(text) },
         Player: { all: () => online, getById: (id) => online.find((entry) => entry.id === id) ?? null },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/status.js"), "utf8"), context);
     context.exports.installStatus();
-    return { api: context.exports, languages, handlers, chat, files, grants, edits, labels, worldLocks, levelLocks, kitCalls, kit, benefits, supporterSummaries, titles, shown, family: familyModule };
+    return { api: context.exports, accessCalls, lords, freeLeft, purse, languages, handlers, chat, files, grants, edits, labels, worldLocks, levelLocks, kitCalls, kit, benefits, revoked, supporterSummaries, titles, shown, family: familyModule, banned, kicked, queued, seenAt };
 }
 
 function makePlayer(steamId, nickname = `jogador-${steamId.slice(-2) || "x"}`) {
     const sent = [];
-    const player = { id: nextId++, nickname, ready: true, alive: true, steamId, sent, health: 72.4, maxHealth: 100, hunger: 64.6, maxHunger: 100, appearance: { gender: "male" }, emit: (event, payload) => sent.push({ event, payload: JSON.parse(payload) }) };
+    const player = { id: nextId++, nickname, ready: true, alive: true, steamId, sent, position: { x: 0, y: 0, z: 0 }, health: 72.4, maxHealth: 100, hunger: 64.6, maxHunger: 100, appearance: { gender: "male" }, emit: (event, payload) => sent.push({ event, payload: JSON.parse(payload) }) };
     online.push(player);
     return player;
 }
@@ -197,7 +367,7 @@ function rosterOf(handlers, player, query = {}) {
 const SELECT = "kcdc-gamemode:status.selectGuild";
 const SOCIAL = "kcdc-gamemode:status.social";
 
-test("a new player is a Plebeius with no guild, and sees the five guilds", () => {
+test("a new player is a Plebeius with no guild, and sees the eight guilds", () => {
     const { handlers } = load();
     const player = makePlayer("76561198000000001");
     handlers.get(POLL)(player);
@@ -207,8 +377,8 @@ test("a new player is a Plebeius with no guild, and sees the five guilds", () =>
     const payload = player.sent[0].payload;
     assert.deepEqual(payload.socialStatus, { label: "Plebeius", gloss: "plebeu" });
     assert.equal(payload.guildId, null);
-    assert.equal(payload.guilds.length, 5);
-    assert.deepEqual(Array.from(payload.guilds, (guild) => guild.profession), ["Ferreiro", "Caçador", "Taberneiro", "Alquimista", "Artesão"]);
+    assert.equal(payload.guilds.length, 8);
+    assert.deepEqual(Array.from(payload.guilds, (guild) => guild.profession), ["Ferreiro", "Caçador", "Taberneiro", "Alquimista", "Artesão", "Coletor", "Agricultor", "Domador"]);
     for (const guild of payload.guilds) {
         for (const key of ["id", "nameLatin", "profession", "crest", "description"]) {
             assert.equal(typeof guild[key], "string", `${guild.id} has a ${key}`);
@@ -217,32 +387,31 @@ test("a new player is a Plebeius with no guild, and sees the five guilds", () =>
     }
 });
 
-test("selecting a guild saves it by Steam id and answers with the new state, once", () => {
-    const { handlers, chat, files } = load();
+test("a player no longer chooses a guild (2026-10-29): the panel's choice is refused with a word on where to find one; an administrator's choice is saved and answered, once", () => {
+    const { handlers, chat, files } = load({ "76561198000000004": "admin" });
     const player = makePlayer("76561198000000002");
     handlers.get(SELECT)(player, { guildId: "venatores" });
+    const told = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
+    assert.match(told.payload.text, /A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras/);
+    assert.equal(files.get("playerdata/social.json"), undefined, "nothing saved");
 
-    assert.equal(player.sent.at(-1).payload.guildId, "venatores");
+    const admin = makePlayer("76561198000000004");
+    handlers.get(SELECT)(admin, { guildId: "venatores" });
+    assert.equal(admin.sent.at(-1).payload.guildId, "venatores");
     assert.match(chat.at(-1), /Venatores/);
-    const saved = JSON.parse(files.get("playerdata/social.json"));
-    assert.equal(saved["76561198000000002"].guildId, "venatores");
+    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000004"].guildId, "venatores");
 
-    handlers.get(SELECT)(player, { guildId: "alchemistae" });
-    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000002"].guildId, "venatores");
-    const notice = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
-    assert.match(notice.payload.text, /Você já escolheu a guilda Venatores: a escolha é definitiva/);
-
-    handlers.get(SELECT)(player, { guildId: "venatores" });
-    const same = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
+    handlers.get(SELECT)(admin, { guildId: "venatores" });
+    const same = admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
     assert.match(same.payload.text, /Você já faz parte de Venatores/);
 });
 
-test("an administrator's remedy: a guild taken away lets the player choose again, and the members of a guild are listed", () => {
-    const { api, handlers, files } = load();
-    const first = makePlayer("76561198000000011");
-    const second = makePlayer("76561198000000012");
-    handlers.get(SELECT)(first, { guildId: "tabernarii" });
-    handlers.get(SELECT)(second, { guildId: "tabernarii" });
+test("an administrator's remedy: a guild taken away lets the player be handed another, and the members of a guild are listed", () => {
+    const { api, files } = load();
+    makePlayer("76561198000000011");
+    makePlayer("76561198000000012");
+    api.setGuildId("76561198000000011", "tabernarii");
+    api.setGuildId("76561198000000012", "tabernarii");
     assert.deepEqual(Array.from(api.listGuildMembers("tabernarii")).sort(), ["76561198000000011", "76561198000000012"]);
     assert.deepEqual(Array.from(api.listGuildMembers("venatores")), []);
 
@@ -252,13 +421,13 @@ test("an administrator's remedy: a guild taken away lets the player choose again
     assert.equal(api.getGuildId("76561198000000011"), null);
     assert.deepEqual(Array.from(api.listGuildMembers("tabernarii")), ["76561198000000012"]);
 
-    handlers.get(SELECT)(first, { guildId: "alchemistae" });
-    assert.equal(api.getGuildId("76561198000000011"), "alchemistae", "free to choose again");
+    api.setGuildId("76561198000000011", "alchemistae");
+    assert.equal(api.getGuildId("76561198000000011"), "alchemistae", "handed another");
     assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000012"].guildId, "tabernarii", "the other is untouched");
 });
 
 test("the tailors' guild is gone: it cannot be chosen, and a saved choice of it reads as no guild", () => {
-    const { handlers, files, chat } = load();
+    const { handlers, files, chat } = load({ "76561198000000091": "admin" });
     const player = makePlayer("76561198000000091");
     handlers.get(SELECT)(player, { guildId: "sartores" });
     assert.equal(player.sent.length, 0, "refused");
@@ -270,8 +439,8 @@ test("the tailors' guild is gone: it cannot be chosen, and a saved choice of it 
     assert.equal(older.sent[0].payload.guildId, null);
 });
 
-test("joining a guild brings its kit once, announced on the panel, and a second guild cannot be joined", () => {
-    const { handlers, kitCalls, kit } = load();
+test("an administrator's first guild brings its kit once, announced on the panel; a swap brings none, and a player's choice brings nothing (2026-10-29)", () => {
+    const { handlers, kitCalls, kit } = load({ "76561198000000093": "admin" });
     const player = makePlayer("76561198000000093");
 
     kit.handed = ["10 sucata de metal", "aço"];
@@ -282,12 +451,16 @@ test("joining a guild brings its kit once, announced on the panel, and a second 
 
     kit.handed = [];
     handlers.get(SELECT)(player, { guildId: "venatores" });
+    assert.equal(kitCalls.length, 1, "a swap brings no kit");
+
+    const common = makePlayer("76561198000000095");
+    handlers.get(SELECT)(common, { guildId: "alchemistae" });
     assert.equal(kitCalls.length, 1, "a refused choice brings no kit");
-    assert.equal(player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.social").at(-1).payload.guildId, "fabri-ferrarii");
+    assert.equal(common.sent.filter((entry) => entry.event === "kcdc-gamemode:status.social").length, 0);
 });
 
 test("a guild that is not in the catalog, or a missing Steam id, is refused and nothing is saved", () => {
-    const { handlers, chat, files } = load();
+    const { handlers, chat, files } = load({ "76561198000000003": "admin" });
     const player = makePlayer("76561198000000003");
 
     handlers.get(SELECT)(player, { guildId: "no-such-guild" });
@@ -435,7 +608,7 @@ test("choosing a faction leaves the guild and the social status alone", () => {
     const { api, handlers } = load();
     const player = makePlayer("76561198000000013");
     api.setSocialStatus(player.steamId, "nobilis");
-    handlers.get(SELECT)(player, { guildId: "tabernarii" });
+    api.setGuildId(player.steamId, "tabernarii");
     handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
 
     const payload = player.sent.at(-1).payload;
@@ -503,7 +676,7 @@ test("a record saved before factions existed still loads, with the new fields at
 const GRANT_KEY = "kcdc-gamemode:status.grantKey";
 
 test("the property catalog is sent to an admin and never to a player", () => {
-    const catalog = [{ id: "casa", name: "Casa", region: "Kuttenberg", doors: [] }];
+    const catalog = [{ id: "casa", name: "Casa", region: "Kuttenberg", doors: [], x: 10, y: 10 }];
     const { handlers } = load({ "76561198000000020": "admin" }, catalog);
 
     const admin = makePlayer("76561198000000020");
@@ -518,9 +691,9 @@ test("the property catalog is sent to an admin and never to a player", () => {
 
 test("a player is sent the properties they own, and only those, with the owner's name and a flag for theirs", () => {
     const catalog = [
-        { id: "casa-03", name: "Casa 03", region: "Suchdol", kind: "house", doors: ["d1", "d2", "d3"], doorGuid: "d1", keys: 2, locked: true, parentId: "", ownerSteamId: "76561198000000140", ownerName: "Hans", description: "Perto do moinho" },
-        { id: "casa-03-bau-1", name: "Baú 1", region: "Suchdol", kind: "chest", doors: [], keys: 0, locked: false, parentId: "casa-03", ownerSteamId: "76561198000000140", ownerName: "Hans" },
-        { id: "casa-04", name: "Casa 04", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "" },
+        { id: "casa-03", x: 1, y: 1, name: "Casa 03", region: "Suchdol", kind: "house", doors: ["d1", "d2", "d3"], doorGuid: "d1", keys: 2, locked: true, parentId: "", ownerSteamId: "76561198000000140", ownerName: "Hans", description: "Perto do moinho" },
+        { id: "casa-03-bau-1", x: 1, y: 1, name: "Baú 1", region: "Suchdol", kind: "chest", doors: [], keys: 0, locked: false, parentId: "casa-03", ownerSteamId: "76561198000000140", ownerName: "Hans" },
+        { id: "casa-04", x: 2, y: 2, name: "Casa 04", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "" },
     ];
     const { handlers } = load({ "76561198000000141": "admin" }, catalog);
 
@@ -540,7 +713,139 @@ test("a player is sent the properties they own, and only those, with the owner's
     const all = admin.sent[0].payload.properties;
     assert.equal(all.length, 3);
     assert.deepEqual(Array.from(all, (entry) => entry.mine ?? false), [false, false, false], "the administrator sees all of them, none as theirs");
-    assert.deepEqual(Object.keys(all[2]).sort(), ["id", "kind", "locked", "name", "region"], "a property with nothing to say about it is sent without the empty fields");
+    assert.deepEqual(Object.keys(all.find((entry) => entry.id === "casa-04")).sort(), ["id", "kind", "locked", "name", "region"], "a property with nothing to say about it is sent without the empty fields");
+});
+
+
+test("an administrator is sent one region at a time (the nearest to them at first), a line for every region, and the region they ask for next (2026-10-21)", () => {
+    const house = (id, region, x, extra = {}) => ({ id, x, y: 0, name: id, region, kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", ...extra });
+    const catalog = [
+        house("suchdol-1", "Suchdol", 0),
+        house("suchdol-2", "Suchdol", 5, { ownerSteamId: "76561198000000150", ownerName: "Hans" }),
+        house("suchdol-2-bau", "Suchdol", 5, { parentId: "suchdol-2", kind: "chest", ownerSteamId: "76561198000000150", ownerName: "Hans" }),
+        house("suchdol-3", "Suchdol", 8, { npc: "Boticário" }),
+        house("suchdol-3-bau", "Suchdol", 8, { parentId: "suchdol-3", kind: "chest" }),
+        house("suchdol-4", "Suchdol", 9),
+        house("suchdol-4-bau", "Suchdol", 9, { parentId: "suchdol-4", kind: "chest" }),
+        house("raborsch-1", "Raborsch", 1000),
+        house("kuttenberg-1", "Kuttenberg", 5000),
+    ];
+    const { handlers } = load({ "76561198000000151": "admin" }, catalog);
+    const admin = makePlayer("76561198000000151");
+    admin.position = { x: 990, y: 0, z: 0 };
+    handlers.get(POLL)(admin);
+    let payload = admin.sent.at(-1).payload;
+    assert.deepEqual(Array.from(payload.properties, (entry) => entry.id), ["raborsch-1"], "only the region next to them, none of the 1131 others");
+    assert.deepEqual({ ...payload.propertyPick }, { keys: "Raborsch", mine: "" });
+    assert.deepEqual(Array.from(payload.propertyRegions, (line) => line.name), ["Kuttenberg", "Raborsch", "Suchdol"], "a line for every region");
+    const suchdol = payload.propertyRegions.find((line) => line.name === "Suchdol");
+    assert.deepEqual({ ...suchdol }, { name: "Suchdol", houses: 4, given: 2, chests: 1, npc: 1, kept: 1, lord: "" }, "what the card that takes the whole region counts: no owner and their chests, NPC houses, houses with an owner, and the lord there is none");
+
+    handlers.get("kcdc-gamemode:status.propRegion")(admin, { tab: "keys", region: "Suchdol" });
+    payload = admin.sent.at(-1).payload;
+    assert.deepEqual(Array.from(payload.properties, (entry) => entry.id).sort(), ["suchdol-1", "suchdol-2", "suchdol-2-bau", "suchdol-3", "suchdol-3-bau", "suchdol-4", "suchdol-4-bau"]);
+    assert.equal(payload.propertyPick.keys, "Suchdol");
+
+    const before = admin.sent.length;
+    handlers.get("kcdc-gamemode:status.propRegion")(admin, { tab: "keys", region: "Atlantis" });
+    handlers.get("kcdc-gamemode:status.propRegion")(admin, { tab: "other", region: "Suchdol" });
+    handlers.get("kcdc-gamemode:status.propRegion")(admin, { tab: "keys", region: 7 });
+    assert.equal(admin.sent.length, before, "a region the catalog does not have, a page that is not one, and a number change nothing");
+});
+
+test("the panel says where each region of the list is on the game's map, and where a property that is a place of its own stands against its village (2026-10-26)", () => {
+    const house = (id, region, x, y, extra = {}) => ({ id, x, y, name: id, region, kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", ...extra });
+    const catalog = [
+        house("minas-1", "Minas", 3197, 2183),
+        house("toca-do-diabo", "Minas", 2912, 2937, { name: "Toca do Diabo", ownerSteamId: "76561198000000160", ownerName: "Hans" }),
+        house("suchdol-1", "Suchdol", 400, 5000),
+    ];
+    const { handlers } = load({ "76561198000000161": "admin" }, catalog, {}, {}, {}, { placeHints: true });
+    const admin = makePlayer("76561198000000161");
+    admin.position = { x: 2900, y: 2900, z: 0 };
+    handlers.get(POLL)(admin);
+    const payload = admin.sent.at(-1).payload;
+    assert.deepEqual(Object.keys(payload.regionHints).sort(), ["Minas", "Suchdol"], "a hint for every region of the list");
+    assert.deepEqual({ ...payload.regionHints.Minas }, { kind: "village", map: "", where: "ao norte de Stará Kutná" }, "the user's own reference: Minas is above Stará Kutná");
+    assert.equal(payload.regionHints.Suchdol.kind, "castle", "a region with walls is drawn as a castle");
+    assert.equal(payload.properties.find((entry) => entry.id === "toca-do-diabo").where, "a noroeste das Minas (770 m)", "the den: where it stands against its village");
+    assert.ok(!("where" in payload.properties.find((entry) => entry.id === "minas-1")), "an ordinary house says nothing of where it is");
+
+    // A player is sent no list of regions, so no hints; the one property they own that is a place says where it is all the same.
+    const { handlers: others } = load({}, catalog, {}, {}, {}, { placeHints: true });
+    const hans = makePlayer("76561198000000160", "Hans");
+    others.get(POLL)(hans);
+    const own = hans.sent.at(-1).payload;
+    assert.deepEqual({ ...own.regionHints }, {}, "no list of regions, no hints");
+    assert.equal(own.properties.find((entry) => entry.id === "toca-do-diabo").where, "a noroeste das Minas (770 m)");
+
+    // Without the module (it could not be loaded) the panel is the panel of before: nothing is added and nothing breaks.
+    const { handlers: bare } = load({ "76561198000000162": "admin" }, catalog);
+    const plain = makePlayer("76561198000000162");
+    plain.position = { x: 2900, y: 2900, z: 0 };
+    bare.get(POLL)(plain);
+    assert.deepEqual({ ...plain.sent.at(-1).payload.regionHints }, {});
+    assert.ok(!("where" in plain.sent.at(-1).payload.properties.find((entry) => entry.id === "toca-do-diabo")));
+});
+
+test("an administrator always has their own properties, in whatever region, and a player cannot open another region, nor a region that is not theirs to see", () => {
+    const catalog = [
+        { id: "a", x: 0, y: 0, name: "A", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "76561198000000160", ownerName: "Admin" },
+        { id: "b", x: 900, y: 0, name: "B", region: "Raborsch", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "" },
+        { id: "c", x: 910, y: 0, name: "C", region: "Raborsch", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "" },
+    ];
+    const { handlers } = load({ "76561198000000160": "admin" }, catalog);
+    const admin = makePlayer("76561198000000160");
+    admin.position = { x: 905, y: 0, z: 0 };
+    handlers.get(POLL)(admin);
+    assert.deepEqual(Array.from(admin.sent.at(-1).payload.properties, (entry) => entry.id).sort(), ["a", "b", "c"], "the region by them, and their own house in Suchdol");
+
+    const player = makePlayer("76561198000000161");
+    handlers.get(POLL)(player);
+    const before = player.sent.length;
+    handlers.get("kcdc-gamemode:status.propRegion")(player, { tab: "keys", region: "Raborsch" });
+    handlers.get("kcdc-gamemode:status.propRegion")(player, { tab: "mine", region: "Raborsch" });
+    assert.equal(player.sent.length, before, "neither Chaves nor a region nobody ceded to them");
+    assert.deepEqual(Array.from(player.sent.at(-1).payload.propertyRegions), [], "and the line of every region is for an administrator");
+});
+
+test("a lord is sent everything in the lands ceded to them with their own properties, what they gave away and the vendors' houses included; a region picked narrows it (2026-10-29)", () => {
+    const lordId = "76561198000000170";
+    const catalog = [
+        { id: "own", x: 0, y: 0, name: "Casa própria", region: "Wysoka", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: lordId, ownerName: "Senhor" },
+        { id: "d1", x: 5, y: 0, name: "Casa 1", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", domainOf: lordId },
+        { id: "d2", x: 6, y: 0, name: "Casa 2", region: "Bylany", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", domainOf: lordId },
+        // A house the lord gave to somebody: it is somebody else's now, and still on the lord's list, as the lands' are.
+        { id: "d3", x: 7, y: 0, name: "Casa 3", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "76561198000000180", ownerName: "Hans", domainOf: lordId },
+        { id: "d3-bau", x: 7, y: 0, name: "Baú 1", region: "Suchdol", kind: "chest", doors: [], keys: 0, locked: false, parentId: "d3", ownerSteamId: "76561198000000180", ownerName: "Hans", domainOf: lordId },
+        // A vendor's house.
+        { id: "d4", x: 8, y: 0, name: "Casa do Ferreiro", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", npc: "Ferreiro", domainOf: lordId },
+        // Somebody else's lands.
+        { id: "x1", x: 9, y: 0, name: "Casa alheia", region: "Raborsch", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "" },
+    ];
+    const { handlers } = load({}, catalog);
+    const lord = makePlayer(lordId, "Senhor");
+    handlers.get(POLL)(lord);
+    let payload = lord.sent.at(-1).payload;
+    assert.deepEqual(Array.from(payload.properties, (entry) => entry.id).sort(), ["d1", "d2", "d3", "d3-bau", "d4", "own"], "all the lands, at once, with their own and with what was given away");
+    assert.deepEqual(Array.from(payload.domainRegions), ["Bylany", "Suchdol"]);
+    const gone = payload.properties.find((entry) => entry.id === "d3");
+    assert.equal(gone.domain, true, "it is read, not touched: it is somebody else's");
+    assert.equal(gone.owner, "Hans");
+    assert.ok(!("mine" in gone));
+    assert.equal(payload.properties.find((entry) => entry.id === "own").mine, true);
+
+    handlers.get("kcdc-gamemode:status.propRegion")(lord, { tab: "mine", region: "Suchdol" });
+    payload = lord.sent.at(-1).payload;
+    assert.deepEqual(Array.from(payload.properties, (entry) => entry.id).sort(), ["d1", "d3", "d3-bau", "d4", "own"], "a region narrows the lands, and their own stay");
+    assert.equal(payload.propertyPick.mine, "Suchdol");
+
+    handlers.get("kcdc-gamemode:status.propRegion")(lord, { tab: "mine", region: "" });
+    assert.equal(lord.sent.at(-1).payload.properties.length, 6, "back to all of them");
+
+    const stranger = makePlayer("76561198000000190", "Katerina");
+    handlers.get(POLL)(stranger);
+    assert.deepEqual(Array.from(stranger.sent.at(-1).payload.properties), [], "somebody who holds no lands is sent none");
 });
 
 test("a request for a key reaches the property module with the sender's role, which decides who may", () => {
@@ -618,6 +923,14 @@ test("a gauge whose capacity the game has not reported yet is on the scale of 10
     assert.deepEqual(Array.from(api.gauge(Number.NaN, 100)), [0, 0]);
     assert.deepEqual(Array.from(api.gauge(-3, 100)), [0, 100]);
     assert.deepEqual(Array.from(api.gauge(50, Number.NaN)), [50, 100]);
+});
+
+test("the Jogadores list shows the server's own thirst, a measure of a hundred, between hunger and energy", () => {
+    const { handlers } = load({ "76561198000000301": "admin" });
+    const admin = makePlayer("76561198000000301", "Mauro");
+    const kat = makePlayer("76561198000000302", "Katerina");
+    const full = rosterOf(handlers, admin).players.find((each) => each.id === kat.id);
+    assert.deepEqual(Array.from(full.thirst), [100, 100], "quenched until the server says otherwise");
 });
 
 test("the Jogadores list still shows hunger when the game has not told the capacity of it: the bar is not left blank", () => {
@@ -1017,7 +1330,7 @@ test("the owner and an administrator lock and unlock from the panel; anybody els
     const stranger = makePlayer("76561198000000161", "Katerina");
     handlers.get(PROP_LOCK)(stranger, { id: "casa-03", locked: 0 });
     assert.deepEqual(edits, []);
-    assert.deepEqual(ofKind(stranger, NOTICE).map((entry) => entry.payload.text), ["Só o dono pode trancar ou destrancar."]);
+    assert.deepEqual(ofKind(stranger, NOTICE).map((entry) => entry.payload.text), ["Só o dono, ou quem tem acesso, pode trancar ou destrancar."]);
 
     handlers.get(PROP_LOCK)(hans, { id: "casa-03", locked: "sim" });
     handlers.get(PROP_LOCK)(hans, { id: "casa-03", locked: 2 });
@@ -1061,6 +1374,44 @@ test("a region asked for without the confirmation is only counted, and one that 
     handlers.get(REGION_CEDE)(admin, { confirm: 1 });
     assert.deepEqual(edits, []);
     assert.equal(ofKind(admin, NOTICE).at(-1).payload.text, "Escolha uma região para ceder.");
+});
+
+test("'Remover dono' takes the lord off a region and the properties they hold in it: counted first, then done, the old lord told, a region with none refused (2026-10-28)", () => {
+    const { handlers, edits, chat, lords } = load({ "76561198000000406": "admin" }, REGION_HOUSES.map((house) => ({ ...house })));
+    const admin = makePlayer("76561198000000406", "Mauro");
+    const lord = makePlayer("76561198000000407", "Radovan");
+
+    handlers.get(REGION_CEDE)(admin, { region: "Suchdol", remove: 1, confirm: 1 });
+    assert.deepEqual(edits, []);
+    assert.equal(ofKind(admin, NOTICE).at(-1).payload.text, "Suchdol não tem senhor.", "nobody to remove");
+
+    handlers.get(REGION_CEDE)(admin, { region: "Suchdol", targetId: lord.id, confirm: 1 });
+    assert.equal(lords.Suchdol.name, "Radovan");
+    const payload = () => { handlers.get(POLL)(admin); return ofKind(admin, SOCIAL).at(-1).payload; };
+    assert.equal(payload().propertyRegions.find((line) => line.name === "Suchdol").lord, "Radovan", "the card tells the page who the lord is");
+
+    handlers.get(REGION_CEDE)(admin, { region: "Suchdol", remove: 1 });
+    assert.match(ofKind(admin, NOTICE).at(-1).payload.text, /Suchdol: Radovan deixaria de ser o senhor das terras: 1 propriedade\(s\) dele ficariam sem dono e 2 de outros donos continuariam\./);
+    assert.equal(lords.Suchdol.name, "Radovan", "nothing changes before the confirmation");
+
+    const heard = chat.length;
+    handlers.get(REGION_CEDE)(admin, { region: "Suchdol", remove: 1, confirm: 1 });
+    assert.deepEqual(edits.at(-1), { kind: "release", region: "Suchdol" });
+    assert.equal(lords.Suchdol, undefined);
+    assert.match(ofKind(admin, NOTICE).at(-1).payload.text, /^Suchdol deixou de ser de Radovan: 1 propriedade\(s\) dele ficaram sem dono e 2 de outros donos continuam\.$/);
+    assert.ok(chat.slice(heard).some((line) => /Mauro tirou de você as terras de Suchdol, com as propriedades que você tinha lá\./.test(line)), "the old lord is told");
+    assert.ok(ofKind(lord, SOCIAL).length >= 1, "and their panel is drawn again");
+    assert.equal(payload().propertyRegions.find((line) => line.name === "Suchdol").lord, "", "the card no longer offers it");
+});
+
+test("only an administrator removes a region's lord, and no property is touched when one does", () => {
+    const { handlers, edits, lords } = load({}, REGION_HOUSES.map((house) => ({ ...house })));
+    lords.Suchdol = { steamId: "76561198000000408", name: "Radovan" };
+    const player = makePlayer("76561198000000409", "Hans");
+    handlers.get(REGION_CEDE)(player, { region: "Suchdol", remove: 1, confirm: 1 });
+    assert.deepEqual(edits, []);
+    assert.equal(lords.Suchdol.name, "Radovan");
+    assert.deepEqual(ofKind(player, NOTICE), [], "and no word: the request is just dropped");
 });
 
 test("a player cannot take or cede a region, whoever they name", () => {
@@ -1136,7 +1487,24 @@ test("raising a player to the nobility takes along the spouse and the legitimate
     handlers.get(SET_SOCIAL)(hans, { targetId: hans.id, status: "nobilis", family: 1 });
     assert.equal(status(hans), "plebeius", "a player cannot raise themselves");
     handlers.get(SET_SOCIAL)(admin, { targetId: hans.id, status: "rei", family: 1 });
-    assert.equal(status(hans), "plebeius", "only plebeius and nobilis");
+    assert.equal(status(hans), "plebeius", "only plebeius, minor and nobilis");
+});
+
+test("an administrator may make a player a lesser noble, with the spouse and the legitimate line, and the status is its own, between the two", () => {
+    const { handlers, api } = load({ "76561198000000331": "admin" });
+    const admin = makePlayer("76561198000000331", "Mauro");
+    const hans = makePlayer("76561198000000332", "Hans");
+    const jan = makePlayer("76561198000000333", "Jan");
+    handlers.get(FAMILY_ADD)(hans, { relation: "filho", name: jan.nickname, linkId: jan.id });
+    answer(handlers, jan);
+
+    handlers.get(SET_SOCIAL)(admin, { targetId: hans.id, status: "minor", family: 1 });
+
+    assert.deepEqual([hans, jan].map((player) => api.getSocialStatus(player.steamId)), ["minor", "minor"]);
+    assert.match(ofKind(admin, NOTICE).at(-1).payload.text, /Nobilis minor \(nobreza menor\) agora: Hans, Jan\./);
+    assert.equal(ofKind(jan, SOCIAL).at(-1).payload.socialStatus.gloss, "nobreza menor");
+    assert.equal(api.SOCIAL_STATUS.minor.label, "Nobilis minor");
+    assert.deepEqual(Array.from(api.SOCIAL_STATUS_IDS), ["plebeius", "minor", "nobilis"]);
 });
 
 test("the players page lists who would change along, and a relative may be linked, edited and unlinked from the tree", () => {
@@ -1248,7 +1616,7 @@ test("what an administrator last asked of the list is what an action refreshes",
 });
 
 test("a toast of the panel, and the chat line with it, are said in the language the player chose", () => {
-    const { handlers, chat, languages } = load();
+    const { handlers, chat, languages } = load({ "76561198000000471": "admin", "76561198000000472": "admin" });
     const english = makePlayer("76561198000000471", "Hans");
     const portuguese = makePlayer("76561198000000472", "Kath");
     languages["76561198000000471"] = "en";
@@ -1261,4 +1629,351 @@ test("a toast of the panel, and the chat line with it, are said in the language 
     assert.equal(chat.at(-1), "[en] Propriedade não encontrada.");
     handlers.get("kcdc-gamemode:status.propLock")(portuguese, { id: "nao-existe", locked: 1 });
     assert.equal(toast(portuguese).payload.text, "Propriedade não encontrada.");
+});
+
+test("an administrator switches guilds from the panel as often as they like, to test the trades; a player cannot", () => {
+    const { handlers, files } = load({ "76561198000000094": "admin" });
+    const admin = makePlayer("76561198000000094");
+    handlers.get(SELECT)(admin, { guildId: "venatores" });
+    handlers.get(SELECT)(admin, { guildId: "alchemistae" });
+    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000094"].guildId, "alchemistae");
+    const notice = admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
+    assert.match(notice.payload.text, /Administrador: você trocou para Alchemistae/);
+    assert.equal(admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.social").at(-1).payload.guildId, "alchemistae");
+    handlers.get(SELECT)(admin, { guildId: "no-such-guild" });
+    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000094"].guildId, "alchemistae", "not to a guild that does not exist");
+});
+
+const ROOM_SAVE = "kcdc-gamemode:status.roomSave";
+const ROOM_GIVE = "kcdc-gamemode:status.roomGive";
+const ROOM_VACATE = "kcdc-gamemode:status.roomVacate";
+const ROOM_DELETE = "kcdc-gamemode:status.roomDelete";
+const DOOR_LOCK = "kcdc-gamemode:status.doorLock";
+const CASTLE = { ...HOUSE, id: "castelo", name: "Castelo de Suchdol", doors: ["d0d0d0d0d0d0d0d0", "d1d1d1d1d1d1d1d1", "d2d2d2d2d2d2d2d2"], doorGuid: "d0d0d0d0d0d0d0d0" };
+const CASTLE_CHEST = { ...HOUSE, id: "castelo-bau-4", name: "Baú 4", kind: "chest", doors: [], parentId: "castelo", stashGuid: "c4c4c4c4c4c4c4c4", ownerSteamId: "", ownerName: "" };
+
+test("rooms: the owner makes one of some doors and chests and gives it; the holder sees it and locks its parts, and nothing else", () => {
+    const { handlers, edits, chat, files } = load({}, [{ ...CASTLE }, { ...CASTLE_CHEST }]);
+    const hans = makePlayer("76561198000000160", "Hans");
+    const dorota = makePlayer("76561198000000170", "Dorota");
+    const stranger = makePlayer("76561198000000171", "Katerina");
+
+    handlers.get(ROOM_SAVE)(stranger, { house: "castelo", name: "Quarto da torre", doors: "1", chests: "castelo-bau-4" });
+    assert.equal(ofKind(stranger, NOTICE).at(-1).payload.text, "Só o dono da casa cuida dos quartos.");
+    handlers.get(ROOM_SAVE)(hans, { house: "castelo", name: "Quarto da torre", doors: "1", chests: "castelo-bau-4" });
+    assert.match(ofKind(hans, NOTICE).at(-1).payload.text, /Quarto criado: Quarto da torre \(1 porta\(s\), 1 baú\(s\)\)/);
+    const saved = Object.values(JSON.parse(files.get("playerdata/rooms.json")));
+    assert.equal(saved.length, 1);
+    assert.deepEqual(saved[0].doors, ["d1d1d1d1d1d1d1d1"]);
+    const roomId = saved[0].id;
+    handlers.get(ROOM_SAVE)(hans, { house: "castelo", name: "Outro", doors: "1", chests: "" });
+    assert.equal(ofKind(hans, NOTICE).at(-1).payload.text, "Uma das portas já é de outro quarto.");
+
+    handlers.get(ROOM_GIVE)(hans, { room: roomId, targetId: dorota.id });
+    assert.match(chat.at(-1), /Hans deu a você o quarto Quarto da torre em Castelo de Suchdol/);
+    const panel = ofKind(dorota, SOCIAL).at(-1).payload;
+    const entry = panel.properties.find((property) => property.id === `room:${roomId}`);
+    assert.equal(entry.kind, "room");
+    assert.equal(entry.house, "Castelo de Suchdol");
+    assert.deepEqual(entry.roomDoors.map((door) => door.index), [1]);
+    assert.ok(panel.properties.some((property) => property.id === "castelo-bau-4" && property.parentId === `room:${roomId}`), "its chest follows it");
+    const owner = ofKind(hans, SOCIAL).at(-1).payload.properties.find((property) => property.id === "castelo");
+    assert.deepEqual(owner.rooms[0].holders, ["Dorota"]);
+
+    edits.length = 0;
+    handlers.get(DOOR_LOCK)(dorota, { id: "castelo", index: 1, locked: 1 });
+    handlers.get(PROP_LOCK)(dorota, { id: "castelo-bau-4", locked: 1 });
+    assert.deepEqual(edits, [{ kind: "door", id: "castelo", index: 1, locked: true }, { kind: "lock", id: "castelo-bau-4", locked: true }]);
+    handlers.get(DOOR_LOCK)(dorota, { id: "castelo", index: 0, locked: 1 });
+    handlers.get(PROP_LOCK)(dorota, { id: "castelo", locked: 1 });
+    assert.equal(edits.length, 2, "the rest of the castle is not hers");
+    handlers.get(DOOR_LOCK)(stranger, { id: "castelo", index: 1, locked: 0 });
+    assert.equal(edits.length, 2);
+
+    handlers.get(ROOM_VACATE)(dorota, { room: roomId, self: 1 });
+    assert.ok(!ofKind(dorota, SOCIAL).at(-1).payload.properties.some((property) => property.id === `room:${roomId}`), "she left it");
+    handlers.get(ROOM_DELETE)(stranger, { room: roomId });
+    assert.equal(Object.keys(JSON.parse(files.get("playerdata/rooms.json"))).length, 1, "not hers to delete");
+    handlers.get(ROOM_DELETE)(hans, { room: roomId });
+    assert.deepEqual(JSON.parse(files.get("playerdata/rooms.json")), {});
+});
+
+test("a player cannot change a guild, with the free change or with coins (2026-10-29: the guilds are handed out, not chosen), and the panel's choice never reaches the purse", () => {
+    const sut = load();
+    const player = makePlayer("76561198000000099");
+    sut.api.setGuildId("76561198000000099", "venatores");
+    sut.freeLeft.add("76561198000000099:guild");
+    sut.purse.set("76561198000000099", 500);
+    sut.handlers.get(SELECT)(player, { guildId: "alchemistae" });
+    assert.equal(JSON.parse(sut.files.get("playerdata/social.json"))["76561198000000099"].guildId, "venatores");
+    assert.equal(sut.purse.get("76561198000000099"), 500, "nothing is taken");
+    assert.equal(sut.freeLeft.has("76561198000000099:guild"), true, "and the free change is not spent");
+    assert.deepEqual(sut.kitCalls, []);
+});
+
+
+
+test("only an administrator takes the supporter benefits back, from the same page; a player who is gone or a bad target is told or ignored (2026-10-25)", () => {
+    const GRANT = "kcdc-gamemode:status.supporterGrant";
+    const REVOKE = "kcdc-gamemode:status.supporterRevoke";
+    const { handlers, revoked, chat } = load({ "76561198000000321": "admin" });
+    const admin = makePlayer("76561198000000321", "Mauro");
+    const hans = makePlayer("76561198000000322", "Hans");
+    handlers.get(GRANT)(admin, { targetId: hans.id });
+
+    handlers.get(REVOKE)(hans, { targetId: hans.id });
+    assert.deepEqual(revoked, [], "a player cannot take their own, nor anybody's");
+
+    handlers.get(REVOKE)(admin, { targetId: hans.id });
+    assert.deepEqual(revoked, [{ by: "76561198000000321", from: "76561198000000322" }]);
+    assert.match(chat.at(-1), /Benefícios retirados de Hans/);
+    const roster = admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.roster").at(-1);
+    assert.equal(roster.payload.players.find((entry) => entry.id === hans.id).supporter, null, "the list no longer shows him as a supporter");
+    assert.equal(hans.sent.filter((entry) => entry.event === SOCIAL).at(-1).payload.supporter, null, "and his own page knows at once");
+
+    handlers.get(REVOKE)(admin, { targetId: hans.id });
+    assert.match(chat.at(-1), /não é apoiador/, "taking them back twice is told, not done");
+    handlers.get(REVOKE)(admin, { targetId: 99999 });
+    assert.match(chat.at(-1), /não está mais no servidor/);
+    for (const bad of [{}, { targetId: "2" }, { targetId: 1.5 }, null]) handlers.get(REVOKE)(admin, bad);
+    assert.equal(revoked.length, 1);
+});
+
+/** Accounts the Jogadores list knows from their saved characters, for the tests of the offline list (2026-10-27). */
+const OFFLINE = {
+    admin: "76561198000000401",
+    kat: "76561198000000402",
+    urik: "76561198000000403",
+    elisabeth: "76561198000000404",
+};
+function offlineWorld() {
+    const characters = {
+        [OFFLINE.kat]: { nickname: "Katerina", appearance: { gender: "female" } },
+        [OFFLINE.urik]: { nickname: "Player", name: "Urik", appearance: { gender: "male" } },
+        [OFFLINE.elisabeth]: { nickname: "Elisabeth of England", name: "Elisabeth", appearance: { gender: "female" } },
+    };
+    const sut = load({ [OFFLINE.admin]: "admin" }, [], characters);
+    const admin = makePlayer(OFFLINE.admin, "Mauro");
+    const kat = makePlayer(OFFLINE.kat, "Katerina");
+    return { ...sut, admin, kat };
+}
+
+test("the Jogadores list carries the accounts that are not in the game, after the bodies that are, by name; a search finds them (2026-10-27)", () => {
+    const { handlers, admin, kat, seenAt } = offlineWorld();
+    seenAt[OFFLINE.urik] = Date.now() - 3 * 3_600_000;
+    const list = rosterOf(handlers, admin);
+    assert.equal(list.total, 4, "Mauro and Katerina are in the game; Urik and Elisabeth are not");
+    assert.deepEqual(list.players.map((entry) => entry.id > 0), [true, true, false, false], "the bodies in the game first");
+    const urik = list.players.find((entry) => entry.nickname === "Urik (Player)");
+    assert.ok(urik, "the character's name, the account in brackets");
+    assert.equal(urik.offline, true);
+    assert.ok(urik.id < 0, "an account that is not in the game has a number below zero");
+    assert.equal(urik.steamId, undefined, "and its Steam id stays on the server");
+    assert.equal(urik.seen, "há 3 h");
+    assert.equal(urik.banned, false);
+    assert.equal(urik.body, "male");
+    assert.equal(list.players.find((entry) => entry.id === kat.id).offline, false);
+
+    assert.deepEqual(rosterOf(handlers, admin, { q: "urik" }).players.map((entry) => entry.nickname), ["Urik (Player)"]);
+    assert.deepEqual(rosterOf(handlers, admin, { q: "elisa" }).players.map((entry) => entry.nickname), ["Elisabeth (Elisabeth of England)"]);
+    assert.deepEqual(rosterOf(handlers, admin, { filter: "offline" }).players.map((entry) => entry.offline), [true, true]);
+    assert.deepEqual(rosterOf(handlers, admin, { filter: "online" }).players.map((entry) => entry.offline), [false, false]);
+
+    const again = rosterOf(handlers, admin).players.find((entry) => entry.nickname === "Urik (Player)");
+    assert.equal(again.id, urik.id, "the same account has the same number every time");
+});
+
+test("a player's own list is not the administrator's: the accounts that are not in the game are for the administrator only", () => {
+    const { handlers, kat } = offlineWorld();
+    const pick = rosterOf(handlers, kat, { tag: "list" });
+    assert.equal(pick.tag, "pick");
+    assert.equal(pick.players.some((entry) => entry.id < 0), false);
+});
+
+test("an administrator bans a Steam account, one that is not in the game too; the list says so, the filter finds it, and the ban can be undone (2026-10-27)", () => {
+    const BAN = "kcdc-gamemode:status.ban";
+    const UNBAN = "kcdc-gamemode:status.unban";
+    const { handlers, admin, kat, banned, chat } = offlineWorld();
+    const urik = rosterOf(handlers, admin).players.find((entry) => entry.nickname === "Urik (Player)");
+
+    handlers.get(BAN)(kat, { targetId: urik.id });
+    assert.equal(banned.size, 0, "a player cannot ban");
+
+    handlers.get(BAN)(admin, { targetId: urik.id });
+    assert.deepEqual([...banned.keys()], [OFFLINE.urik]);
+    assert.match(chat.at(-1), /Urik.* foi banido/);
+    const after = admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.roster").at(-1).payload;
+    assert.equal(after.players.find((entry) => entry.id === urik.id).banned, true, "the list is brought up to date");
+    assert.deepEqual(rosterOf(handlers, admin, { filter: "banned" }).players.map((entry) => entry.nickname), ["Urik (Player)"]);
+
+    handlers.get(BAN)(admin, { targetId: urik.id });
+    assert.match(chat.at(-1), /já está banido/, "twice is said, not done");
+
+    handlers.get(UNBAN)(admin, { targetId: urik.id });
+    assert.equal(banned.size, 0);
+    assert.match(chat.at(-1), /foi desbanido/);
+});
+
+test("a ban never lands on the administrator who asks, puts a banned body in the game out, and a number nobody knows is told", () => {
+    const BAN = "kcdc-gamemode:status.ban";
+    const { handlers, admin, kat, banned, kicked, chat } = offlineWorld();
+    handlers.get(BAN)(admin, { targetId: admin.id });
+    assert.equal(banned.size, 0);
+    assert.match(chat.at(-1), /não pode banir a si mesmo/);
+
+    handlers.get(BAN)(admin, { targetId: kat.id });
+    assert.deepEqual([...banned.keys()], [OFFLINE.kat]);
+    assert.deepEqual(kicked, [OFFLINE.kat], "Katerina is put out of the game at once");
+
+    handlers.get(BAN)(admin, { targetId: -5 });
+    assert.match(chat.at(-1), /não foi encontrado/);
+    handlers.get(BAN)(admin, { targetId: 99999 });
+    assert.match(chat.at(-1), /não está mais no servidor/);
+    for (const bad of [{}, { targetId: "2" }, { targetId: 0 }, null]) handlers.get(BAN)(admin, bad);
+    assert.equal(banned.size, 1);
+});
+
+test("the supporter benefits of an account that is not in the game are reserved for its next entry, for the administrator only (2026-10-27)", () => {
+    const GRANT = "kcdc-gamemode:status.supporterGrant";
+    const REVOKE = "kcdc-gamemode:status.supporterRevoke";
+    const { handlers, admin, kat, queued, benefits, revoked, chat } = offlineWorld();
+    const elisabeth = rosterOf(handlers, admin).players.find((entry) => entry.nickname === "Elisabeth (Elisabeth of England)");
+
+    handlers.get(GRANT)(kat, { targetId: elisabeth.id });
+    assert.deepEqual(queued, [], "a player cannot reserve anything");
+
+    handlers.get(GRANT)(admin, { targetId: elisabeth.id });
+    assert.deepEqual(queued, [{ action: "grant", steamId: OFFLINE.elisabeth, name: "Elisabeth", by: "Mauro" }]);
+    assert.match(chat.at(-1), /Elisabeth não está no jogo: reservado \(grant\)/);
+
+    handlers.get(REVOKE)(admin, { targetId: elisabeth.id });
+    assert.deepEqual(queued.at(-1), { action: "revoke", steamId: OFFLINE.elisabeth, name: "Elisabeth", by: "Mauro" });
+    assert.deepEqual(benefits.concat(revoked), [], "nothing was handed or taken now: the body is not there");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Access instead of keys (2026-10-28: "ao invés de chaves vamos usar dar acesso; no painel Propriedades, duas abas: as dele e as que ele tem acesso").
+
+const PROP_ACCESS = "kcdc-gamemode:status.propAccess";
+const PROP_ACCESS_REMOVE = "kcdc-gamemode:status.propAccessRemove";
+const PROP_ACCESS_LEAVE = "kcdc-gamemode:status.propAccessLeave";
+const HANS_ID = "76561198000000160";
+const DOROTA_ID = "76561198000000170";
+const KATERINA_ID = "76561198000000171";
+const MAURO_ID = "76561198000000141";
+
+/** Hans's house with a chest in it, Dorota with access to it, and another house that is somebody else's. */
+function sharedCatalog() {
+    return [
+        { ...HOUSE, id: "casa-03", doors: ["d1"], doorGuid: "d1", access: [{ steamId: DOROTA_ID, name: "Dorota", at: 1 }] },
+        { ...HOUSE, id: "casa-03-bau-1", name: "Baú 1", kind: "chest", doors: [], parentId: "casa-03", stashGuid: "c1", ownerSteamId: HANS_ID, ownerName: "Hans" },
+        { ...HOUSE, id: "casa-09", name: "Casa 09", ownerSteamId: "76561198000000199", ownerName: "Outro" },
+    ];
+}
+
+test("the owner is sent who has access, the one given access is sent the property as shared with its chests, and a stranger neither", () => {
+    const { handlers } = load({ [MAURO_ID]: "admin" }, sharedCatalog());
+    const hans = makePlayer(HANS_ID, "Hans");
+    handlers.get(POLL)(hans);
+    const mine = hans.sent[0].payload.properties;
+    assert.deepEqual(Array.from(mine, (entry) => entry.id), ["casa-03", "casa-03-bau-1"]);
+    assert.deepEqual(Array.from(mine[0].access), ["Dorota"]);
+    assert.ok(!("shared" in mine[0]), "it is theirs, not shared with them");
+    assert.equal(hans.sent[0].payload.propertyLimits.accessLimit, 12);
+
+    const dorota = makePlayer(DOROTA_ID, "Dorota");
+    handlers.get(POLL)(dorota);
+    const given = dorota.sent[0].payload.properties;
+    assert.deepEqual(Array.from(given, (entry) => entry.id), ["casa-03", "casa-03-bau-1"], "the house and its chest, and not the other house");
+    assert.equal(given[0].shared, true);
+    assert.equal(given[0].owner, "Hans");
+    assert.ok(!("mine" in given[0]), "not hers");
+    assert.ok(!("access" in given[0]), "who has access is for the owner and an administrator to see");
+
+    const stranger = makePlayer(KATERINA_ID, "Katerina");
+    handlers.get(POLL)(stranger);
+    assert.deepEqual(Array.from(stranger.sent[0].payload.properties), []);
+
+    const admin = makePlayer(MAURO_ID, "Mauro");
+    handlers.get(POLL)(admin);
+    const seen = admin.sent[0].payload.properties.find((entry) => entry.id === "casa-03");
+    assert.deepEqual(Array.from(seen.access), ["Dorota"], "an administrator sees who has it too");
+});
+
+test("the owner gives access to a player who is here: the module is asked as the owner (an administrator as one), the player is told, both panels are drawn again", () => {
+    const { handlers, accessCalls, chat } = load({ [MAURO_ID]: "admin" }, sharedCatalog());
+    const hans = makePlayer(HANS_ID, "Hans");
+    const katerina = makePlayer(KATERINA_ID, "Katerina");
+
+    handlers.get(PROP_ACCESS)(hans, { id: "casa-03", targetId: katerina.id });
+    assert.deepEqual(accessCalls.at(-1), { kind: "grant", by: HANS_ID, id: "casa-03", to: KATERINA_ID, admin: false });
+    assert.equal(ofKind(hans, NOTICE).at(-1).payload.text, "acesso dado");
+    assert.equal(chat.at(-1), "Hans deu a você acesso a Casa 03. Veja em Propriedades, na aba Com acesso (F2).");
+    assert.ok(ofKind(katerina, SOCIAL).length >= 1, "the one who was given it is drawn again");
+    assert.ok(ofKind(hans, SOCIAL).length >= 1);
+
+    const before = accessCalls.length;
+    handlers.get(PROP_ACCESS)(hans, { id: "casa-03", targetId: hans.id });
+    assert.equal(ofKind(hans, NOTICE).at(-1).payload.text, "Escolha outro jogador para dar o acesso.");
+    handlers.get(PROP_ACCESS)(hans, { id: "casa-03", targetId: 99999 });
+    assert.equal(ofKind(hans, NOTICE).at(-1).payload.text, "Esse jogador não está mais no servidor.");
+    handlers.get(PROP_ACCESS)(hans, { id: 7, targetId: katerina.id });
+    handlers.get(PROP_ACCESS)(hans, { id: "casa-03" });
+    handlers.get(PROP_ACCESS)(hans, null);
+    assert.equal(accessCalls.length, before, "nobody, a player who left and a request that names no property or no player never get as far as the module");
+
+    const admin = makePlayer(MAURO_ID, "Mauro");
+    handlers.get(PROP_ACCESS)(admin, { id: "casa-03-bau-1", targetId: katerina.id });
+    assert.deepEqual(accessCalls.at(-1), { kind: "grant", by: MAURO_ID, id: "casa-03-bau-1", to: KATERINA_ID, admin: true });
+    assert.match(chat.at(-1), /Mauro deu a você acesso a Casa 03\./, "a chest in a house is told as the house");
+});
+
+test("access is taken back by the owner, who names the one and the place in the list; the one it was taken from is told if they are here; they may also let go of it", () => {
+    const { handlers, accessCalls, chat } = load({}, sharedCatalog());
+    const hans = makePlayer(HANS_ID, "Hans");
+    const dorota = makePlayer(DOROTA_ID, "Dorota");
+
+    handlers.get(PROP_ACCESS_REMOVE)(hans, { id: "casa-03", index: 0, name: "Dorota" });
+    assert.deepEqual(accessCalls.at(-1), { kind: "revoke", by: HANS_ID, id: "casa-03", index: 0, name: "Dorota", admin: false });
+    assert.equal(chat.at(-1), "Hans tirou o seu acesso a Casa 03.");
+    assert.ok(ofKind(dorota, SOCIAL).length >= 1, "and her panel no longer lists it");
+    const after = ofKind(dorota, SOCIAL).at(-1).payload.properties;
+    assert.deepEqual(Array.from(after), []);
+
+    const before = accessCalls.length;
+    handlers.get(PROP_ACCESS_REMOVE)(hans, { id: "casa-03", name: "Dorota" });
+    handlers.get(PROP_ACCESS_REMOVE)(hans, { index: 0, name: "Dorota" });
+    assert.equal(accessCalls.length, before, "a request without an id or an index is not asked of the module");
+    handlers.get(PROP_ACCESS_REMOVE)(hans, { id: "casa-03", index: 0, name: "Dorota" });
+    assert.equal(ofKind(hans, NOTICE).at(-1).payload.text, "Essa pessoa não tem mais acesso.", "what is gone is said to be gone");
+
+    // She lets go of one that was given to her: the module is asked as her.
+    const give = sharedCatalog();
+    const again = load({}, give);
+    const dorota2 = makePlayer(DOROTA_ID, "Dorota");
+    again.handlers.get(PROP_ACCESS_LEAVE)(dorota2, { id: "casa-03" });
+    assert.deepEqual(again.accessCalls.at(-1), { kind: "leave", by: DOROTA_ID, id: "casa-03" });
+    assert.equal(ofKind(dorota2, NOTICE).at(-1).payload.text, "deixou o acesso");
+    assert.deepEqual(Array.from(ofKind(dorota2, SOCIAL).at(-1).payload.properties), []);
+    again.handlers.get(PROP_ACCESS_LEAVE)(dorota2, { id: 5 });
+    assert.equal(again.accessCalls.length, 1, "an id that is not a string asks nothing");
+});
+
+test("whoever has access locks and unlocks the property, its doors and its chests from the panel; a stranger is told only the owner or whoever has access may", () => {
+    const { handlers, edits } = load({}, sharedCatalog());
+    const dorota = makePlayer(DOROTA_ID, "Dorota");
+    const katerina = makePlayer(KATERINA_ID, "Katerina");
+
+    handlers.get(PROP_LOCK)(dorota, { id: "casa-03", locked: 1 });
+    handlers.get(PROP_LOCK)(dorota, { id: "casa-03-bau-1", locked: 1 });
+    handlers.get(DOOR_LOCK)(dorota, { id: "casa-03", index: 0, locked: 1 });
+    assert.deepEqual(edits, [{ kind: "lock", id: "casa-03", locked: true }, { kind: "lock", id: "casa-03-bau-1", locked: true }, { kind: "door", id: "casa-03", index: 0, locked: true }]);
+
+    edits.length = 0;
+    handlers.get(PROP_LOCK)(dorota, { id: "casa-09", locked: 1 });
+    assert.deepEqual(edits, [], "another house is not hers to lock");
+    handlers.get(PROP_LOCK)(katerina, { id: "casa-03", locked: 0 });
+    handlers.get(DOOR_LOCK)(katerina, { id: "casa-03", index: 0, locked: 0 });
+    assert.deepEqual(edits, []);
+    assert.equal(ofKind(katerina, NOTICE).at(-1).payload.text, "Só o dono, ou quem tem acesso, pode trancar ou destrancar.");
 });
