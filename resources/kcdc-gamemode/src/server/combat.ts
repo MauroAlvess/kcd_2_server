@@ -29,6 +29,15 @@ const REPORT_EVERY_MS = 2_000;
 /** What `/paz` does: set by `installCombat`. */
 let makePeace: (player: Player) => { ended: string[]; busy: string[] } = () => ({ ended: [], busy: [] });
 let releaseNear: (player: Player) => number = () => 0;
+let endBetween: (first: Player, second: Player, why: string) => void = () => undefined;
+
+/**
+ * Ends the fight between these two at once, whatever its age (a duel that is over, `duel.ts`): the game lets go of their lock-on
+ * and retires the blows in the air. Nothing happens when the server knows of no fight between them.
+ */
+export function endFightBetween(first: Player, second: Player, why: string): void {
+    endBetween(first, second, why);
+}
 
 /** Ends every fight of `player` that has been quiet for `PAZ_QUIET_MS`: the opponents' names, and those still exchanging blows. */
 export function endQuietFights(player: Player): { ended: string[]; busy: string[] } {
@@ -97,6 +106,10 @@ export function installCombat(timeoutMs = COMBAT_TIMEOUT_MS, peaceQuietMs = PEAC
             ended.push(other.nickname);
         }
         return { ended, busy };
+    };
+    endBetween = (first, second, why) => {
+        const fight = fights.get(key(first, second));
+        if (fight) end(fight, why);
     };
     releaseNear = (player) => {
         if (!player.ready) return 0;

@@ -15,6 +15,9 @@
  * cancel, and the creator is never closed for being idle. Whoever already has a character, and opens it again to change the
  * look, may leave, and the look is put back.
  *
+ * The age and the height are asked too (2026-11-02, `character-details.ts`), and a character made before they were has the creator at its next entry,
+ * with its look and its name as they are, and cannot leave it until it says them (`complete`): the look may change on the way, the name stays.
+ *
  * Two creators never stand in each other's picture (user, 2026-10-17): see `creator-space.ts`. A creator with somebody within
  * 30 m is taken to the nearest free ground once their body is in the world, and brought back to where they were when the
  * creator is left.
@@ -22,6 +25,7 @@
 
 import { isAdmin } from "./auth.js";
 import { emitLarge } from "./big-emit.js";
+import { AGE_LIMITS, cleanAge, cleanHeight, detailsForPage, HEIGHT_LIMITS, heightText, lacksDetails } from "./character-details.js";
 import { cleanName, epithetById, EPITHETS, EPITHET_GROUPS, fullName, nameKey, NAME_MAX, NAME_MIN } from "./character-name.js";
 import type { CharacterIdentity } from "./characters.js";
 import { allCharacters, clothesGivenTo, getCharacter, getIdentity, noteClothesGiven, saveCharacter } from "./characters.js";
@@ -160,6 +164,11 @@ interface Session {
     kept: Kept | null;
     /** A remake of the look and the name ("Refazer aparência"): what is done once it is saved, or null. */
     readonly remake: ((player: Player) => void) | null;
+    /** A character that exists, opened to say its age and height (made before they were asked): it cannot be left until it does. */
+    readonly complete: boolean;
+    /** Whether the head of a character that exists has come out from under what it wore on it (`bareHead`), and how many times it was tried. */
+    headBare: boolean;
+    headTries: number;
 }
 
 const sessions = new Map<number, Session>();
@@ -318,6 +327,10 @@ function tick(): void {
         if (!session.placed && player.ready) {
             makeRoom(player, session);
         }
+        if (!session.headBare && session.clothes === "give" && player.ready && session.headTries < HEAD_TRIES) {
+            session.headTries += 1;
+            session.headBare = bareHead(player, session);
+        }
         if (session.wanted !== null && !holds(player.appearance, session.wanted) && now - session.appliedAt >= ENFORCE_MS) {
             apply(player, session.wanted, session);
         }
@@ -379,6 +392,31 @@ function tryOn(player: Player, session: Session, pieces: readonly string[], part
 /** The table names of the rows a character had when it began to try pieces on, by row id (`tryOn`). */
 const names = new Map<string, string>();
 
+/** How many looks (one a second) the creator gives the bag of a character that exists before it stops trying to bare its head. */
+export const HEAD_TRIES = 20;
+
+/**
+ * The head of a character that exists comes out from under the helmet, the hood or the coif when its creator opens (user, 2026-11-02: "ao abrir, o
+ * jogador pode estar com elmo equipado ou coisa na cabeça, e precisamos retirar"), so that the face is seen while it is chosen: `tryOn` with no
+ * pieces takes off what is worn on the head and nothing else, and `takeOff` puts it all back as it was when the creator ends. True once that is
+ * done, or when nothing was on the head; false while the bag is not ready.
+ */
+function bareHead(player: Player, session: Session): boolean {
+    const state = Inventory.get(player);
+    if (state === null || !state.ready) {
+        return false;
+    }
+    const covered = state.items.some((row) => row.equipped > 0 && WORN_CATEGORIES.has(classOf(row.item)?.category ?? "") && partWorn(String(row.name)) === "head");
+    if (!covered) {
+        return true;
+    }
+    const done = tryOn(player, session, [], new Set());
+    if (done) {
+        console.log(`creator: ${player.nickname}: o que cobria a cabeça saiu enquanto o criador está aberto`);
+    }
+    return done;
+}
+
 /** What a character that exists had on before it tried pieces on, put back as it was. */
 function takeOff(player: Player, session: Session): void {
     const kept = session.kept;
@@ -414,8 +452,13 @@ export function openCreatorFor(player: Player, genders: Gender | "both" = "both"
     } catch (thrown: unknown) {
         // A catalog the game will not give: the game's own stage, which a newcomer cannot back out of either.
         const reason = thrown instanceof Error ? thrown.message : String(thrown);
-        console.log(`creator: ${player.nickname}: sem o catálogo de aparências (${reason}); vai o criador do jogo`);
         const before = getCharacter(player.steamId);
+        // The game's stage asks no age nor height: a character that exists and lacks only those plays on, and is asked again at its next entry.
+        if (before !== null && before.redo !== true && lacksDetails(before)) {
+            console.log(`creator: ${player.nickname}: sem o catálogo de aparências (${reason}); a idade e a altura ficam para a próxima entrada`);
+            return;
+        }
+        console.log(`creator: ${player.nickname}: sem o catálogo de aparências (${reason}); vai o criador do jogo`);
         fallbackStage?.(player, "sem catálogo de aparências", before === null || before.redo === true);
         return;
     }
@@ -434,7 +477,9 @@ export function openCreatorFor(player: Player, genders: Gender | "both" = "both"
     const remake = options.remake ?? null;
     const fixed = identity !== null && !isAdmin(player) && !redo && remake === null ? identity : null;
     const picked = pickedFrom(wide, saved?.appearance ?? null, genders, Math.random);
-    const mandatory = saved === null || redo;
+    // A character made before the age and the height were asked: it says them before it plays on (2026-11-02).
+    const complete = saved !== null && !redo && lacksDetails(saved);
+    const mandatory = saved === null || redo || complete;
     const opening = {
         genders,
         catalog: pageCatalog(wide),
@@ -443,9 +488,15 @@ export function openCreatorFor(player: Player, genders: Gender | "both" = "both"
         epithets: { groups: EPITHET_GROUPS, list: EPITHETS.map((epithet) => ({ id: epithet.id, label: epithet.label, gloss: epithet.gloss, group: epithet.group })) },
         rules: { min: NAME_MIN, max: NAME_MAX },
         mandatory,
+        // The age and the height: what the character said (null for what it has not), the limits, and where a new one starts.
+        details: { age: typeof saved?.age === "number" ? saved.age : null, height: typeof saved?.height === "number" ? saved.height : null },
+        detailLimits: detailsForPage(),
+        complete,
+        // A character that exists saves ("Salvar"); a newcomer creates ("Salvar e criar").
+        existing: saved !== null,
     };
     const clothes: ClothesMode | null = !hasClothes() ? null : saved === null ? "dress" : "give";
-    const session: Session = { genders, base, fixed, mandatory, opening, failures: 0, tried: previous?.tried ?? false, wanted: null, appliedAt: 0, touchedAt: Date.now(), timer: null, placed: previous?.placed ?? false, origin: previous?.origin ?? null, dressed: previous?.dressed ?? null, clothes, kept: previous?.kept ?? null, remake: remake ?? previous?.remake ?? null };
+    const session: Session = { genders, base, fixed, mandatory, opening, failures: 0, tried: previous?.tried ?? false, wanted: null, appliedAt: 0, touchedAt: Date.now(), timer: null, placed: previous?.placed ?? false, origin: previous?.origin ?? null, dressed: previous?.dressed ?? null, clothes, kept: previous?.kept ?? null, remake: remake ?? previous?.remake ?? null, complete, headBare: previous?.headBare ?? false, headTries: 0 };
     sessions.set(player.id, session);
     startTicking();
     send(player, BEGIN_EVENT, opening);
@@ -589,6 +640,17 @@ function onAccept(player: Player, payload: unknown): void {
         send(player, REFUSED_EVENT, { message: state.message, field: "name" });
         return;
     }
+    // The age and the height (2026-11-02): asked of every creator, in the limits of the gender chosen.
+    const age = cleanAge(fields["age"]);
+    const height = cleanHeight(fields["height"], look.gender);
+    if (age === null || height === null) {
+        const limits = HEIGHT_LIMITS[look.gender];
+        send(player, REFUSED_EVENT, {
+            message: age === null ? `A idade vai de ${AGE_LIMITS.min} a ${AGE_LIMITS.max} anos.` : `A altura ${look.gender === "female" ? "de uma mulher" : "de um homem"} vai de ${heightText(limits.min)} a ${heightText(limits.max)}.`,
+            field: "details",
+        });
+        return;
+    }
     if (session.timer !== null) {
         clearTimeout(session.timer);
         session.timer = null;
@@ -600,7 +662,7 @@ function onAccept(player: Player, payload: unknown): void {
     leaveBooth(player, session.origin);
     settling.set(player.id, { look, until: Date.now() + SETTLE_AFTER_MS, appliedAt: Date.now() });
     startTicking();
-    saveCharacter(player.steamId, look, player.nickname, { name: state.name, epithet: state.epithet });
+    saveCharacter(player.steamId, look, player.nickname, { name: state.name, epithet: state.epithet }, { age, height });
     // Dressed from the "Roupas" tab for this very body: those are the clothes, and the starter outfit is not put over them.
     if (session.dressed !== null && session.dressed === look.gender) {
         markStarterOutfit(player);
@@ -608,10 +670,13 @@ function onAccept(player: Player, payload: unknown): void {
     ensureStarter(player);
     if (session.remake !== null) {
         session.remake(player);
-        console.log(`creator: ${player.nickname} refez a aparência de ${state.full} (${look.gender === "female" ? "mulher" : "homem"})`);
+        console.log(`creator: ${player.nickname} refez a aparência de ${state.full} (${look.gender === "female" ? "mulher" : "homem"}, ${age} anos, ${heightText(height)})`);
         Chat.sendToPlayer(player, `Aparência refeita: agora você é ${state.full}. Tudo o que o personagem tinha continua seu.`);
+    } else if (session.complete) {
+        console.log(`creator: ${player.nickname} completou ${state.full}: ${age} anos, ${heightText(height)}`);
+        Chat.sendToPlayer(player, `Personagem completo: ${state.full}, ${age} anos, ${heightText(height)}. Bom jogo!`);
     } else {
-        console.log(`creator: ${player.nickname} criou ${state.full} (${look.gender === "female" ? "mulher" : "homem"})`);
+        console.log(`creator: ${player.nickname} criou ${state.full} (${look.gender === "female" ? "mulher" : "homem"}, ${age} anos, ${heightText(height)})`);
         Chat.sendToPlayer(player, `Bem-vindo a Kuttenberg, ${state.full}. Digite /creator para mudar o visual quando quiser.`);
     }
     if (session.clothes === "give") {
@@ -697,6 +762,14 @@ export function installCreator(onFailed: (player: Player, reason: string, mandat
         sessions.delete(player.id);
         takeOff(player, session);
         leaveBooth(player, session.origin);
+        // The game's stage asks no age nor height: a character that lacks only those plays on, and is asked again at its next entry.
+        if (session.complete) {
+            if (session.tried && session.base !== null) {
+                player.setAppearance(session.base);
+            }
+            console.log(`creator: ${player.nickname}: a página não abriu (${reason}); a idade e a altura ficam para a próxima entrada`);
+            return;
+        }
         console.log(`creator: ${player.nickname}: a página não abriu (${reason}); vai o criador do jogo${session.mandatory ? ", que não se pode deixar sem criar o personagem" : ""}`);
         onFailed(player, reason, session.mandatory);
     });

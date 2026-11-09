@@ -39,6 +39,9 @@ function load({ seed = {}, looks = {}, souls = SOULS } = {}) {
     const horses = [];
     const handlers = new Map();
     const timers = [];
+    const intervals = [];
+    const cleared = [];
+    const later = [];
     const online = [];
     const state = { refuse: new Set(), refuseSouls: new Set(), spawnThrows: false, now: 1_760_400_000_000, refuseRemove: new Set(), horseGone: false };
     const bags = new Map();
@@ -60,12 +63,20 @@ function load({ seed = {}, looks = {}, souls = SOULS } = {}) {
                     },
                 };
             }
-            if (id === "./place.js") return { inFrontOf: (player, distance) => ({ position: { x: player.position.x, y: player.position.y + distance, z: 0 }, rotation: "facing back" }) };
+            if (id === "./place.js") {
+                return {
+                    inFrontOf: (player, distance) => ({ position: { x: player.position.x, y: player.position.y + distance, z: 0 }, rotation: "facing back" }),
+                    groundForward: (rotation) => (rotation && rotation.forward) || { x: 0, y: 1 },
+                    yawTowards: (x, y) => ({ forward: { x, y } }),
+                };
+            }
             assert.fail(`unexpected require ${id}`);
         },
         console: { log: (line) => logs.push(line) },
         Date,
         setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+        setInterval: (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
+        clearInterval: (id) => cleared.push(id),
         Chat: { sendToPlayer: (player, text) => chat.push({ to: player.nickname, text }) },
         Inventory: {
             add: (player, request) => {
@@ -90,7 +101,7 @@ function load({ seed = {}, looks = {}, souls = SOULS } = {}) {
             spawn: (owner, position, rotation, soul, name) => {
                 if (state.spawnThrows) throw new Error("no ground under it");
                 if (soul !== undefined && state.refuseSouls.has(soul)) throw new Error("no such soul");
-                const dog = { id: nextDog++, owner, position, rotation, soul, name: name ?? "", mode: 1, destroyed: false, destroy() { this.destroyed = true; owner.dog = null; } };
+                const dog = { id: nextDog++, owner, position, rotation, soul, name: name ?? "", mode: 1, objective: 0, destroyed: false, destroy() { this.destroyed = true; owner.dog = null; } };
                 owner.dog = dog;
                 spawned.push(dog);
                 return dog;
@@ -105,7 +116,7 @@ function load({ seed = {}, looks = {}, souls = SOULS } = {}) {
             },
         },
         Events: { on: (name, fn) => handlers.set(name, fn) },
-        Player: { getById: (id) => online.find((player) => player.id === id) ?? null },
+        Player: { getById: (id) => online.find((player) => player.id === id) ?? null, all: () => online.slice() },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/supporters.js"), "utf8"), context);
     const api = context.exports;
@@ -118,12 +129,12 @@ function load({ seed = {}, looks = {}, souls = SOULS } = {}) {
     };
     /** What the bag of a player holds, as rows of the game: { name: amount }. */
     const stock = (steamId, items) => bags.set(steamId, Object.entries(items).map(([name, amount], index) => ({ id: `r${index}`, name, amount })));
-    return { api, disk, logs, chat, added, spawned, horses, handlers, timers, online, state, player, stock, bags, removedHorses, removedItems };
+    return { api, disk, logs, chat, added, spawned, horses, handlers, timers, intervals, cleared, later, online, state, player, stock, bags, removedHorses, removedItems };
 }
 
 /** A fresh module with the clock in reach (the exported instance is made at load, with Date.now). */
 function withClock(sut, random = () => 0) {
-    const s = new sut.api.Supporters(() => sut.state.now, random);
+    const s = new sut.api.Supporters(() => sut.state.now, random, (fn, ms) => sut.later.push({ fn, ms }));
     s.load();
     return s;
 }
@@ -580,4 +591,257 @@ test("a reserved hand-over that cannot be made yet because the body is not in th
     sut.timers.at(-1).fn();
     assert.equal(supporters.pendingFor("76561198000000043"), null);
     assert.ok(sut.added.length >= 5);
+});
+
+const STAY_FILE_ENTRY = { since: 1, last: 1, times: 1, by: "Mauro", name: "Hans", dogName: "" };
+
+test("a dog told to wait is written down where it sits; following, running free or a call takes the spot away (2026-10-30)", () => {
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": STAY_FILE_ENTRY }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    const saved = () => JSON.parse(sut.disk.files.get(FILE))["76561198000000003"].dogStay;
+    supporters.bringDog(hans);
+    hans.dog.position = { x: 105.456, y: 220.1, z: 31.999 };
+    hans.dog.rotation = { forward: { x: 0.6, y: 0.8 } };
+
+    supporters.order(hans, "sentar");
+    assert.deepEqual(saved(), { x: 105.46, y: 220.1, z: 32, fx: 0.6, fy: 0.8 }, "the spot, to two decimals, and the way it faces");
+    supporters.order(hans, "seguir");
+    assert.equal(saved(), undefined, "following is no longer staying");
+    supporters.order(hans, "esperar");
+    assert.notEqual(saved(), undefined);
+    supporters.order(hans, "solto");
+    assert.equal(saved(), undefined, "running free is no longer staying either");
+
+    supporters.order(hans, "esperar");
+    sut.state.now += sut.api.CALL_COOLDOWN_MS;
+    assert.equal(supporters.call(hans).ok, true);
+    assert.equal(saved(), undefined, "called to its owner, it is not left where it sat");
+    assert.equal(sut.spawned.at(-1).position.y, hans.position.y + 1.6, "and it comes to the owner");
+});
+
+test("a dog left staying is brought back at its spot, facing as it did, once its owner is within 60 m, and not before (2026-10-30)", () => {
+    const stay = { x: 500, y: 600, z: 40, fx: 0, fy: 1 };
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { ...STAY_FILE_ENTRY, dogStay: stay } }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    assert.deepEqual({ ...supporters.get("76561198000000003").dogStay }, stay, "read back from the file");
+
+    assert.equal(supporters.bringDog(hans), null, "the owner is far from the spot: no dog beside them");
+    assert.equal(sut.spawned.length, 0);
+    hans.position = { x: 500, y: 661, z: 40 };
+    assert.equal(supporters.bringDog(hans), null, "61 m is still far");
+    hans.position = { x: 520, y: 640, z: 40 };
+    const dog = supporters.bringDog(hans);
+    assert.deepEqual({ ...dog.position }, { x: 500, y: 600, z: 40 }, "at the spot, not beside the owner");
+    assert.deepEqual({ ...dog.rotation.forward }, { x: 0, y: 1 }, "facing as it did");
+    assert.equal(dog.mode, 0, "waiting from its first moment");
+});
+
+test("an odd spot in the file is let go, and a dog never left staying still comes beside its owner (2026-10-30)", () => {
+    const sut = load({
+        seed: {
+            [FILE]: JSON.stringify({
+                "76561198000000003": { ...STAY_FILE_ENTRY, dogStay: { x: "5", y: 6, z: 7, fx: 0, fy: 1 } },
+                "76561198000000004": { ...STAY_FILE_ENTRY, dogStay: null },
+                "76561198000000005": { ...STAY_FILE_ENTRY, dogStay: { x: 1, y: 2, z: 3, fx: 0 } },
+            }),
+        },
+    });
+    const supporters = withClock(sut);
+    for (const id of ["76561198000000003", "76561198000000004", "76561198000000005"]) {
+        assert.equal(supporters.get(id).dogStay, undefined, id);
+    }
+    const hans = sut.player("76561198000000003", "Hans");
+    const dog = supporters.bringDog(hans);
+    assert.equal(dog.position.y, hans.position.y + 1.6);
+    assert.equal(dog.mode, 1, "the game's own mode at a dog's coming");
+});
+
+test("keepStays brings the dog when its owner comes near, sends a dog that follows or wandered back to wait, brings a new one when that does not hold, and drops one left behind (2026-10-30)", () => {
+    const stay = { x: 500, y: 600, z: 40, fx: 0, fy: 1 };
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { ...STAY_FILE_ENTRY, dogStay: stay } }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    const other = sut.player("76561198000000007", "Ondra");
+
+    supporters.keepStays([hans, other]);
+    assert.equal(sut.spawned.length, 0, "the owner is far from the spot: nothing comes, and nobody else is looked at");
+
+    hans.position = { x: 510, y: 600, z: 40 };
+    supporters.keepStays([hans, other]);
+    assert.equal(sut.spawned.length, 1);
+    const first = hans.dog;
+    assert.equal(first.mode, 0);
+
+    supporters.keepStays([hans]);
+    assert.equal(sut.later.length, 0, "a dog sitting on its spot is left alone");
+    first.position = { x: 501, y: 601, z: 40 };
+    supporters.keepStays([hans]);
+    assert.equal(sut.later.length, 0, "and so is one that shifted a little");
+
+    // The owner's game says it follows although it was told to wait: the bug of the long walk away.
+    first.objective = 4;
+    supporters.keepStays([hans]);
+    assert.equal(first.mode, 1, "told to follow, so that the game takes the next order");
+    assert.equal(sut.later.length, 1);
+    assert.equal(sut.later[0].ms, sut.api.STAY_REASSERT_MS);
+    sut.later[0].fn();
+    assert.equal(first.mode, 0, "and to wait, a moment later");
+
+    // It took: the next look finds it still, and the count of failed looks starts again.
+    first.objective = 0;
+    supporters.keepStays([hans]);
+    assert.equal(sut.later.length, 1);
+
+    // It wandered 20 m off with an idle report: the same, twice, and then a new dog.
+    first.position = { x: 520, y: 600, z: 40 };
+    first.objective = 25;
+    supporters.keepStays([hans]);
+    assert.equal(first.mode, 1);
+    sut.later[1].fn();
+    assert.equal(first.mode, 0);
+    supporters.keepStays([hans]);
+    sut.later[2].fn();
+    assert.equal(first.destroyed, false, "two tries are made before a new dog");
+    supporters.keepStays([hans]);
+    assert.equal(first.destroyed, true, "the third look in a row finds it still off: a new one, at the spot");
+    assert.equal(sut.spawned.length, 2);
+    const second = hans.dog;
+    assert.deepEqual({ ...second.position }, { x: 500, y: 600, z: 40 });
+    assert.equal(second.mode, 0);
+
+    // A dog the owner left behind and that is off its spot is let go; it comes again with them.
+    hans.position = { x: 10, y: 20, z: 0 };
+    second.position = { x: 40, y: 50, z: 0 };
+    second.objective = 4;
+    supporters.keepStays([hans]);
+    assert.equal(second.destroyed, true);
+    assert.equal(sut.spawned.length, 2);
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 2, "not while the owner is far from the spot");
+    hans.position = { x: 505, y: 620, z: 40 };
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 3);
+    assert.deepEqual({ ...hans.dog.position }, { x: 500, y: 600, z: 40 });
+
+    // One at its spot with the owner far is left sitting there.
+    hans.position = { x: 10, y: 20, z: 0 };
+    supporters.keepStays([hans]);
+    assert.equal(hans.dog.destroyed, false);
+
+    // A dead owner is not looked at; a dog told to follow is no longer held.
+    hans.dog.destroy();
+    hans.alive = false;
+    hans.position = { x: 505, y: 620, z: 40 };
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 3);
+    hans.alive = true;
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 4, "alive again, it comes");
+    supporters.order(hans, "seguir");
+    hans.dog.destroy();
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 4, "once told to follow it is no longer held");
+});
+
+test("the look is installed with the module, every two seconds, and ends with the resource (2026-10-30)", () => {
+    const stay = { x: 500, y: 600, z: 40, fx: 0, fy: 1 };
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { ...STAY_FILE_ENTRY, dogStay: stay } }) } });
+    sut.api.installSupporters();
+    assert.equal(sut.intervals.length, 1);
+    assert.equal(sut.intervals[0].ms, sut.api.STAY_LOOK_MS);
+    const hans = sut.player("76561198000000003", "Hans");
+    hans.position = { x: 505, y: 600, z: 40 };
+    sut.intervals[0].fn();
+    assert.equal(sut.spawned.length, 1, "the owner came near their dog: it is there");
+    assert.deepEqual({ ...hans.dog.position }, { x: 500, y: 600, z: 40 });
+    sut.handlers.get("resourceStop")("another-resource");
+    assert.deepEqual(sut.cleared, []);
+    sut.handlers.get("resourceStop")("kcdc-gamemode");
+    assert.deepEqual(sut.cleared, [1]);
+});
+
+test("a spot the game will not put a dog on is given up: the dog comes beside its owner instead of failing every two seconds (2026-10-30)", () => {
+    const stay = { x: 500, y: 600, z: 40, fx: 0, fy: 1 };
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { ...STAY_FILE_ENTRY, dogStay: stay } }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    hans.position = { x: 505, y: 600, z: 40 };
+    sut.state.spawnThrows = true;
+    assert.equal(supporters.bringDog(hans), null, "no ground there, nor beside the owner");
+    assert.ok(sut.logs.some((line) => /não pôde vir ao lugar onde ficou: .*no ground under it/.test(line)), sut.logs.join("|"));
+    assert.equal(JSON.parse(sut.disk.files.get(FILE))["76561198000000003"]?.dogStay, undefined, "the spot is let go");
+    sut.state.spawnThrows = false;
+    const dog = supporters.bringDog(hans);
+    assert.equal(dog.position.y, hans.position.y + 1.6, "the next one comes beside the owner");
+});
+
+test("a dog sent away leaves the world and is not brought at any entry, until it is called (2026-10-30, the panel's Mandar embora and /cachorro embora)", () => {
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { since: 1, last: 1, times: 1, by: "Mauro", name: "Hans", dogName: "Lobo" } }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    const ondra = sut.player("76561198000000007", "Ondra");
+    const saved = () => JSON.parse(sut.disk.files.get(FILE))["76561198000000003"];
+
+    assert.equal(supporters.sendAway(ondra).ok, false, "not a supporter: no dog to send away");
+    assert.match(supporters.sendAway(ondra).message, /Só quem apoia o servidor tem um cão/);
+
+    supporters.bringDog(hans);
+    const dog = hans.dog;
+    assert.ok(dog);
+    const outcome = supporters.sendAway(hans);
+    assert.equal(outcome.ok, true);
+    assert.match(outcome.message, /Seu cão foi embora/);
+    assert.equal(dog.destroyed, true, "the dog leaves the world");
+    assert.equal(hans.dog, null);
+    assert.equal(saved().dogAway, true, "and the record keeps it away");
+
+    // Not brought by an entry, nor by anything else that brings a dog.
+    assert.equal(supporters.bringDog(hans), null);
+    assert.equal(sut.spawned.length, 1, "no second dog was made");
+    // Not sent away twice.
+    assert.equal(supporters.sendAway(hans).ok, false);
+    assert.match(supporters.sendAway(hans).message, /já foi embora/);
+
+    // A new module over the same file (the next start) reads it: still away.
+    const again = new sut.api.Supporters(() => sut.state.now, () => 0, (fn, ms) => sut.later.push({ fn, ms }));
+    again.load();
+    assert.equal(again.get("76561198000000003").dogAway, true);
+    assert.equal(again.bringDog(hans), null, "away at the next start too");
+
+    // A call brings it back into the world and takes the mark away.
+    sut.state.now += sut.api.CALL_COOLDOWN_MS;
+    const called = supporters.call(hans);
+    assert.equal(called.ok, true);
+    assert.equal(called.message, "Seu cão voltou ao mundo e veio para perto de você.");
+    assert.ok(hans.dog, "the dog is in the world again");
+    assert.equal(sut.spawned.length, 2);
+    assert.equal(saved().dogAway, undefined, "no longer away");
+    assert.equal(hans.dog.name, "Lobo", "with the name it had");
+    // Called again, it is the ordinary call.
+    sut.state.now += sut.api.CALL_COOLDOWN_MS;
+    assert.equal(supporters.call(hans).message, "Seu cão veio para perto de você.");
+});
+
+test("a dog sent away need not be in the world, forgets where it was left staying, and an entry brings none (2026-10-30)", () => {
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { since: 1, last: 1, times: 1, by: "Mauro", name: "Hans", dogName: "", dogStay: { x: 10, y: 21.6, z: 0, fx: 0, fy: 1 } } }) } });
+    const supporters = withClock(sut);
+    const hans = sut.player("76561198000000003", "Hans");
+    const saved = () => JSON.parse(sut.disk.files.get(FILE))["76561198000000003"];
+    assert.equal(hans.dog, null, "no dog in the world yet");
+    assert.equal(supporters.sendAway(hans).ok, true);
+    assert.equal(saved().dogAway, true);
+    assert.equal(saved().dogStay, undefined, "a dog sent away is no longer left anywhere");
+    // The look that holds the dogs left staying finds nothing to bring.
+    supporters.keepStays([hans]);
+    assert.equal(sut.spawned.length, 0);
+    assert.equal(supporters.bringDog(hans), null, "and neither does an entry's bringing");
+});
+
+test("a file with an odd away mark keeps what makes sense: only a true is a mark (2026-10-30)", () => {
+    const sut = load({ seed: { [FILE]: JSON.stringify({ "76561198000000003": { since: 1, last: 1, times: 1, by: "Mauro", name: "Hans", dogName: "", dogAway: "sim" }, "76561198000000004": { since: 1, last: 1, times: 1, by: "Mauro", name: "Ivan", dogName: "", dogAway: true } }) } });
+    const supporters = withClock(sut);
+    assert.equal(supporters.get("76561198000000003").dogAway, undefined, "only a true is a mark");
+    assert.equal(supporters.get("76561198000000004").dogAway, true);
 });

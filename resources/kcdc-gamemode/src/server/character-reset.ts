@@ -7,9 +7,9 @@
  * What goes is everything of the character (user, 2026-10-25: "ao apagar o personagem deve perder os cavalos, carroças e tudo, até
  * apoiador, afinal ele perdeu o personagem"; "o apagar realmente apaga"): what it carries and has learnt (`character-state.ts`:
  * inventory, progression, recipes, vitals, kits), its look and name (`characters.ts`, so the creator is asked for at the next entry),
- * the standing, guild and faction (`status.ts`), the citizenship, the family tree, the titles, the people who know them, the place they
+ * the standing and guild (`status.ts`), the citizenship, the family tree, the titles, the people who know them, the place they
  * stood at, the thief's mark; its horses and carts (taken out of the world), the support given to the server with its dog, the houses
- * and chests it owned (back to nobody, the chests emptied), its rooms, the regions ceded to it, the beds it sowed, what it had won over
+ * and chests it owned (back to nobody; the chests emptied, but for those of a lord's lands and of houses others had access to, which keep what they hold), its rooms, the regions ceded to it, the beds it sowed, what it had won over
  * of the wild horses, its thirst, its reading of the skill books, its free changes, what was owed to it, and its death drops (nobody's
  * from then on). What stays with the account: the player's own options (camera, microphone, size of the pages, language) and their
  * administrator's role. The appearance alone is remade, once for each account, by "Refazer aparência" (`look-remake.ts`).
@@ -24,15 +24,14 @@ import { cartsOf, removeCart } from "./carts.js";
 import { discardCharacter } from "./character-state.js";
 import { forgetCharacter } from "./characters.js";
 import { emptyChest } from "./chest-state.js";
-import { esgrima } from "./esgrima.js";
 import { setCitizenship } from "./citizenship.js";
 import { forgetDropOwner } from "./death-drop.js";
 import { forgetFamily } from "./family.js";
 import { clearPlotsOf } from "./farm.js";
 import { forgetFreeChanges } from "./free-changes.js";
 import { forgetHorsesOf } from "./horses.js";
-import { forgetPlace } from "./position.js";
-import { releaseAllOf } from "./properties.js";
+import { forgetPlace, forgetPlaceOf } from "./position.js";
+import { getProperty, listProperties, releaseAllOf } from "./properties.js";
 import { forgetOwed } from "./restitution.js";
 import { roomsHeldBy, vacateRoom } from "./rooms.js";
 import { forgetReader } from "./skillbooks.js";
@@ -59,6 +58,16 @@ export const DELETED_REASON = "Seu personagem foi apagado. Entre de novo no serv
 export interface Outcome {
     readonly ok: boolean;
     readonly message: string;
+}
+
+/** What differs when an administrator's execution deletes the character instead of the player's own ask (`execution.ts`, 2026-11-04). */
+export interface ResetOptions {
+    /** What the mod's main menu shows (the player's own delete says `DELETED_REASON`). */
+    readonly reason?: string;
+    /** How long the player stays before the kick (an execution has its screen up meanwhile). */
+    readonly kickAfterMs?: number;
+    /** The verb of the log line. */
+    readonly did?: string;
 }
 
 let used: Record<string, number> = {};
@@ -110,10 +119,12 @@ function forgetBelongings(steamId: string): string {
     if (part("o apoio", () => supporters.forgetSupport(steamId), false)) {
         said.push("o apoio (benefícios e cão)");
     }
-    const held = part("as propriedades", () => releaseAllOf(steamId), { properties: 0, regions: 0, chests: [] as string[] });
+    const held = part("as propriedades", () => releaseAllOf(steamId), { properties: 0, regions: 0, chests: [] as string[], kept: 0 });
     count(held.properties, "propriedade", "propriedades");
     count(held.regions, "região", "regiões");
     count(held.chests.filter((guid) => part("um baú", () => emptyChest(guid), false)).length, "baú esvaziado", "baús esvaziados");
+    // The chests of a lord's lands and of a house others were given access to keep what they hold (2026-10-31): the belongings of other players are in them.
+    count(held.kept, "baú ficou com o que tem (era de todos)", "baús ficaram com o que têm (eram de todos)");
     count(part("os quartos", () => roomsHeldBy(steamId).filter((room) => vacateRoom(room.id, steamId).ok).length, 0), "quarto", "quartos");
     count(part("as hortas", () => clearPlotsOf(steamId), 0), "canteiro", "canteiros");
     count(part("a doma", () => forgetTamer(steamId), 0), "cavalo selvagem em doma", "cavalos selvagens em doma");
@@ -124,15 +135,25 @@ function forgetBelongings(steamId: string): string {
     part("a sede", () => forgetThirst(steamId), false);
     part("os livros lidos", () => forgetReader(steamId), false);
     part("as trocas grátis", () => forgetFreeChanges(steamId), false);
-    if (part("os combos", () => esgrima.forget(steamId), false)) {
-        said.push("os combos de esgrima");
-    }
     part("o que lhe era devido", () => forgetOwed(steamId), false);
     return said.join(", ");
 }
 
+/** The wipe itself, for a Steam id: the body, the standing and everything it had. What went with it, for the log ("" for nothing). */
+function wipe(steamId: string, forgetWhere: () => void): string {
+    discardCharacter(steamId);
+    forgetCharacter(steamId);
+    resetRecord(steamId);
+    setCitizenship(steamId, null);
+    forgetFamily(steamId);
+    forgetTitles(steamId);
+    forgetAcquaintances(steamId);
+    forgetWhere();
+    return forgetBelongings(steamId);
+}
+
 /** Deletes the character, for good, and sends the player back to the mod's main menu. */
-export function resetCharacter(player: Player, now = Date.now()): Outcome {
+export function resetCharacter(player: Player, now = Date.now(), options: ResetOptions = {}): Outcome {
     const steamId = player.steamId;
     if (!STEAM_ID.test(steamId)) {
         return { ok: false, message: "Sem identificação Steam não dá para saber qual personagem apagar; nada foi apagado." };
@@ -156,27 +177,117 @@ export function resetCharacter(player: Player, now = Date.now()): Outcome {
         }
         return { ok: false, message: `Não consegui registrar a exclusão (${error instanceof Error ? error.message : String(error)}); nada foi apagado.` };
     }
-    discardCharacter(steamId);
-    forgetCharacter(steamId);
-    resetRecord(steamId);
-    setCitizenship(steamId, null);
-    forgetFamily(steamId);
-    forgetTitles(steamId);
-    forgetAcquaintances(steamId);
-    forgetPlace(player);
-    const gone = forgetBelongings(steamId);
+    const gone = wipe(steamId, () => forgetPlace(player));
     leaving.add(player.id);
-    console.log(`reset: ${player.nickname} apagou o personagem${before === undefined ? "" : " (já tinha apagado antes)"}${gone === "" ? "" : `; foram junto ${gone}`}; volta ao menu principal`);
+    console.log(`reset: ${player.nickname} ${options.did ?? "apagou o personagem"}${before === undefined ? "" : " (já tinha apagado antes)"}${gone === "" ? "" : `; foram junto ${gone}`}; volta ao menu principal`);
     const id = player.id;
     setTimeout(() => {
         leaving.delete(id);
         try {
-            player.kick(DELETED_REASON);
+            player.kick(options.reason ?? DELETED_REASON);
         } catch {
             // The player left on their own.
         }
-    }, KICK_AFTER_MS);
+    }, options.kickAfterMs ?? KICK_AFTER_MS);
     return { ok: true, message: "Personagem apagado. Em instantes você volta ao menu principal; ao entrar de novo, cria um novo personagem." };
+}
+
+const PENDING_FILE = `${DIR}/erase-pending.json`;
+
+/** What a house would say of why its chests were left as they are, or "" when they may be emptied. */
+function whyNotEmpty(house: { readonly ownerSteamId: string; readonly access?: readonly unknown[] }): string {
+    if (house.ownerSteamId !== "") {
+        return "tem dono";
+    }
+    return (house.access ?? []).length > 0 ? "deixa outras pessoas entrarem" : "";
+}
+
+/** The chests of a house nobody owns and nobody was let into: emptied. How many went, or why they were left as they are. */
+function emptyIdleHouse(id: string, everything: ReturnType<typeof listProperties>): { readonly emptied: number; readonly left: string } {
+    const house = getProperty(id);
+    if (house === null) {
+        return { emptied: 0, left: "não existe" };
+    }
+    // A chest filed under a house stands in that house: its owner and the people let in decide about it too.
+    const parent = house.parentId === "" ? null : getProperty(house.parentId);
+    const why = whyNotEmpty(house) || (parent === null ? "" : whyNotEmpty(parent));
+    if (why !== "") {
+        return { emptied: 0, left: why };
+    }
+    let emptied = 0;
+    for (const chest of everything) {
+        if (chest.kind === "chest" && chest.stashGuid !== "" && chest.ownerSteamId === "" && (chest.id === house.id || chest.parentId === house.id)) {
+            emptied += part("um baú", () => emptyChest(chest.stashGuid), false) ? 1 : 0;
+        }
+    }
+    return { emptied, left: "" };
+}
+
+/**
+ * Accounts and houses an administrator wants cleaned while their players are not here (2026-11-01, user: "tire do mapa os cavalos do Gunther que saiu ... além de todos itens
+ * no mundo depois apague os personagens"). `playerdata/erase-pending.json`, written by hand with the server stopped, is `{ "v": 1, "characters": [Steam ids], "houses": [property ids] }`;
+ * it is read once, at the end of the start, when every module has its data. Each character goes exactly as when its player deletes it (`wipe`), without the kick. A house
+ * in `houses` has its chests emptied only if nobody owns it and nobody was let into it (so the villagers' things in a lord's chests, or in a house with guests, stay: the
+ * 2026-10-31 lesson). The file is then rewritten with nothing left to do and what was done, so a second start does nothing.
+ */
+export function runPendingErasures(now = Date.now()): void {
+    const asked = read<{ characters?: unknown; houses?: unknown }>(PENDING_FILE);
+    if (asked.status === "missing") {
+        return;
+    }
+    if (asked.status === "corrupt") {
+        console.log(`reset: ${PENDING_FILE} está ilegível e foi deixado como está: ${asked.reason}`);
+        return;
+    }
+    const strings = (value: unknown): string[] => [...new Set(Array.isArray(value) ? value.filter((one): one is string => typeof one === "string") : [])];
+    const characters = strings(asked.value.characters).filter((steamId) => STEAM_ID.test(steamId));
+    const houses = strings(asked.value.houses).filter((id) => id.length > 0 && id.length <= 80);
+    if (characters.length === 0 && houses.length === 0) {
+        return;
+    }
+    const done: string[] = [];
+    // The accounts that could not be wiped stay in the file, for the next start.
+    const left: string[] = [];
+    if (!writable && characters.length > 0) {
+        console.log("reset: o registro dos personagens apagados não pôde ser lido; nenhum personagem foi apagado");
+        left.push(...characters);
+    } else {
+        for (const steamId of characters) {
+            try {
+                used[steamId] = now;
+                const gone = wipe(steamId, () => forgetPlaceOf(steamId));
+                console.log(`reset: personagem …${steamId.slice(-4)} apagado pela administração${gone === "" ? "" : `; foram junto ${gone}`}`);
+                done.push(steamId.slice(-4));
+            } catch (error: unknown) {
+                console.log(`reset: personagem …${steamId.slice(-4)} não foi apagado por inteiro (fica para a próxima subida): ${error instanceof Error ? error.message : String(error)}`);
+                left.push(steamId);
+            }
+        }
+        if (done.length > 0) {
+            try {
+                ensureDir(DIR);
+                write(FILE, used);
+            } catch (error: unknown) {
+                console.log(`reset: não consegui registrar as exclusões: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
+    if (houses.length > 0) {
+        const everything = listProperties();
+        for (const id of houses) {
+            try {
+                const result = emptyIdleHouse(id, everything);
+                console.log(`reset: ${id}: ${result.left === "" ? `${result.emptied} baú(s) esvaziado(s)` : `os baús ficaram como estavam (${result.left})`}`);
+            } catch (error: unknown) {
+                console.log(`reset: ${id} não foi esvaziada: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
+    try {
+        write(PENDING_FILE, { v: 1, characters: left, houses: [], done: { at: now, characters: done, houses } });
+    } catch (error: unknown) {
+        console.log(`reset: não consegui marcar ${PENDING_FILE} como feito: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 
 export function installCharacterReset(): void {

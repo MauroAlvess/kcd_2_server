@@ -36,6 +36,7 @@
  */
 
 import { BOOKS, bookGuid } from "./books.js";
+import { craftItemGuid } from "./craft-items.js";
 import { ensureDir, read, write } from "./store.js";
 
 declare function require(id: string): unknown;
@@ -175,14 +176,18 @@ export function entries(gear: Gear): readonly Entry[] {
         plain("perfume bom", 3, 2, ["perfume_longWeak_medium", "perfume_shortStrong_medium"], 1, 1),
         plain("perfume raro", 2, 3, ["perfume_longWeak_high", "perfume_shortStrong_high"], 1, 1),
         plain("ervas", 10, 1, HERBS, 2, 6),
+        // The vine's saplings (2026-11-04, user: "NPC vender sementes de uva e poder achar no mundo"): the grapes are the wine's, and the farmers' garden is the only place they grow.
+        plain("mudas de videira", 3, 1, ["kcdc-craft:semente-uva"], 1, 2),
         plain("sucata", 10, 1, ["bsmt_ironBad"], 2, 6),
         plain("flechas", 8, 1, ["arrow_crude", "arrow_normal"], 5, 15),
         {
             id: "moedas",
             weight: 9,
             minTier: 1,
-            // The game shows a tenth of the money item's amount: 50 to 300 reads as 5 to 30 coins (halved 2026-10-25).
-            roll: (tier, random) => [{ item: "money", amount: between(random, 50 * tier, 300 * tier * tier) }],
+            // The game shows a tenth of the money item's amount: 20 to 80 reads as 2 to 8 coins near people, 4 to 16 farther, 6 to 24 far away (2026-11-03, the realm's standard:
+            // a chest was 5 to 30, 10 to 120 and 15 to 270 coins, the far ones worth most of a day's sales to a vendor; now a near chest pays what a bandit carries and a far one
+            // about half of what his chief does).
+            roll: (tier, random) => [{ item: "money", amount: between(random, 20 * tier, 80 * tier) }],
         },
         plain("ferro", 8, 2, ["bsmt_ironGood"], 1, 4),
         plain("aço comum", 7, 2, ["bsmt_steelBad", "bsmt_hardware"], 1, 3),
@@ -421,9 +426,11 @@ export class Treasure {
             if (this.refused.has(row.item)) {
                 continue;
             }
-            let result = stash.addItem({ item: row.item, amount: row.amount, ...(row.metadata === undefined ? {} : { metadata: row.metadata }) });
+            // An item of ours (`kcdc-craft:...`) is the class the game was given when it was registered.
+            const item = craftItemGuid(row.item) ?? row.item;
+            let result = stash.addItem({ item, amount: row.amount, ...(row.metadata === undefined ? {} : { metadata: row.metadata }) });
             if (!result.ok && row.metadata !== undefined) {
-                result = stash.addItem({ item: row.item, amount: row.amount });
+                result = stash.addItem({ item, amount: row.amount });
             }
             if (result.ok) {
                 held += 1;

@@ -10,12 +10,13 @@ const vm = require("node:vm");
 // the alchemy table's "Criar / Sair" first.
 
 function load({ guilds = ["fogo", "alchemy", "costura"], granted = false } = {}) {
-    const state = { counts: [], cancelCalls: [], processed: [], handlers: new Map(), client: new Map(), emitted: [], chat: [], made: [], chosen: [], opened: [], closed: [], session: 0, busy: new Set(), notices: [], planted: [], plantCancels: 0, pageClosed: [] };
+    const state = { counts: [], cancelCalls: [], processed: [], handlers: new Map(), client: new Map(), emitted: [], chat: [], made: [], chosen: [], opened: [], closed: [], session: 0, busy: new Set(), notices: [], planted: [], plantCancels: 0, pageClosed: [], played: [], stopped: 0, timers: [] };
     const craft = {
         STATIONS: { fogo: { title: "Cozinha", craft: "fogo" }, alquimia: { title: "Alquimia", craft: "alchemy" }, costura: { title: "Costura", craft: "costura" }, forja: { title: "Forja", craft: "smithing" } },
         viewFor: (player, station) => ({ station, recipes: [] }),
         batchOf: (value) => { const n = Math.floor(Number(value)); return Number.isFinite(n) ? Math.min(10, Math.max(1, n)) : 1; },
-        make: (player, id, near, report, spot, count) => { state.counts.push(count); state.made.push({ id, forge: near(player, "forja"), fire: near(player, "fogo"), sew: near(player, "costura") }); report(player, { ok: true, message: "Feito." }); },
+        variantOf: (value) => { const n = typeof value === "number" ? value : Number(value); return Number.isInteger(n) && n > 0 ? n : 0; },
+        make: (player, id, near, report, spot, count, variant) => { state.counts.push(count); (state.variants ??= []).push(variant); state.made.push({ id, forge: near(player, "forja"), fire: near(player, "fogo"), sew: near(player, "costura") }); report(player, { ok: true, message: "Feito." }); },
         chooseAlchemy: (player, id) => { state.chosen.push(id); return { ok: true, message: "Está no seu livro." }; },
         atOwnAlchemyTable: (player) => player.position.x > 1000,
         brew: (player, id, atTable, report, spot, count) => { state.counts.push(count); state.brewed = [...(state.brewed ?? []), { id, at: atTable(player) }]; report(player, { ok: true, message: "Preparando." }); },
@@ -35,6 +36,8 @@ function load({ guilds = ["fogo", "alchemy", "costura"], granted = false } = {})
             "./craft.js": craft,
             "./craft-titles.js": { craftTitle: (station) => (station === "fogo" ? "data:image/webp;base64,AAAA" : "") },
             "./craft-spot.js": { workSpot: () => ({ point: null, campfire: false, female: false }) },
+            // The station's work played while a piece is broken (2026-11-03).
+            "./craft-animation.js": { playWork: (player, station, options) => { state.played.push([station, options.ms]); return true; }, stopWork: () => { state.stopped += 1; } },
             "./big-emit.js": { emitLarge: (player, name, json) => { player.emit(`kcdc-gamemode:${name}`, json); return 1; } },
             "./guild-crafts.js": { mayCraft: (player, kind) => guilds.includes(kind) },
             // The forge's and the sewing page's second tab (2026-10-27): the pieces to break apart.
@@ -43,7 +46,8 @@ function load({ guilds = ["fogo", "alchemy", "costura"], granted = false } = {})
                 MODES: [["fabricar", "Fabricar"], ["extrair", "Extrair"]],
                 canExtractAt: (station) => station === "forja" || station === "costura",
                 extractView: (player, station) => ({ station, mode: "extrair", recipes: [{ id: "extrair:a" }] }),
-                extract: (player, id, station, near) => { state.extracted = [...(state.extracted ?? []), { id, station, near: near(player, station) }]; return { ok: true, message: "Extraído." }; },
+                extract: (player, id, station, near, count) => { state.extracted = [...(state.extracted ?? []), { id, station, near: near(player, station), count }]; return { ok: true, message: "Extraído." }; },
+                checkExtraction: (player, id, station, near, count) => (near(player, station) ? { ok: true, message: "", count: Math.min(2, count) } : { ok: false, message: "Fique junto da forja para isso." }),
             },
             // The gardens' page shares this one (2026-10-22): its "Plantar", its "Parar" and its closing go to farm.ts.
             "./repair.js": {
@@ -63,6 +67,8 @@ function load({ guilds = ["fogo", "alchemy", "costura"], granted = false } = {})
         console: { log() {} },
         Date,
         JSON,
+        setTimeout: (fn, ms) => { state.timers.push({ fn, ms, live: true }); return state.timers.length; },
+        clearTimeout: (handle) => { if (state.timers[handle - 1]) state.timers[handle - 1].live = false; },
         Chat: { sendToPlayer: (player, text) => state.chat.push(text) },
         Events: { on: (name, fn) => state.handlers.set(name, fn), onClient: (name, fn) => state.client.set(name, fn) },
         Dialogue: {
@@ -188,6 +194,45 @@ test("the gardens' page shares the trades' events: a horta: recipe is farm.ts's 
     assert.equal(sut.state.plantCancels, 0);
 });
 
+test("a piece being broken is a piece of work: nothing else is made meanwhile, Parar and closing the page stop it with nothing broken, a stack's pieces take three seconds each, and a lost page is answered (2026-11-03)", () => {
+    const sut = load({ guilds: ["smithing", "costura", "fogo"] });
+    const hans = sut.player(500);
+    const make = sut.state.client.get("kcdc-gamemode:craft.make");
+    sut.api.openCraftHud(hans, "forja");
+    sut.state.client.get("kcdc-gamemode:craft.mode")(hans, JSON.stringify({ mode: "extrair" }));
+    make(hans, JSON.stringify({ id: "extrair:a", n: 5 }));
+    assert.deepEqual(sut.state.played.at(-1), ["forja", 6000], "two of the stack: six seconds");
+    make(hans, JSON.stringify({ id: "forja:espada" }));
+    assert.equal(sut.state.emitted.at(-2).payload.text, "Você já está trabalhando em algo.");
+    assert.deepEqual(sut.state.made, [], "no recipe while a piece is being broken");
+    make(hans, JSON.stringify({ id: "extrair:b" }));
+    assert.equal(sut.state.emitted.at(-2).payload.text, "Você já está trabalhando em algo.");
+    // Parar.
+    sut.state.client.get("kcdc-gamemode:craft.cancel")(hans);
+    assert.equal(sut.state.emitted.at(-2).payload.text, "Extração interrompida: nada foi quebrado.");
+    assert.equal(sut.state.timers.at(-1).live, false);
+    assert.equal(sut.api.isExtracting(hans), false);
+    assert.equal(sut.state.extracted, undefined, "nothing broken");
+    assert.deepEqual(sut.state.cancelCalls, [], "the recipes' work is not asked to stop");
+    // Closing the page stops it too.
+    make(hans, JSON.stringify({ id: "extrair:a" }));
+    sut.state.client.get("kcdc-gamemode:craft.closed")(hans);
+    assert.equal(sut.state.timers.at(-1).live, false);
+    assert.equal(sut.state.extracted, undefined);
+    // Far from the forge: refused before any work, with the reason.
+    const far = sut.player(10);
+    sut.api.openCraftHud(far, "forja");
+    sut.state.client.get("kcdc-gamemode:craft.mode")(far, JSON.stringify({ mode: "extrair" }));
+    const timers = sut.state.timers.length;
+    make(far, JSON.stringify({ id: "extrair:a" }));
+    assert.equal(sut.state.timers.length, timers, "no work begun");
+    assert.equal(sut.state.emitted.at(-2).payload.text, "Fique junto da forja para isso.");
+    // A page the server no longer has open: answered, not left standing.
+    sut.state.client.get("kcdc-gamemode:craft.closed")(far);
+    make(far, JSON.stringify({ id: "extrair:a" }));
+    assert.equal(sut.state.emitted.at(-1).payload.text, "A página do ofício se perdeu: abra de novo a forja ou a costura.");
+});
+
 test("the forge's and the sewing page have two tabs: the recipes, and the pieces to break apart (2026-10-27)", () => {
     const sut = load({ guilds: ["smithing", "costura", "fogo"] });
     const hans = sut.player(500);
@@ -200,9 +245,19 @@ test("the forge's and the sewing page have two tabs: the recipes, and the pieces
     mode(hans, JSON.stringify({ mode: "extrair" }));
     assert.deepEqual(sut.state.emitted.at(-1).payload, { station: "forja", mode: "extrair", recipes: [{ id: "extrair:a" }] }, "the list of pieces");
 
-    // The work asked of that list is extract.ts's, at the station, and the page is answered with the list again.
+    // The work asked of that list is extract.ts's, at the station: a piece of work of three seconds with the forge's animation and the page's bar (2026-11-03), then the piece is
+    // broken and the page is answered with the list again.
     sut.state.client.get("kcdc-gamemode:craft.make")(hans, JSON.stringify({ id: "extrair:a" }));
-    assert.deepEqual(sut.state.extracted, [{ id: "extrair:a", station: "forja", near: true }]);
+    assert.equal(sut.state.extracted, undefined, "not at once");
+    assert.deepEqual(sut.state.played, [["forja", 3000]]);
+    assert.deepEqual(sut.state.emitted.at(-1), { event: "kcdc-gamemode:craft.progress", payload: { id: "extrair:a", ms: 3000, doing: "Extraindo" } });
+    assert.equal(sut.api.isExtracting(hans), true);
+    const timer = sut.state.timers.at(-1);
+    assert.equal(timer.ms, 3000);
+    timer.fn();
+    assert.deepEqual(sut.state.extracted, [{ id: "extrair:a", station: "forja", near: true, count: 1 }]);
+    assert.equal(sut.api.isExtracting(hans), false);
+    assert.equal(sut.state.stopped, 1, "the animation stops with the work");
     assert.deepEqual(sut.state.made, [], "not made like a recipe");
     assert.deepEqual(sut.state.emitted.at(-2).payload, { ok: true, text: "Extraído." });
     assert.equal(sut.state.emitted.at(-1).payload.mode, "extrair", "the tab stays where the player put it");
@@ -222,7 +277,8 @@ test("the tab is for the trades that have it, not while working, and only for th
     const hans = sut.player(500);
     const mode = sut.state.client.get("kcdc-gamemode:craft.mode");
     mode(hans, JSON.stringify({ mode: "extrair" }));
-    assert.deepEqual(sut.state.emitted, [], "no page open");
+    assert.deepEqual(sut.state.emitted.map((one) => one.payload), [{ ok: false, text: "A página do ofício se perdeu: abra de novo a forja ou a costura." }], "no page open on the server: the page is told to be opened again (2026-11-03: it was left without a word)");
+    sut.state.emitted.length = 0;
 
     sut.api.openCraftHud(hans, "fogo");
     const before = sut.state.emitted.length;
@@ -234,6 +290,7 @@ test("the tab is for the trades that have it, not while working, and only for th
     sut.api.openCraftHud(hans, "costura");
     sut.state.working = true;
     mode(hans, JSON.stringify({ mode: "extrair" }));
+    assert.equal(sut.state.emitted.at(-2).payload.text, "Termine o trabalho que está fazendo antes de trocar de aba.", "answered, not left standing (2026-11-03)");
     sut.state.client.get("kcdc-gamemode:craft.make")(hans, JSON.stringify({ id: "extrair:a" }));
     assert.equal(sut.state.emitted.at(-2).payload.text, "Você já está trabalhando em algo.");
     assert.equal(sut.state.extracted, undefined, "nothing is broken while a piece of work goes on");

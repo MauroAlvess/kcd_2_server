@@ -106,7 +106,8 @@ class DiceLobby {
         if (this.setupTables() === 0) {
             for (const delay of TABLE_RETRY_MS) setTimeout(() => { if (this.tables.length === 0) this.setupTables(); }, delay);
         }
-        const timer = setInterval(() => this.tick(), 250);
+        // Twice a second (four times until 2026-11-02, perf-watch: a quarter of a second measured every player against every table for a hint that half a second brings as well).
+        const timer = setInterval(() => this.tick(), DICE_TICK_MS);
         Events.onClient("kcdc-gamemode:dice.sync", (sender) => {
             this.offer(sender as Player, true);
             (sender as Player).emit(BUSY_EVENT, this.busyJson());
@@ -656,5 +657,8 @@ class DiceLobby {
         this.accept(second);
     }
 }
+
+/** How often the tables are looked at, for who stands at one and the deadlines of the lobbies. */
+export const DICE_TICK_MS = 500;
 
 export const diceLobby = new DiceLobby();

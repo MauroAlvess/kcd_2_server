@@ -6,8 +6,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const { profession } = require("./reachpatch.cjs");
-// The tables' own pace: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, 4 times in play): the tests of the pace set it.
-profession.professionXp.rate = 1;
+// The tables' own XP and no day's limit: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, the standard of 2026-11-03): the tests of the pace set it.
+profession.useTables();
 
 // The Coletores' work (src/server/gather.ts, 2026-10-21): E at a tree with an axe in the bag, or at a rock with the pick, starts the game's own
 // work; every so many seconds a log, or a strike of the pick rolled; the tool wears a little; E again, moving off or being hurt stops it.
@@ -136,7 +136,7 @@ test("E at a tree with an axe in the bag starts the woodcutter's work: every ten
     assert.deepEqual(jan.xp, [["survival", 4]]);
     const [, wear] = sut.properties[0];
     assert.equal(wear.id, "t0");
-    assert.ok(Math.abs(wear.metadata.condition - 0.985) < 1e-9, "1.5% of the axe");
+    assert.ok(Math.abs(wear.metadata.condition - 0.991) < 1e-9, "0.9% of the axe");
     assert.equal(wear.metadata.health, undefined, "the condition, not the health");
     sut.tick();
     sut.tick();
@@ -190,10 +190,12 @@ test("without an axe in the bag, with a worn one, of another guild, busy at a tr
     assert.match(empty.told.at(-1), /Você precisa de um machado na bolsa para cortar lenha/);
     const miner = sut.player("Kuba", [PICK]);
     assert.equal(sut.api.startGather(miner, aim(OAK), sut.clock.now).why, "sem ferramenta", "a pick does not cut wood");
+    // An axe left at nothing (tools stopped at 2% until 2026-11-04) breaks at the first try and leaves the bag; one at 1% still works.
     const worn = sut.player("Vit");
-    sut.bags.get(worn.id)[0].condition = 0.01;
-    assert.equal(sut.api.startGather(worn, aim(OAK), sut.clock.now).why, "ferramenta gasta");
-    assert.match(worn.told.at(-1), /gasto demais: conserte com um kit de reparo ou faça outro no ferreiro/);
+    sut.bags.get(worn.id)[0].condition = 0;
+    assert.equal(sut.api.startGather(worn, aim(OAK), sut.clock.now).why, "ferramenta quebrou");
+    assert.match(worn.told.at(-1), /O seu machado quebrou de tanto uso e sumiu do inventário/);
+    assert.deepEqual(sut.bags.get(worn.id), [], "and it is gone (one with a little left still works: the last test)");
     const any = sut.player("Rad", [BARBED]);
     assert.equal(sut.api.startGather(any, aim(PINE), sut.clock.now).started, true, "any axe of the game");
     const jan = sut.player();
@@ -321,12 +323,12 @@ test("two axes of one class are one row of the bag, and a log wears ONE of them:
     sut.api.startGather(jan, aim(OAK), sut.clock.now);
     sut.tick();
     const rows = () => sut.bags.get(jan.id).map((row) => [row.id, row.amount, Math.round(row.condition * 1000) / 1000]);
-    assert.deepEqual(rows(), [["t0", 1, 1], ["n2", 1, 0.985]], "one axe whole, one worn: not two worn");
+    assert.deepEqual(rows(), [["t0", 1, 1], ["n2", 1, 0.991]], "one axe whole, one worn: not two worn");
     assert.equal(sut.properties.length, 0, "the stack's own properties were not touched");
     assert.deepEqual(sut.removed, [["Jan", [{ id: "t0", amount: 1 }]]]);
     // The next log wears the best one, which is the whole axe: they take turns, each wearing half as fast.
     sut.tick();
-    assert.deepEqual(rows(), [["t0", 1, 0.985], ["n2", 1, 0.985]]);
+    assert.deepEqual(rows(), [["t0", 1, 0.991], ["n2", 1, 0.991]]);
     assert.equal(sut.properties.length, 1, "a lone tool is worn in place, as before");
 });
 
@@ -369,15 +371,29 @@ test("a cut of the axe is a log, and now and then the straight wood of the bows 
     assert.ok(sut.logs.some((line) => /coleta: Jan cortou madeira de arco/.test(line)));
 });
 
-test("a log is paid at the trades' pace: four times the table's XP (2026-10-27)", () => {
-    profession.professionXp.rate = 4;
+test("a log is paid at the trades' standard: the table's own XP since 2026-11-03 (four times it from 2026-10-27, when the felling paid four times what the gardens do)", () => {
+    profession.useStandard();
     try {
         const sut = load();
         const jan = sut.player();
         sut.api.startGather(jan, aim(OAK), sut.clock.now);
         sut.tick();
-        assert.deepEqual(jan.xp, [["survival", 16]]);
+        assert.deepEqual(jan.xp, [["survival", 4]]);
     } finally {
-        profession.professionXp.rate = 1;
+        profession.useTables();
     }
+});
+
+test("an axe with half a percent left still works (2% stopped it before 2026-11-04); worn to nothing by a log it breaks: one of the stack leaves the bag, the player is told, and the work stops at the next log for want of an axe (2026-11-04)", () => {
+    const sut = load();
+    const jan = sut.player("Jan", [{ item: AXE, amount: 2 }]);
+    // Both axes of the stack at 0.5% (one row, one condition): the next log takes 0.9% and breaks the one in use.
+    sut.bags.get(jan.id)[0].condition = 0.005;
+    assert.equal(sut.api.startGather(jan, aim(OAK), sut.clock.now).started, true);
+    sut.tick();
+    assert.deepEqual(sut.removed.at(-1), ["Jan", [{ id: "t0", amount: 1 }]], "one axe out of the stack");
+    assert.match(jan.told.at(-1), /O seu machado quebrou de tanto uso e sumiu do inventário\. Faça outro no ferreiro\./);
+    assert.ok(sut.logs.some((line) => /coleta: Jan: o machado quebrou com o uso e saiu do inventário/.test(line)));
+    assert.equal(sut.bags.get(jan.id)[0].amount, 1, "the other axe of the stack is still there");
+    assert.ok(jan.xp.length >= 1, "the log was worked all the same");
 });

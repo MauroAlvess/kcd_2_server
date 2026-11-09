@@ -39,6 +39,7 @@ function load() {
         require: (id) => {
             if (id === "./books.js") return { BOOKS: books, bookGuid: (id2) => `guid:${id2}` };
             if (id === "./store.js") return store;
+            if (id === "./craft-items.js") return { craftItemGuid: (item) => (item.startsWith("kcdc-craft:") ? `guid-of-${item}` : null) };
             throw new Error(`unexpected require ${id}`);
         },
         console: { log: (line) => logs.push(line) },
@@ -217,7 +218,7 @@ test("every chest has food or survival goods, minerals, recipes and gear to be f
     }
 });
 
-test("coin grows with the tier, in the money item's units (the game shows a tenth)", () => {
+test("coin grows with the tier, in the money item's units (the game shows a tenth): 2 to 8 coins near people, 4 to 16 farther, 6 to 24 far away (2026-11-03)", () => {
     const { api } = load();
     const money = api.entries(GEAR).find((entry) => entry.id === "moedas");
     const range = (tier) => {
@@ -230,9 +231,9 @@ test("coin grows with the tier, in the money item's units (the game shows a tent
         }
         return [low, high];
     };
-    assert.deepEqual(range(1), [50, 300]);
-    assert.deepEqual(range(2), [100, 1200]);
-    assert.deepEqual(range(3), [150, 2700]);
+    assert.deepEqual(range(1), [20, 80]);
+    assert.deepEqual(range(2), [40, 160]);
+    assert.deepEqual(range(3), [60, 240]);
 });
 
 test("a gear roll carries a worn quality, one or two for a weapon, and says nothing when the table has none", () => {

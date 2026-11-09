@@ -179,16 +179,35 @@ test("a container the level reports late joins the rest on the rare look, and th
     assert.equal(sut.api.nests.count(), 4, "and found once");
 });
 
-test("a nest now and then holds a rooster's feather beside its eggs: the fletching of the arrows (2026-10-27)", () => {
+test("every nest holds rooster's feathers beside its eggs, two to four: the fletching of the arrows (2026-10-27, every nest since 2026-10-31)", () => {
     const sut = load();
-    // Per nest: the egg pick, the egg count, the chance of a feather and, when it comes, how many.
-    const nests = sut.feathered([0, 0.99, 0.1, 0.99, 0, 0, 0.9, 0, 0.5, 0.39, 0]);
+    // Per nest: the egg pick, the egg count, the chance of a feather (always met) and how many.
+    const nests = sut.feathered([0, 0.99, 0.1, 0.99, 0, 0, 0.9, 0, 0, 0.5, 0.39, 0.5]);
     nests.find(sut.stashes);
     assert.equal(nests.fill([]), 3);
-    assert.deepEqual(sut.stashes[0].rows, [{ item: "cls:egg", amount: 3 }, { item: "cls:special_featherRooster", amount: 2 }], "the chance came (under 40%): two feathers");
-    assert.deepEqual(sut.stashes[1].rows, [{ item: "cls:egg", amount: 1 }], "it did not: eggs alone");
-    assert.deepEqual(sut.stashes[2].rows, [{ item: "cls:egg", amount: 2 }, { item: "cls:special_featherRooster", amount: 1 }]);
-    assert.equal(sut.api.EGGS.extra.chance, 0.4);
+    assert.deepEqual(sut.stashes[0].rows, [{ item: "cls:egg", amount: 3 }, { item: "cls:special_featherRooster", amount: 4 }]);
+    assert.deepEqual(sut.stashes[1].rows, [{ item: "cls:egg", amount: 1 }, { item: "cls:special_featherRooster", amount: 2 }], "a nest with one egg has feathers too");
+    assert.deepEqual(sut.stashes[2].rows, [{ item: "cls:egg", amount: 2 }, { item: "cls:special_featherRooster", amount: 3 }]);
+    assert.equal(sut.api.EGGS.extra.chance, 1);
     assert.equal(sut.api.FISH.extra, undefined, "and only the nests: the traps and the hives have none");
     assert.equal(sut.api.HONEY.extra, undefined);
+});
+
+test("the game's names are found as the server keeps them, in lower case: the feathers reach the nests (2026-11-01: no nest had one)", () => {
+    const sut = load();
+    // As `resolveItems` (bandits.ts) answers: every key in lower case.
+    const lower = (names) => new Map(names.map((name) => [name.toLowerCase(), `cls:${name.toLowerCase()}`]));
+    const nests = new sut.api.Nests(sut.api.EGGS, sut.api.nestSettings, () => sut.state.now, () => 0, lower);
+    nests.find(sut.stashes);
+    assert.equal(nests.fill([]), 3);
+    assert.deepEqual(sut.stashes[0].rows, [{ item: "cls:egg", amount: 1 }, { item: "cls:special_featherrooster", amount: 2 }]);
+    assert.match(nests.extraNote(), /com 2 a 4 de special_featherRooster em cada um/);
+
+    const none = new sut.api.Nests(sut.api.EGGS, sut.api.nestSettings, () => sut.state.now, () => 0, (names) => new Map([["egg", "cls:egg"]]));
+    assert.equal(none.extraNote(), "", "nothing is said before the first fill");
+    none.find(sut.stashes);
+    sut.state.now += sut.api.nestSettings.everyMs;
+    none.fill([]);
+    assert.match(none.extraNote(), /sem special_featherRooster, que o jogo não conhece/);
+    assert.deepEqual(sut.stashes[0].rows, [{ item: "cls:egg", amount: 1 }], "the eggs still come");
 });

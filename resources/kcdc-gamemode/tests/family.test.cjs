@@ -707,3 +707,39 @@ test("an entry the other side took over is not made again from it, even after th
     assert.equal(api.backfillMirrors(() => ({ name: "Dorota", gender: "female" })), 0, "her entry is marked: the one who removed hers is not put back");
     assert.deepEqual(plain(api.listFamily(ME)), []);
 });
+
+test("a crest link is an https address of a named host: no http, no address of a machine, no local name, no user part, no spaces, not too long (2026-11-09)", () => {
+    const { api } = load();
+    for (const good of ["https://example.com/crest.png", "https://i.imgur.com/abc123.png?x=1", "https://cdn.discordapp.com/attachments/1/2/capon.webp", "HTTPS://Example.COM/a.jpg", "https://example.com"]) {
+        assert.equal(api.cleanCrestLink(good), good, good);
+    }
+    for (const bad of ["", "   ", "http://example.com/a.png", "ftp://example.com/a.png", "javascript:alert(1)", "data:image/png;base64,AAAA", "//example.com/a.png", "https://localhost/a.png", "https://192.168.0.10/a.png", "https://127.0.0.1/a.png", "https://[::1]/a.png", "https://printer.local/a.png", "https://nas.lan/a.png", "https://machine/a.png", "https://user:pass@example.com/a.png", "https://example.com:8080@evil.com/a.png", "https://exa mple.com/a.png", "https://example.com/a b.png", "https://example..com/a.png", "https://example.com/<script>", `https://example.com/${"a".repeat(400)}`]) {
+        assert.equal(api.cleanCrestLink(bad), null, bad);
+    }
+    assert.equal(api.cleanCrestLink("  https://example.com/a.png  "), "https://example.com/a.png", "trimmed");
+});
+
+test("the family's description and crest link are kept, cleared by an empty text, and read for the towns and properties; a text that does not fit changes nothing (2026-11-09)", () => {
+    const { api } = load();
+    assert.deepEqual(plain(api.getFamilyProfile(ME)), { description: "", crest: "" });
+    assert.equal(api.crestOf(ME), "");
+    assert.deepEqual(plain(api.setFamilyProfile(ME, "  A casa   dos\nCapon  ", "https://example.com/capon.png")), { ok: true, profile: { description: "A casa dos Capon", crest: "https://example.com/capon.png" } });
+    assert.deepEqual(plain(api.getFamilyProfile(ME)), { description: "A casa dos Capon", crest: "https://example.com/capon.png" });
+    assert.equal(api.crestOf(ME), "https://example.com/capon.png");
+    assert.equal(api.crestOf(OTHER), "", "another family has none");
+    assert.equal(api.crestOf(""), "");
+    // A refusal changes nothing.
+    assert.equal(api.setFamilyProfile(ME, "x".repeat(301), "").ok, false);
+    assert.equal(api.setFamilyProfile(ME, "ok", "http://example.com/a.png").ok, false);
+    assert.equal(api.setFamilyProfile(ME, 7, "").ok, false);
+    assert.equal(api.setFamilyProfile(ME, "ok", null).ok, false);
+    assert.equal(api.setFamilyProfile("", "ok", "").ok, false, "no Steam id");
+    assert.deepEqual(plain(api.getFamilyProfile(ME)), { description: "A casa dos Capon", crest: "https://example.com/capon.png" });
+    // The surname and the tree stay with it.
+    api.setSurname(ME, "Capon");
+    api.setFamilyProfile(ME, "", "https://example.com/capon.png");
+    assert.equal(api.getSurname(ME), "Capon");
+    assert.deepEqual(plain(api.getFamilyProfile(ME)), { description: "", crest: "https://example.com/capon.png" });
+    assert.equal(api.setFamilyProfile(ME, "", "").ok, true);
+    assert.deepEqual(plain(api.getFamilyProfile(ME)), { description: "", crest: "" }, "an empty text and an empty link clear them");
+});

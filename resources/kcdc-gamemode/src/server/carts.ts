@@ -59,6 +59,24 @@ export const CHOOSE_M = 5;
 export const BODY_BACK_M = 5.5;
 export const BODY_FRONT_M = 1.5;
 
+/** The tail of the longer wagons (the nomads' carpet wagon, `wagon_a_*`, which runs well past a covered one's 5.5 m), by the start of the prefab's name. */
+export const BODY_BACK_BY: ReadonlyArray<readonly [prefix: string, back: number]> = [["wagon_a", 8]];
+
+export function bodyBackOf(blueprint: string): number {
+    return BODY_BACK_BY.find(([prefix]) => blueprint.startsWith(prefix))?.[1] ?? BODY_BACK_M;
+}
+
+/**
+ * The player's own game sees a cart where it really is (2026-11-02, user: "o Jaromir tem uma carroça mas toda hora que ele para ele precisa chamar a carroça pelo botão, porque bugou e não
+ * consegue subir nela de novo"). The server's sight of a cart that was driven can lag behind it (where it stopped, and which way it turned), and "[E] Subir na carroça" was offered by that
+ * sight alone: a player beside the real wagon was too far from the server's, and only "Trazer", which puts the cart where the server knows it, let them on again. So each player is also
+ * told of the carts round them (`AROUND_M`, the nearest `AROUND_MAX`, with the length of each one's body), their client measures itself against the cart it sees, and an E it sends for one is
+ * believed within `TRUST_M` of the server's sight (the gap written to the log, to see how far behind the server was).
+ */
+export const AROUND_M = 40;
+export const AROUND_MAX = 3;
+export const TRUST_M = 25;
+
 /**
  * A player the server still has on a cart that is this far from them is not on it (teleported by an administrator, or let out by the
  * game unheard): they are let out, so the seat is free and the hint comes back.
@@ -97,6 +115,8 @@ export const BLUEPRINT_NAMES: Readonly<Record<string, string>> = {
     wagon_b_covered: "Carroça coberta",
     wagon_b_covered_empty: "Carroça coberta, vazia",
     cart_b: "Carro de duas rodas",
+    wagon_b: "Carroça aberta",
+    wagon_a_cloth_carpets: "Carroça de tapetes",
 };
 
 export interface Outcome {
@@ -518,18 +538,32 @@ interface Stand {
     /** The unit vector of its heading on the ground plane. */
     readonly ax: number;
     readonly ay: number;
+    /** How far its body runs behind the front axle (`bodyBackOf`). */
+    readonly back: number;
+}
+
+/** Each cart's prefab, by cart id: read once, it never changes. */
+const blueprintOf = new Map<number, string>();
+
+function backOfCart(cart: Cart): number {
+    let blueprint = blueprintOf.get(cart.id);
+    if (blueprint === undefined) {
+        blueprint = cart.blueprint;
+        blueprintOf.set(cart.id, blueprint);
+    }
+    return bodyBackOf(blueprint);
 }
 
 function standOf(cart: Cart): Stand {
     const radians = (yawOf(cart.rotation) * Math.PI) / 180;
     const at = cart.position;
-    return { cart, x: at.x, y: at.y, z: at.z, ax: -Math.sin(radians), ay: Math.cos(radians) };
+    return { cart, x: at.x, y: at.y, z: at.z, ax: -Math.sin(radians), ay: Math.cos(radians), back: backOfCart(cart) };
 }
 
 function distanceFromBody(stand: Stand, at: { x: number; y: number }): number {
     const dx = at.x - stand.x;
     const dy = at.y - stand.y;
-    const along = Math.max(-BODY_BACK_M, Math.min(BODY_FRONT_M, dx * stand.ax + dy * stand.ay));
+    const along = Math.max(-stand.back, Math.min(BODY_FRONT_M, dx * stand.ax + dy * stand.ay));
     return Math.hypot(dx - stand.ax * along, dy - stand.ay * along);
 }
 
@@ -568,6 +602,8 @@ export function cartOf(player: Player): Cart | null {
 interface Menu {
     readonly playerId: number;
     readonly cartId: number;
+    /** Opened for the cart the player's own game saw beside them: a seat is chosen within `TRUST_M` of the server's sight of it. */
+    readonly trusted?: boolean;
 }
 
 const menus = new Map<number, Menu>();
@@ -608,12 +644,59 @@ export function seatPage(player: Player, cart: Cart): DialoguePage {
     return { line: `${titleOf(cart)}: onde você quer ficar?`, onRight: false, options: options.slice(0, 8) };
 }
 
-/** E at a cart: the seats. */
-export function useCart(player: Player): void {
+/** What the client says of the cart its E was for: its id, and where its own game sees it. */
+export interface CartClaim {
+    readonly id: number;
+    readonly x?: number;
+    readonly y?: number;
+}
+
+export function parseClaim(payload: unknown): CartClaim | null {
+    let value = payload;
+    if (typeof value === "string" && value.length <= 200) {
+        try {
+            value = JSON.parse(value) as unknown;
+        } catch {
+            return null;
+        }
+    }
+    if (typeof value !== "object" || value === null) {
+        return null;
+    }
+    const { id, x, y } = value as { id?: unknown; x?: unknown; y?: unknown };
+    if (typeof id !== "number" || !Number.isInteger(id) || id <= 0) {
+        return null;
+    }
+    return { id, ...(typeof x === "number" && Number.isFinite(x) ? { x } : {}), ...(typeof y === "number" && Number.isFinite(y) ? { y } : {}) };
+}
+
+/** The cart a claim names, when it may be used and the server's sight of it is within `TRUST_M` of the player; the gap is logged when the server's sight was out of reach. */
+function claimedCart(player: Player, claim: CartClaim): Cart | null {
+    const cart = Cart.getById(claim.id);
+    if (cart === null || reservedCarts.has(cart.id) || cart.virtualWorld !== player.virtualWorld) {
+        return null;
+    }
+    const away = bodyDistance(cart, player.position);
+    if (away > TRUST_M) {
+        return null;
+    }
+    if (away > PRESS_M) {
+        const at = cart.position;
+        const gap = claim.x !== undefined && claim.y !== undefined ? `; o jogo dele a vê a ${Math.hypot(claim.x - at.x, claim.y - at.y).toFixed(1)} m de onde o servidor acha` : "";
+        console.log(`carts: ${player.nickname} subiu pela vista do próprio jogo na carroça ${cart.id} (${cartName(blueprintOf.get(cart.id) ?? cart.blueprint)}), a ${away.toFixed(1)} m do corpo pelo servidor${gap}`);
+    }
+    return cart;
+}
+
+/** E at a cart: the seats. `payload` names the cart the player's own game saw beside them, if it does. */
+export function useCart(player: Player, payload?: unknown): void {
     if (!player.ready || !player.alive) {
         return;
     }
-    const cart = cartOf(player) ?? cartNear(player, PRESS_M);
+    const seated = cartOf(player);
+    const claim = seated === null && payload !== undefined ? parseClaim(payload) : null;
+    const claimed = claim === null ? null : claimedCart(player, claim);
+    const cart = seated ?? claimed ?? cartNear(player, PRESS_M);
     if (cart === null) {
         return;
     }
@@ -626,7 +709,7 @@ export function useCart(player: Player): void {
     if (session === 0) {
         return;
     }
-    menus.set(session, { playerId: player.id, cartId: cart.id });
+    menus.set(session, { playerId: player.id, cartId: cart.id, ...(claimed !== null && cart === claimed ? { trusted: true } : {}) });
     sessionOf.set(player.id, session);
 }
 
@@ -652,7 +735,7 @@ function chose(session: number, player: Player, option: string): void {
     if (!cart.seats.includes(seat)) {
         return;
     }
-    if (bodyDistance(cart, player.position) > CHOOSE_M || !player.alive) {
+    if (bodyDistance(cart, player.position) > (menu.trusted === true ? TRUST_M : CHOOSE_M) || !player.alive) {
         tell(player, "Você se afastou demais da carroça.");
         return;
     }
@@ -702,7 +785,26 @@ function releaseStale(player: Player, stand: Stand, at: { x: number; y: number }
  * The cart each player stands beside, told to their client so it can show "[E] Subir na carroça": when it changes, and again
  * every few seconds while they stand there, so a hint the game took down is put back.
  */
-const toldNear = new Map<number, { id: number; at: number }>();
+const toldNear = new Map<number, { id: number; around: string; at: number }>();
+
+/** The usable carts within `AROUND_M` of a point by the server's sight, the nearest first, as the JSON of [id, how far its body runs behind the axle] pairs; "" for none. */
+function aroundOf(stands: readonly Stand[], at: { x: number; y: number; z: number }): string {
+    const found: Array<readonly [number, number, number]> = [];
+    for (const stand of stands) {
+        if (reservedCarts.has(stand.cart.id)) {
+            continue;
+        }
+        const away = Math.hypot(stand.x - at.x, stand.y - at.y);
+        if (away <= AROUND_M && Math.abs(stand.z - at.z) <= 10) {
+            found.push([stand.cart.id, stand.back, away]);
+        }
+    }
+    if (found.length === 0) {
+        return "";
+    }
+    found.sort((a, b) => a[2] - b[2]);
+    return JSON.stringify(found.slice(0, AROUND_MAX).map(([id, back]) => [id, back]));
+}
 
 function tellNear(now = Date.now()): void {
     const players = Player.all().filter((player) => player.ready);
@@ -740,10 +842,12 @@ function tellNear(now = Date.now()): void {
         }
         const near = player.alive && aboard === undefined ? nearestStand(seen.stands, at, NEAR_M) : null;
         const id = near === null ? 0 : near.id;
+        // The carts round them, for their own game to measure itself against (`AROUND_M`): none while they sit in one.
+        const around = player.alive && aboard === undefined ? aroundOf(seen.stands, at) : "";
         const told = toldNear.get(player.id);
-        if ((told?.id ?? 0) !== id || (id !== 0 && now - (told?.at ?? 0) >= NEAR_AGAIN_MS)) {
-            toldNear.set(player.id, { id, at: now });
-            player.emit(`${RESOURCE}:cart.near`, JSON.stringify({ id }));
+        if ((told?.id ?? 0) !== id || (told?.around ?? "") !== around || (id !== 0 && now - (told?.at ?? 0) >= NEAR_AGAIN_MS)) {
+            toldNear.set(player.id, { id, around, at: now });
+            player.emit(`${RESOURCE}:cart.near`, around === "" ? JSON.stringify({ id }) : `{"id":${id},"around":${around}}`);
         }
     }
 }
@@ -779,6 +883,7 @@ export function installCarts(): void {
         }
     });
     Events.on("cartDestroy", (cart) => {
+        blueprintOf.delete(cart.id);
         const key = keyByLive.get(cart.id);
         if (key !== undefined && !stopping) {
             console.log(`carts: a carroça ${records.get(key)?.name || key} de ${records.get(key)?.ownerName ?? "?"} foi removida do mundo e deixa de ser guardada`);
@@ -788,7 +893,7 @@ export function installCarts(): void {
         }
     });
 
-    Events.onClient(`${RESOURCE}:cart.use`, (sender) => useCart(sender as Player));
+    Events.onClient(`${RESOURCE}:cart.use`, (sender, payload) => useCart(sender as Player, payload));
     Events.on("dialogueChoice", (session, player, option) => chose(session, player, option));
     Events.on("dialogueClosed", (session) => {
         const menu = menus.get(session);

@@ -23,7 +23,8 @@
 import { emitLarge } from "./big-emit.js";
 import { batchOf, isWorking } from "./craft.js";
 import { CRAFT_ITEMS, FARM_CROPS, FARM_PROCESSES, FARM_TOOLS } from "./craft-data.js";
-import { paid } from "./profession-xp.js";
+import { award, paid, quote } from "./profession-xp.js";
+import type { Trade } from "./profession-xp.js";
 import type { FarmCrop, FarmProcess } from "./craft-data.js";
 import { classOf, craftItemGuid } from "./craft-items.js";
 import { craftTitle } from "./craft-titles.js";
@@ -60,6 +61,11 @@ export const farmSettings = {
     /** How long the digging and sowing of a bed takes, and the picking of its harvest. */
     plantSeconds: 9,
     harvestSeconds: 6,
+    /**
+     * Between one piece of work on the harvest and the next of the same player (2026-11-01: eleven millings and maltings in three seconds, and the player could not move the
+     * flour and the malt out of the bag until they came back in: the game's view of the bag did not keep up with so many changes at once).
+     */
+    processGapMs: 2_500,
     /**
      * How near the row of a bed the body must be (the nearest point of the row, flat): the one reach of the E prompts, a garden bed's
      * margin and the server's metre over (`reach.ts`); and up or down.
@@ -422,7 +428,7 @@ export function farmView(player: Player, bed: Bed): Record<string, unknown> {
                 [shovelId, 1, shovel, 1],
             ],
             lvl: crop.level,
-            xp: paid(crop.xp),
+            xp: quote(player.steamId, farmSettings.track, paid(crop.xp, "horta")),
             s: 0,
             t: `colheita em ${crop.minutes} min · rende ${crop.least} a ${crop.most}${level >= farmSettings.bonusLevel ? " (+1)" : ""}`,
             lock: !unlocked,
@@ -440,7 +446,7 @@ export function farmView(player: Player, bed: Bed): Record<string, unknown> {
             n: process.amount,
             ing,
             lvl: process.level,
-            xp: paid(process.xp),
+            xp: quote(player.steamId, farmSettings.track, paid(process.xp, "beneficiar")),
             s: 0,
             lock: !unlocked,
             can: unlocked && ing.every(([, need, have]) => have >= need),
@@ -587,7 +593,7 @@ export function whyNotPlant(player: Player, bed: Bed, crop: FarmCrop): string {
         return "Agora não dá.";
     }
     if (!mayCraft(player, "horta")) {
-        return "Plantar é ofício dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.";
+        return "Plantar é ofício dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.";
     }
     if (player.steamId === "") {
         return "Sem identificação Steam não há como guardar a sua plantação.";
@@ -628,12 +634,15 @@ function takeOne(player: Player, item: string): boolean {
     return Inventory.remove(player, { units: [{ id: row.id, amount: 1 }], revision: state.revision }).ok;
 }
 
-function addXp(player: Player, xp: number): void {
+/** Pays a piece of the gardens' work at its trade's rate, counted to the day's limit (`profession-xp.ts`), and says what it gave. */
+function addXp(player: Player, xp: number, trade: Trade): number {
+    const given = award(player.steamId, farmSettings.track, paid(xp, trade));
     try {
-        player.addXp(farmSettings.track, paid(xp));
+        player.addXp(farmSettings.track, given);
     } catch (error: unknown) {
         console.log(`farm: o XP não foi dado a ${player.nickname}: ${error instanceof Error ? error.message : String(error)}`);
     }
+    return given;
 }
 
 /** "Plantar" on the page: the bed is dug for `plantSeconds`, then the seed goes in. */
@@ -682,7 +691,7 @@ export function whyNotProcess(player: Player, process: FarmProcess, count = 1): 
         return "Agora não dá.";
     }
     if (!mayCraft(player, "horta")) {
-        return "Este trabalho é dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.";
+        return "Este trabalho é dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.";
     }
     if (!usesFreeCrafts(player) && levelOf(player) < process.level) {
         return `É preciso nível ${process.level} de sobrevivência para isto.`;
@@ -699,6 +708,9 @@ export function whyNotProcess(player: Player, process: FarmProcess, count = 1): 
     }
     return "";
 }
+
+/** When each player's last piece of work on the harvest was done (`farmSettings.processGapMs`). */
+const lastProcess = new Map<number, number>();
 
 /** Takes what the work takes, `count` times over, in one change; false when it is not all there. */
 function takeFor(player: Player, process: FarmProcess, count = 1): boolean {
@@ -748,6 +760,11 @@ export function processFromPage(player: Player, pageId: string, count = 1): stri
         report(player, false, why);
         return why;
     }
+    const now = Date.now();
+    if (now - (lastProcess.get(player.id) ?? Number.NEGATIVE_INFINITY) < farmSettings.processGapMs) {
+        report(player, false, "Espere um instante: o que você acabou de fazer ainda está sendo guardado na bolsa.");
+        return "cedo";
+    }
     if (!takeFor(player, process, times)) {
         report(player, false, "Nada foi feito: o que o trabalho pede não estava mais todo aí.");
         return "faltou";
@@ -761,8 +778,8 @@ export function processFromPage(player: Player, pageId: string, count = 1): stri
         report(player, false, given.code === "inventoryCapacity" ? "Nada foi feito: não coube no seu inventário." : "Nada foi feito: o jogo não aceitou o produto, e nada foi gasto.");
         return "sem lugar";
     }
-    const gained = paid(process.xp) * times;
-    addXp(player, process.xp * times);
+    lastProcess.set(player.id, now);
+    const gained = addXp(player, process.xp * times, "beneficiar");
     console.log(`farm: ${player.nickname} fez ${process.amount * times}x ${name} (${process.id}${times > 1 ? `, ${times} vezes` : ""}, +${gained} XP)`);
     report(player, true, `Feito: ${process.amount * times}x ${name} (+${gained} XP).`);
     return "";
@@ -810,7 +827,7 @@ export function finishPlant(player: Player, job: Job, now = Date.now()): boolean
     plots.set(plot.bed, plot);
     persist();
     showPlot(plot, now);
-    addXp(player, farmSettings.plantXp);
+    addXp(player, farmSettings.plantXp, "horta");
     sendBedsToFarmers();
     console.log(`farm: ${player.nickname} plantou ${job.crop.name} em ${gardenName(job.bed)} (${job.bed.id}); colheita em ${job.crop.minutes} min`);
     report(player, true, `Plantado: ${job.crop.name.toLowerCase()} na ${gardenName(job.bed)}. Volte para colher em ${job.crop.minutes} min.`);
@@ -883,11 +900,11 @@ export function finishHarvest(player: Player, job: Job, now = Date.now(), random
     persist();
     clearProps(plot.bed);
     unmarkRipe(plot.bed);
-    addXp(player, job.crop.xp);
+    const gained = addXp(player, job.crop.xp, "horta");
     sendBedsToFarmers();
     const name = CRAFT_ITEMS[job.crop.harvest]?.[0] ?? job.crop.name;
     console.log(`farm: ${player.nickname} colheu ${amount}x ${name} em ${gardenName(job.bed)} (${job.bed.id})`);
-    say(player, `Colheita: ${amount}x ${name} e ${seeds} ${seeds === 1 ? "semente" : "sementes"} para semear de novo (+${paid(job.crop.xp)} XP).`);
+    say(player, `Colheita: ${amount}x ${name} e ${seeds} ${seeds === 1 ? "semente" : "sementes"} para semear de novo (+${gained} XP).`);
     return true;
 }
 
@@ -902,7 +919,7 @@ export function useBed(player: Player, index: unknown, now = Date.now()): string
         return "parou";
     }
     if (!mayCraft(player, "horta")) {
-        say(player, "Lavrar as hortas é ofício dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.");
+        say(player, "Lavrar as hortas é ofício dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.");
         return "não é da guilda";
     }
     if (!nearBed(player, bed)) {
@@ -1315,6 +1332,7 @@ export function installFarm(): void {
         }
         jobs.delete(player.id);
         pageBed.delete(player.id);
+        lastProcess.delete(player.id);
         for (const plot of plotsOf(player.steamId)) {
             unmarkRipe(plot.bed);
         }

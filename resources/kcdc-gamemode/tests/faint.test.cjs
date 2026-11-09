@@ -156,3 +156,83 @@ test("a family the game's tables refuse does not stop the others from being aske
     watch.tick([player], sut.WAKE_DRUNK_MS);
     assert.deepEqual([...player.asked], ["unconscious", "alcohol_drunk"]);
 });
+
+test("a drunk faint's own effects are taken off by name, and only from a drunk body (2026-11-01: Václav lay 643 s, the families never woke him)", () => {
+    const { sut } = load();
+    const watch = new sut.FaintWatch();
+    const removed = [];
+    const player = body(11, {
+        consciousness: 0,
+        drunkenness: 1,
+        buffs: [{ name: "unconscious_alcohol", aiTag: null }, { name: "drunkenness", aiTag: null }, { name: "overeat", aiTag: null }],
+        removeBuff(name) {
+            removed.push(name);
+            return true;
+        },
+    });
+    watch.tick([player], 0);
+    watch.tick([player], sut.WAKE_DRUNK_MS);
+    assert.deepEqual(removed, ["unconscious_alcohol", "drunkenness"], "the faint and the drink, not the full belly");
+
+    const struck = body(12, { consciousness: 0, buffs: [{ name: "unconscious_alcohol", aiTag: null }], removeBuff: (name) => removed.push(`struck:${name}`) });
+    struck.buffs = [{ name: "knocked_out", aiTag: "unconscious" }];
+    watch.tick([struck], 0);
+    watch.tick([struck], sut.WAKE_OTHER_MS);
+    assert.equal(removed.filter((name) => name.startsWith("struck:")).length, 0, "a blow's knockout keeps its effects");
+});
+
+test("a drunk body wakes where it fell: carried a little it is followed, and one the game took far while it lay is put back (2026-11-01)", () => {
+    const { sut, logs } = load();
+    const watch = new sut.FaintWatch();
+    const sent = [];
+    const player = body(13, {
+        position: { x: 100, y: 100, z: 10 },
+        teleport(at) {
+            sent.push({ ...at });
+            this.position = { ...at };
+            return true;
+        },
+    });
+    watch.tick([player], 0);
+    // The game takes the falling body away at once: where it stood a look ago is kept.
+    player.consciousness = 0;
+    player.drunkenness = 1;
+    player.position = { x: 400, y: 400, z: 50 };
+    watch.tick([player], 2_000);
+    // Dragged a couple of metres while it lies: followed.
+    player.position = { x: 102, y: 100, z: 10 };
+    watch.tick([player], 4_000);
+    // It comes round in the inn's corner, far away.
+    player.consciousness = 1;
+    player.position = { x: 300, y: 300, z: 20 };
+    watch.tick([player], 6_000);
+    assert.deepEqual(sent, [{ x: 102, y: 100, z: 10 }]);
+    assert.ok(logs.some((line) => /Jogador13 acordou a \d+ m de onde caiu: posto de volta lá/.test(line)));
+
+    // Waking where it lay asks nothing: it falls again where it was put back, and comes round a metre off.
+    player.consciousness = 0;
+    watch.tick([player], 8_000);
+    player.consciousness = 1;
+    player.position = { x: 103, y: 100, z: 10 };
+    watch.tick([player], 10_000);
+    assert.equal(sent.length, 1, "within three metres of where it lay");
+});
+
+test("a body struck down is never moved when it comes round, and a body whose place cannot be read is left where it is", () => {
+    const { sut } = load();
+    const watch = new sut.FaintWatch();
+    const sent = [];
+    const fighter = body(14, { position: { x: 0, y: 0, z: 0 }, teleport: (at) => sent.push(at) });
+    watch.tick([fighter], 0);
+    fighter.consciousness = 0;
+    watch.tick([fighter], 2_000);
+    fighter.consciousness = 1;
+    fighter.position = { x: 50, y: 0, z: 0 };
+    watch.tick([fighter], 4_000);
+    const lost = body(15, { consciousness: 0, drunkenness: 1, teleport: (at) => sent.push(at) });
+    watch.tick([lost], 0);
+    lost.consciousness = 1;
+    lost.position = { x: 9, y: 9, z: 9 };
+    watch.tick([lost], 2_000);
+    assert.deepEqual(sent, []);
+});

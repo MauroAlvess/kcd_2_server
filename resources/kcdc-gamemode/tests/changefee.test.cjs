@@ -95,3 +95,26 @@ test("a purse the game will not take from, and a player with no Steam id, are re
     assert.equal(nobody.ok, false);
     assert.match(nobody.message, /identificação Steam/);
 });
+
+test("the price of a change with no free one to spend (the guild vendors' second trade, 2026-10-31): taken though the free change is there, refused with what the player has when short, handed back by a refund", () => {
+    const sut = load({ coinsOf: { [HANS.steamId]: 130 } });
+    sut.state.free.add(`${HANS.steamId}:guild`);
+    const taken = sut.api.chargeChangePrice(HANS);
+    assert.equal(taken.ok, true);
+    assert.equal(taken.free, false);
+    assert.equal(sut.state.purse.get(HANS.steamId), 300, "100 coins out of 130");
+    assert.equal(sut.state.free.has(`${HANS.steamId}:guild`), true, "the free change is not spent");
+    taken.refund();
+    assert.equal(sut.state.purse.get(HANS.steamId), 1300);
+
+    const poor = load({ coinsOf: { [HANS.steamId]: 40 } });
+    const refused = poor.api.chargeChangePrice(HANS);
+    assert.equal(refused.ok, false);
+    assert.equal(refused.message, "Aprender outro ofício custa 100 moedas e você tem 40 moedas.");
+    assert.equal(poor.state.purse.get(HANS.steamId), 400);
+
+    const stuck = load({ coinsOf: { [HANS.steamId]: 500 } });
+    stuck.state.takeFails = true;
+    assert.match(stuck.api.chargeChangePrice(HANS).message, /As moedas não puderam ser cobradas agora/);
+    assert.match(load().api.chargeChangePrice({ steamId: "" }).message, /identificação Steam/);
+});

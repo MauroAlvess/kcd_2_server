@@ -46,27 +46,107 @@ const unsupported: Unsupported[] = [
 
 export const UNSUPPORTED_PERKS: ReadonlyArray<Unsupported> = unsupported;
 
-export interface Cleaned {
-    readonly snapshot: ProgressionSnapshot;
-    /** The perks that were taken out. */
-    readonly removed: string[];
+/**
+ * The passives too strong for a server of roleplay (user, 2026-11-01: "desativa essas passivas roubadas, deixe apenas Marbon com elas; os jogadores que a tinham, retire e
+ * devolve os pontos"): the nine `PASSIVAS.md` calls "Forte demais" (`tools/perks-verdicts.py`), which take the weight of death, of the lock, of the armour or of the wound away.
+ * They are blocked on everybody's perk screen; a saved character that holds one is put back without it and the point it cost given back in its tree. The keepers
+ * (`STRONG_KEEPERS`) have all nine, handed over by `addPerk` a little after they come in (`giveStrongPerks`): a blocked perk is left out of `restoreProgression`, and `addPerk`
+ * still grants it.
+ */
+export interface StrongPerk extends Unsupported {
+    /** What the game's Portuguese calls it, for the chat. */
+    readonly pt: string;
 }
 
-/** A saved progression without the perks above and with their points back; the same object when it had none of them. */
-export function cleanSnapshot(snapshot: ProgressionSnapshot): Cleaned {
-    if (!perkGuard.enabled) {
-        return { snapshot, removed: [] };
-    }
-    const removed = snapshot.perks.filter((perk) => unsupported.some((bad) => bad.name === perk));
-    if (removed.length === 0) {
-        return { snapshot, removed };
+export const STRONG_PERKS: ReadonlyArray<StrongPerk> = [
+    { name: "Hard to kill", track: "vitality", pt: "Duro de Matar" },
+    { name: "Revenant II", track: "vitality", pt: "Ressuscitado II" },
+    { name: "Runaway boy", track: "vitality", pt: "Velocidade de Hermes" },
+    { name: "Clean cut", track: "weapon_sword", pt: "Fatiador de Tendões" },
+    { name: "Sundering blow II", track: "heavy_weapons", pt: "Golpe Destruidor II" },
+    { name: "Painkiller", track: "heavy_weapons", pt: "Golpe Abalador" },
+    { name: "Ringenmeister", track: "weapon_unarmed", pt: "Mestre de Ringen" },
+    { name: "Master thief", track: "thievery", pt: "Mestre-ladrão" },
+    { name: "Zaklady bohoslovectvi meta", track: "scholarship", pt: "Teologia" },
+];
+
+/** Who keeps the nine, by Steam id: Marbon, the user's own character. */
+export const STRONG_KEEPERS: ReadonlySet<string> = new Set(["76561198906140019"]);
+
+/** Whether the strong passives are blocked. Switched off, nobody loses them. */
+export const strongGuard = { enabled: true };
+
+/** How long after a keeper's progression is restored the nine are handed over. */
+export const KEEPER_GRANT_MS = 20_000;
+
+/** The Portuguese name of a strong passive (its own name for any other). */
+export function strongName(name: string): string {
+    return STRONG_PERKS.find((one) => one.name === name)?.pt ?? name;
+}
+
+export interface Cleaned {
+    readonly snapshot: ProgressionSnapshot;
+    /** The perks that were taken out, a point given back for each. */
+    readonly removed: string[];
+    /** Of those, the strong passives (the others are the ones the alchemy tables cannot work with). */
+    readonly strong: string[];
+    /** The strong passives a keeper had: left out of what is restored, with no point back, and handed over again by `giveStrongPerks`. */
+    readonly kept: string[];
+}
+
+/** A saved progression without the perks above and with their points back; the same object when it had none of them. `steamId` says whose it is (a keeper keeps the strong ones). */
+export function cleanSnapshot(snapshot: ProgressionSnapshot, steamId = ""): Cleaned {
+    const alchemy = perkGuard.enabled ? snapshot.perks.filter((perk) => unsupported.some((bad) => bad.name === perk)) : [];
+    const held = strongGuard.enabled ? snapshot.perks.filter((perk) => STRONG_PERKS.some((one) => one.name === perk)) : [];
+    const keeper = STRONG_KEEPERS.has(steamId);
+    const strong = keeper ? [] : held;
+    const kept = keeper ? held : [];
+    const removed = [...alchemy, ...strong];
+    if (removed.length === 0 && kept.length === 0) {
+        return { snapshot, removed, strong, kept };
     }
     const perkPoints = { ...snapshot.perkPoints };
     for (const name of removed) {
-        const track = unsupported.find((bad) => bad.name === name)?.track ?? "main";
+        const track = unsupported.find((bad) => bad.name === name)?.track ?? STRONG_PERKS.find((one) => one.name === name)?.track ?? "main";
         perkPoints[track] = (perkPoints[track] ?? 0) + 1;
     }
-    return { snapshot: { ...snapshot, perks: snapshot.perks.filter((perk) => !removed.includes(perk)), perkPoints }, removed };
+    const out = new Set([...removed, ...kept]);
+    return { snapshot: { ...snapshot, perks: snapshot.perks.filter((perk) => !out.has(perk)), perkPoints }, removed, strong, kept };
+}
+
+/** Whether this account keeps the strong passives. */
+export function isStrongKeeper(steamId: string): boolean {
+    return strongGuard.enabled && STRONG_KEEPERS.has(steamId);
+}
+
+/** Hands a keeper whichever of the nine their body does not have, by `addPerk`. How many the game took. */
+export function giveStrongPerks(player: Player): number {
+    if (!isStrongKeeper(player.steamId)) {
+        return 0;
+    }
+    let live: string[] = [];
+    try {
+        live = [...player.perks];
+    } catch {
+        // Read as none: every one is asked for.
+    }
+    let given = 0;
+    for (const one of STRONG_PERKS) {
+        if (live.includes(one.name)) {
+            continue;
+        }
+        try {
+            if (player.addPerk(one.name)) {
+                given += 1;
+            } else {
+                console.log(`perks: o jogo não aceitou ${one.name} para ${player.nickname}`);
+            }
+        } catch (error: unknown) {
+            console.log(`perks: o jogo não aceitou ${one.name} para ${player.nickname}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    console.log(`perks: ${player.nickname} fica com as passivas fortes (${given} dada(s) agora, ${STRONG_PERKS.length - given} já tinha ou o jogo recusou)`);
+    return given;
 }
 
 /** Every perk that stands on this one, however far down the tree (a perk's `parent` is what has to be owned first). */
@@ -138,16 +218,25 @@ function blockAlchemyFamily(): void {
 }
 
 export function installPerkGuard(): void {
-    if (!perkGuard.enabled) {
+    const names: string[] = [];
+    if (perkGuard.enabled) {
+        resolveBrokenPerks();
+        blockAlchemyFamily();
+        names.push(...unsupported.map((bad) => bad.name));
+    } else {
         console.log("perks: as passivas de alquimia (Secrets of ...) estão liberadas: a alquimia é feita na página dos ofícios, não na mesa do jogo");
+    }
+    if (strongGuard.enabled) {
+        names.push(...STRONG_PERKS.map((one) => one.name));
+        console.log(`perks: passivas fortes demais bloqueadas para todos (${STRONG_PERKS.map((one) => one.pt).join(", ")}); quem as tinha recebe o ponto de volta ao entrar; ${STRONG_KEEPERS.size} conta(s) fica(m) com elas`);
+    }
+    if (names.length === 0) {
         return;
     }
-    resolveBrokenPerks();
-    blockAlchemyFamily();
     try {
-        // What the server already blocks is kept: the Esgrima's combos (`esgrima.ts`) are blocked too, by whichever of the two calls comes last.
-        Progression.blockPerks([...new Set([...Progression.blockedPerks, ...unsupported.map((bad) => bad.name)])]);
+        // What the server already blocks is kept.
+        Progression.blockPerks([...new Set([...Progression.blockedPerks, ...names])]);
     } catch (error: unknown) {
-        console.log(`perks: não consegui bloquear ${unsupported.map((bad) => bad.name).join(", ")}: ${error instanceof Error ? error.message : String(error)}`);
+        console.log(`perks: não consegui bloquear ${names.join(", ")}: ${error instanceof Error ? error.message : String(error)}`);
     }
 }

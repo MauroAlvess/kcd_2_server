@@ -2,8 +2,8 @@
  * How each player's microphone opens, and how far the three voices carry, told to the voice indicator (`client/voice.ts`, 2026-10-23: "o
  * mod permite tirar do push para open o tempo inteiro"; "vamos criar um retângulo ... com a cor do alcance, sussurro, fala e grito").
  *
- * The microphone is open by default (it sends whenever the player speaks, with the noise of the room filtered) and the player may go back
- * to holding the voice key from the panel's Opções. The choice is kept by Steam id with the other options (`options.ts`). The client asks
+ * The microphone is held to talk by default, on the mod's own key, H (2026-11-09: "vamos deixar pré-ativo o de segurar para falar"), and the player may open it from the panel's Opções (it then sends
+ * whenever the player speaks, with the noise of the room filtered). The choice is kept by Steam id with the other options (`options.ts`). The client asks
  * for it once it is in the world (`voice.get`), says what it chose (`voice.set`), and is answered with the whole of what is kept and the
  * radius of each voice -- whisper, speech and shout, as the server has them (`Voice.getTierRange`) -- which the indicator writes beside the
  * name of the range the player is on.

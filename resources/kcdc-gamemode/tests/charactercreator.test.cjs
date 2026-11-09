@@ -48,20 +48,32 @@ const CLASS_LIST = [
 ];
 const guid = (name) => `guid-${name}`;
 
-function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
+/** A saved character of the tests made before 2026-11-02 says its age and height, unless the test is about one that has not (`incomplete`). */
+function withDetails(saved, incomplete) {
+    const out = {};
+    for (const [steamId, character] of Object.entries(saved)) {
+        out[steamId] = incomplete.includes(steamId) ? { ...character } : { age: 30, height: character.appearance?.gender === "female" ? 160 : 175, ...character };
+    }
+    return out;
+}
+
+function load({ saved = {}, admins = [], online = [], broken = false, incomplete = [] } = {}) {
     const clientHandlers = new Map();
     const serverHandlers = new Map();
     const timers = new Map();
     const state = { now: 1_000_000, nextTimer: 1, chat: [], logs: [], starter: [], saves: [], players: new Map(), failed: [], large: [], dressed: [], outfits: [] };
     const characters = {
-        saved: { ...saved },
+        saved: withDetails(saved, incomplete),
         allCharacters: () => Object.entries(characters.saved).map(([steamId, c]) => ({ steamId, name: c.name ?? c.nickname, epithet: c.epithet ?? "", nickname: c.nickname, named: Boolean(c.name) })),
         getCharacter: (steamId) => characters.saved[steamId] ?? null,
         getIdentity: (steamId) => (characters.saved[steamId]?.name ? { name: characters.saved[steamId].name, epithet: characters.saved[steamId].epithet ?? "" } : null),
-        saveCharacter: (steamId, appearance, nickname, identity) => {
-            state.saves.push({ steamId, appearance, nickname, identity });
+        saveCharacter: (steamId, appearance, nickname, identity, details) => {
+            state.saves.push({ steamId, appearance, nickname, identity, details });
             const given = characters.saved[steamId]?.clothesGiven;
-            characters.saved[steamId] = { appearance, nickname, ...(identity ?? {}), ...(given ? { clothesGiven: given } : {}) };
+            const was = characters.saved[steamId] ?? {};
+            const age = details?.age ?? was.age;
+            const height = details?.height ?? was.height;
+            characters.saved[steamId] = { appearance, nickname, ...(identity ?? {}), ...(age !== undefined ? { age } : {}), ...(height !== undefined ? { height } : {}), ...(given ? { clothesGiven: given } : {}) };
         },
         clothesGivenTo: (steamId) => characters.saved[steamId]?.clothesGiven ?? [],
         noteClothesGiven: (steamId, items) => {
@@ -71,6 +83,8 @@ function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
     const modules = {
         "./auth.js": { isAdmin: (player) => admins.includes(player.steamId) },
         "./character-name.js": real("character-name.js"),
+        // The age and the height (2026-11-02): the real rules.
+        "./character-details.js": real("character-details.js"),
         "./creator-catalog.js": real("creator-catalog.js"),
         "./creator-space.js": real("creator-space.js"),
         "./characters.js": characters,
@@ -132,7 +146,16 @@ function load({ saved = {}, admins = [], online = [], broken = false } = {}) {
         return p;
     };
     for (const entry of online) player(...entry);
-    const fire = (event, p, payload) => clientHandlers.get(`kcdc-gamemode:creator.${event}`)(p, typeof payload === "string" ? payload : JSON.stringify(payload ?? {}));
+    // A newcomer's creation has a third step, the place of birth: the tests of the rest of the creator pick one for them, unless they say "birth: undefined".
+    const fire = (event, p, payload) => {
+        let body = event === "accept" && payload !== null && typeof payload === "object" && !("birth" in payload) ? { ...payload, birth: "leoes" } : payload;
+        // And an age and a height, the creator's since 2026-11-02, unless the test says them.
+        if (event === "accept" && body !== null && typeof body === "object") {
+            const female = body.look && body.look.gender === "female";
+            body = { ...body, ...(!("age" in body) ? { age: 30 } : {}), ...(!("height" in body) ? { height: female ? 160 : 175 } : {}) };
+        }
+        return clientHandlers.get(`kcdc-gamemode:creator.${event}`)(p, typeof body === "string" ? body : JSON.stringify(body ?? {}));
+    };
     return { api: context.exports, state, characters, player, advance, fire, serverHandlers };
 }
 
@@ -145,7 +168,8 @@ test("opening sends the page the catalog as counts, a look to start from, the al
     sut.api.openCreatorFor(hans);
     const open = lastOf(hans, "begin");
     assert.equal(open.genders, "both");
-    assert.deepEqual(plain(open.catalog.male), { heads: 2, skins: 2, hairs: [[], ["black", "blonde"]], beards: [2, 0] });
+    // Henry's own face is offered since 2026-11-02, after the generic ones (the drowned man's is not).
+    assert.deepEqual(plain(open.catalog.male), { heads: 3, skins: 2, hairs: [[], ["black", "blonde"]], beards: [2, 0, 0] });
     assert.deepEqual(plain(open.catalog.female), { heads: 2, skins: 2, hairs: [["black", "ginger"]], beards: [0, 0] });
     assert.doesNotMatch(JSON.stringify(open.catalog), /m_head|m_hair|x_hair|m_body|m_beard/, "never a name of the game's");
     assert.equal(open.mandatory, true, "nobody has made a character yet, so there is no way out");
@@ -245,7 +269,7 @@ test("accepting saves the look and the name, puts the look on, dresses the newco
     const hans = sut.player(1, "Hans");
     sut.api.openCreatorFor(hans);
     sut.fire("accept", hans, { look: LOOK, name: "jindřich", epithet: "junior" });
-    assert.deepEqual(plain(sut.state.saves), [{ steamId: hans.steamId, appearance: { gender: "male", head: "m_head_000", hair: "m_hair_001_blonde", beard: "m_beard_01", body: "m_body_tan_01" }, nickname: "Hans", identity: { name: "Jindřich", epithet: "junior" } }]);
+    assert.deepEqual(plain(sut.state.saves), [{ steamId: hans.steamId, appearance: { gender: "male", head: "m_head_000", hair: "m_hair_001_blonde", beard: "m_beard_01", body: "m_body_tan_01" }, nickname: "Hans", identity: { name: "Jindřich", epithet: "junior" }, details: { age: 30, height: 175 } }]);
     assert.equal(hans.applied.at(-1).hair, "m_hair_001_blonde");
     assert.deepEqual(sut.state.starter, [1]);
     assert.match(sut.state.chat[0].text, /Bem-vindo a Kuttenberg, Jindřich Júnior/);
@@ -462,12 +486,12 @@ test("the log says what the catalog holds, once", () => {
     sut.api.openCreatorFor(hans);
     sut.api.openCreatorFor(hans);
     assert.equal(sut.state.logs.filter((line) => line.startsWith("creator: catálogo")).length, 1);
-    assert.match(sut.state.logs[0], /homens 2 rostos, 2 cabelos, 2 peles/);
+    assert.match(sut.state.logs[0], /homens 3 rostos, 2 cabelos, 2 peles/);
 });
 
 test("the catalog is read when the server starts, so that a catalog the game does not give shows in the log then", () => {
     const sut = load();
-    assert.match(sut.state.logs[0], /creator: catálogo dos homens 2 rostos, 2 cabelos, 2 peles/, "before anybody has joined");
+    assert.match(sut.state.logs[0], /creator: catálogo dos homens 3 rostos, 2 cabelos, 2 peles/, "before anybody has joined");
 
     const broken = load({ broken: true });
     assert.match(broken.state.logs[0], /o catálogo de aparências não pôde ser lido agora: .*the game has no catalog yet/);
@@ -706,7 +730,7 @@ test("a newcomer is sent clothes to choose, is dressed in each pick, and keeps t
     const sut = load();
     const hans = sut.player(1, "Hans");
     sut.api.openCreatorFor(hans);
-    assert.equal(sut.state.large.length, 1, "the clothes, with their icons, in pieces");
+    assert.equal(sut.state.large.length, 1, "the clothes, with their icons, in pieces, and no place of birth");
     assert.equal(sut.state.large[0].name, "creator.clothes");
 
     sut.fire("dress", hans, { gender: "male", top: 0, legs: 0, feet: 0 });
@@ -797,4 +821,126 @@ test("the pieces a character already made marks go to its inventory when it save
     assert.equal(sut.state.added.length, 3, "picks for the other gender than the look saved give nothing");
     sut.state.addRefused = "HoseSeparate01_m01_E";
     assert.deepEqual(plain(sut.api.giveClothes(back, "male", { gender: "male", top: 0, legs: 0, feet: 0 })), [], "everything given already");
+});
+
+test("a newcomer's creator has no third step: the character is saved at the second, and put back where the booth took them from (2026-11-09)", () => {
+    const sut = load();
+    const blocker = sut.player(9, "Passante");
+    standAt(blocker, 700, 3200);
+    const hans = sut.player(1, "Hans");
+    standAt(hans, 701, 3200);
+    sut.api.openCreatorFor(hans);
+    sut.advance(2_000);
+    assert.equal(hans.teleports.length, 1, "taken to a booth first");
+    assert.equal(sut.state.large.filter((entry) => entry.name === "creator.birth").length, 0, "no place of birth is offered");
+
+    blocker.position = { x: 5000, y: 5000, z: 0 };
+    sut.fire("accept", hans, { look: LOOK, name: "Hans" });
+    assert.equal(sut.state.saves.length, 1);
+    assert.deepEqual(lastOf(hans, "done"), { full: "Hans" });
+    sut.advance(5_000);
+    assert.equal(hans.teleports.length, 2, "back at the spot the booth took them from");
+});
+
+test("a character that exists saves at once, with nothing but its look and its name (2026-11-09)", () => {
+    const sut = load({ saved: { 765: RETURNING } });
+    const hans = sut.player(1, "Hans", "765", RETURNING.appearance);
+    sut.api.openCreatorFor(hans);
+    sut.fire("accept", hans, { look: LOOK, name: "Hans" });
+    assert.equal(sut.state.saves.length, 1);
+});
+
+test("the age and the height are asked of every creator, in the limits of the gender chosen, and saved with the look; the page is told the limits and where to start (2026-11-02)", () => {
+    const sut = load();
+    const hans = sut.player(1, "Hans");
+    sut.api.openCreatorFor(hans);
+    const open = lastOf(hans, "begin");
+    assert.deepEqual(plain(open.details), { age: null, height: null }, "a newcomer has said neither");
+    assert.deepEqual(plain(open.detailLimits.age), { min: 18, max: 80 });
+    assert.deepEqual(plain(open.detailLimits.height), { male: { min: 155, max: 200 }, female: { min: 145, max: 185 } });
+    assert.equal(open.existing, false);
+    for (const [age, height, pattern] of [[17, 175, /idade vai de 18 a 80/], [81, 175, /idade vai de 18 a 80/], [30.5, 175, /idade/], [30, 154, /altura de um homem vai de 1,55 m a 2,00 m/], [30, 201, /altura/], ["30", 175, /idade/]]) {
+        sut.fire("accept", hans, { look: LOOK, name: "jindřich", epithet: "", age, height });
+        const refused = lastOf(hans, "refused");
+        assert.equal(refused.field, "details");
+        assert.match(refused.message, pattern, `${age} ${height}`);
+    }
+    assert.equal(sut.state.saves.length, 0, "nothing saved while they are wrong");
+    // A woman of 1.85 m and a man of 1.55 m are the edges.
+    sut.fire("accept", hans, { look: LOOK, name: "jindřich", epithet: "", age: 80, height: 155 });
+    assert.deepEqual(plain(sut.state.saves.at(-1).details), { age: 80, height: 155 });
+    assert.ok(sut.state.logs.some((line) => /criou Jindřich \(homem, 80 anos, 1,55 m\)/.test(line)), sut.state.logs.join("|"));
+});
+
+test("a character made before the age and the height were asked gets the creator it cannot leave, its name kept and its look as it was; saying them completes it (2026-11-02)", () => {
+    const steamId = "765611980000000071";
+    const look = { gender: "male", head: "m_head_000", hair: "m_hair_001_blonde", beard: "", body: "m_body_tan_01" };
+    const sut = load({ saved: { [steamId]: { appearance: look, nickname: "Hans", name: "Jindřich", epithet: "" } }, incomplete: [steamId] });
+    const hans = sut.player(71, "Hans", steamId);
+    sut.api.openCreatorFor(hans);
+    const open = lastOf(hans, "begin");
+    assert.equal(open.complete, true);
+    assert.equal(open.mandatory, true, "no way out until it says them");
+    assert.equal(open.existing, true);
+    assert.equal(open.identity.locked, true, "the name stays");
+    assert.equal(open.look.head, 0, "the look it has");
+    sut.fire("cancel", hans, {});
+    assert.ok(sut.state.logs.some((line) => /tentou sair do criador/.test(line)), "a cancel is not taken");
+    sut.fire("accept", hans, { look: { gender: "male", head: 0, hair: 1, tone: 1, beard: -1, skin: 1 }, name: "", epithet: "", age: 42, height: 181 });
+    assert.deepEqual(plain(sut.state.saves.at(-1).details), { age: 42, height: 181 });
+    assert.equal(sut.characters.saved[steamId].name, "Jindřich");
+    assert.ok(sut.state.chat.some((line) => /^Personagem completo: Jindřich, 42 anos, 1,81 m\. Bom jogo!$/.test(line.text)), JSON.stringify(sut.state.chat));
+    assert.ok(!sut.state.chat.some((line) => /Bem-vindo a Kuttenberg/.test(line.text)), "not welcomed as a newcomer");
+    // Once it has said them, the creator it opens is one it may leave.
+    sut.api.openCreatorFor(hans);
+    const again = lastOf(hans, "begin");
+    assert.equal(again.complete, false);
+    assert.equal(again.mandatory, false);
+    assert.deepEqual(plain(again.details), { age: 42, height: 181 });
+});
+
+test("a completing creator whose page will not open does not send the player to the game's own stage: they play on and are asked again next time (2026-11-02)", () => {
+    const steamId = "765611980000000072";
+    const sut = load({ saved: { [steamId]: { appearance: { gender: "male", head: "m_head_000", hair: "", beard: "", body: "" }, nickname: "Ana", name: "Ana" } }, incomplete: [steamId] });
+    const ana = sut.player(72, "Ana", steamId);
+    sut.api.openCreatorFor(ana);
+    for (let n = 0; n <= 2; n += 1) {
+        sut.fire("failed", ana, { reason: "no browser" });
+        sut.advance(5_000);
+    }
+    assert.equal(sut.state.failed.length, 0, "never the game's stage");
+    assert.ok(sut.state.logs.some((line) => /a idade e a altura ficam para a próxima entrada/.test(line)), sut.state.logs.join("|"));
+});
+
+test("the creator of a character that exists bares its head: the helmet or the hood comes off while it is open and goes back on when it ends (2026-11-02)", () => {
+    const steamId = "765611980000000073";
+    const sut = load({ saved: { [steamId]: { appearance: { gender: "male", head: "m_head_000", hair: "", beard: "", body: "" }, nickname: "Jan", name: "Jan" } } });
+    const jan = sut.player(73, "Jan", steamId);
+    jan.ready = true;
+    const rows = [
+        { id: "r1", item: guid("Hood01_m01_A"), name: "Hood01_m01_A", amount: 1, metadata: {}, equipped: 1 },
+        { id: "r2", item: guid("TunicLong01_m01_C"), name: "TunicLong01_m01_C", amount: 1, metadata: {}, equipped: 1 },
+        { id: "r3", item: guid("bread"), name: "bread", amount: 2, metadata: {}, equipped: 0 },
+    ];
+    sut.state.inventory = { ready: true, revision: 1, items: rows, quickslots: null };
+    sut.api.openCreatorFor(jan);
+    sut.advance(1_000);
+    const off = sut.state.dressed.at(-1);
+    assert.ok(off, "the bag was set");
+    assert.deepEqual(plain(off.items.map((one) => [one.id, one.equipped])), [["r1", 0], ["r2", 1], ["r3", 0]], "the hood off, the tunic on");
+    assert.ok(sut.state.logs.some((line) => /o que cobria a cabeça saiu/.test(line)));
+    sut.advance(3_000);
+    assert.equal(sut.state.dressed.length, 1, "once");
+    sut.fire("cancel", jan, {});
+    const back = sut.state.dressed.at(-1);
+    assert.deepEqual(plain(back.items.map((one) => [one.id, one.equipped])), [["r1", 1], ["r2", 1], ["r3", 0]], "everything as it was");
+
+    // Nothing on the head: the bag is not touched.
+    const bare = load({ saved: { [steamId]: { appearance: { gender: "male", head: "m_head_000", hair: "", beard: "", body: "" }, nickname: "Jan", name: "Jan" } } });
+    const jan2 = bare.player(73, "Jan", steamId);
+    jan2.ready = true;
+    bare.state.inventory = { ready: true, revision: 1, items: rows.slice(1), quickslots: null };
+    bare.api.openCreatorFor(jan2);
+    bare.advance(2_000);
+    assert.equal(bare.state.dressed.length, 0);
 });

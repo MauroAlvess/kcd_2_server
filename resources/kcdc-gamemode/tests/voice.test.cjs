@@ -49,7 +49,7 @@ function load({ screen = { width: 1920, height: 1080 }, refuseMode = false, refu
             setActivationThreshold: (level) => { state.thresholds.push(level); },
             setNoiseSuppression: (on) => { state.noise = on; },
             getPushToTalkKey: () => state.key,
-            setPushToTalkKey: () => { state.keyCalls += 1; },
+            setPushToTalkKey: (key) => { state.keyCalls += 1; state.key = key; },
             setIndicatorVisible: (visible) => {
                 if (refuseIndicator) throw new Error("not in this build");
                 state.indicator = visible;
@@ -95,7 +95,7 @@ function load({ screen = { width: 1920, height: 1080 }, refuseMode = false, refu
     const choose = (payload) => locals.get("voice.choose")(payload);
     const fromPage = (name, view = 1) => page.get(`${view}:${name}`)?.();
     /** The player is in the world, the indicator's view is made, and its page has drawn. */
-    const up = (kept = { mic: "aberto", sensitivity: "media", ranges: [3, 15, 25] }) => {
+    const up = (kept = { mic: "apertar", sensitivity: "media", ranges: [3, 15, 25] }) => {
         state.me = { ready: true };
         tick();
         fromServer(kept);
@@ -106,11 +106,11 @@ function load({ screen = { width: 1920, height: 1080 }, refuseMode = false, refu
     return { api: context.exports, state, events, locals, intervals, tick, fromServer, choose, fromPage, up, states, announced };
 }
 
-test("the indicator goes to the bottom centre, a hand above the health bar, and grows with the screen within limits", () => {
+test("the indicator is a small icon at the bottom centre, a hand above the health bar where the plate stood, and grows with the screen within limits", () => {
     const { hudGeometry } = load().api;
-    assert.deepEqual(plain(hudGeometry({ width: 1920, height: 1080 })), { x: 816, y: 910, width: 288, height: 43 });
-    assert.deepEqual(plain(hudGeometry({ width: 1280, height: 720 })), { x: 525, y: 597, width: 230, height: 38 });
-    assert.deepEqual(plain(hudGeometry({ width: 3840, height: 2160 })), { x: 1765, y: 1855, width: 310, height: 50 });
+    assert.deepEqual(plain(hudGeometry({ width: 1920, height: 1080 })), { x: 934, y: 916, width: 52, height: 37 });
+    assert.deepEqual(plain(hudGeometry({ width: 1280, height: 720 })), { x: 619, y: 605, width: 42, height: 30 });
+    assert.deepEqual(plain(hudGeometry({ width: 3840, height: 2160 })), { x: 1889, y: 1861, width: 62, height: 44 });
     for (const [width, height] of [[1920, 1080], [1280, 720], [2560, 1440], [3840, 2160], [1366, 768]]) {
         const spot = hudGeometry({ width, height });
         assert.ok(Math.abs(spot.x + spot.width / 2 - width / 2) <= 0.5, `${width}x${height}: in the middle`);
@@ -132,10 +132,11 @@ test("the bars follow the microphone on a decibel scale: nothing for no sound, e
     assert.ok(quiet > 0.15 && quiet < middle && middle < loud && loud < 1, [quiet, middle, loud].join(" < "));
 });
 
-test("until the server has said what the player chose, the microphone sends only while the key is held, and the game's own key is left alone", () => {
+test("until the server has said what the player chose, the microphone sends only while the key is held, and the key is the mod's own H, which this module never sets (2026-11-09)", () => {
     const sut = load();
     assert.deepEqual(sut.state.modeCalls, ["pushToTalk"]);
-    assert.equal(sut.state.keyCalls, 0, "the voice key is H, the game's; it is no longer moved to another");
+    assert.equal(sut.state.key, "h", "the voice key is the mod's own");
+    assert.equal(sut.state.keyCalls, 0, "and was never put by this module: what the player chose in the mod's menu stands");
     assert.deepEqual(sut.state.thresholds, []);
     assert.equal(sut.state.indicator, true, "the mod's own indicator is still the one in use");
     assert.deepEqual(sut.state.errors, []);
@@ -169,22 +170,24 @@ test("what the server keeps is put on the microphone: open with the sensitivity 
 
     sut.fromServer({ mic: "apertar", sensitivity: "baixa" });
     assert.equal(sut.state.mode, "pushToTalk");
+    assert.equal(sut.state.key, "h", "held on the mod's key whichever way it goes");
     assert.equal(sut.state.keyCalls, 0);
     assert.equal(sut.state.errors.length, 0);
     assert.deepEqual(sut.announced().at(-1), { mic: "apertar", sensitivity: "baixa", ranges: [3, 15, 25] }, "the panel is told");
 });
 
-test("a server that says nothing for ten seconds leaves the microphone open at the middle sensitivity, as the defaults have it", () => {
+test("a server that says nothing for ten seconds leaves the microphone held on the mod's key, as the defaults have it", () => {
     const sut = load();
     sut.state.me = { ready: true };
     sut.tick();
     sut.tick(9_000);
     assert.equal(sut.state.mode, "pushToTalk");
     sut.tick(2_000);
-    assert.equal(sut.state.mode, "voiceActivity");
-    assert.deepEqual(sut.state.thresholds, [0.04]);
+    assert.equal(sut.state.mode, "pushToTalk", "the defaults stand: nothing opens by itself");
+    assert.equal(sut.state.key, "h");
+    assert.deepEqual(sut.state.thresholds, []);
     sut.tick(20_000);
-    assert.deepEqual(sut.state.thresholds, [0.04], "once");
+    assert.deepEqual(sut.state.modeCalls, ["pushToTalk", "pushToTalk"], "the defaults are put on once");
 });
 
 test("a choice from the panel is put on at once and kept by the server; the same choice, or a wrong one, is not sent", () => {
@@ -192,21 +195,21 @@ test("a choice from the panel is put on at once and kept by the server; the same
     sut.up();
     sut.state.server.length = 0;
 
-    sut.choose({ mic: "apertar" });
-    assert.equal(sut.state.mode, "pushToTalk");
-    assert.deepEqual(sut.state.server, [{ name: SET, payload: { mic: "apertar", sensitivity: "media" } }]);
+    sut.choose({ mic: "aberto" });
+    assert.equal(sut.state.mode, "voiceActivity");
+    assert.deepEqual(sut.state.server, [{ name: SET, payload: { mic: "aberto", sensitivity: "media" } }]);
 
-    sut.choose({ mic: "apertar" });
+    sut.choose({ mic: "aberto" });
     sut.choose({ mic: "turbo", sensitivity: "enorme" });
     sut.choose("not an object");
     sut.choose(null);
     assert.equal(sut.state.server.length, 1);
 
-    sut.choose({ mic: "aberto", sensitivity: "alta" });
-    assert.equal(sut.state.mode, "voiceActivity");
-    assert.deepEqual(sut.state.thresholds.at(-1), 0.02);
-    assert.deepEqual(sut.state.server.at(-1), { name: SET, payload: { mic: "aberto", sensitivity: "alta" } });
-    assert.deepEqual(sut.announced().at(-1), { mic: "aberto", sensitivity: "alta", ranges: [3, 15, 25] });
+    sut.choose({ mic: "apertar", sensitivity: "alta" });
+    assert.equal(sut.state.mode, "pushToTalk");
+    assert.equal(sut.state.key, "h");
+    assert.deepEqual(sut.state.server.at(-1), { name: SET, payload: { mic: "apertar", sensitivity: "alta" } });
+    assert.deepEqual(sut.announced().at(-1), { mic: "apertar", sensitivity: "alta", ranges: [3, 15, 25] });
 });
 
 test("only the answer to the newest choice is applied: an older answer does not undo it", () => {
@@ -242,7 +245,7 @@ test("the indicator's view is made once the player is in the world, hidden; the 
     sut.tick();
     assert.equal(sut.state.views.length, 1);
     assert.equal(sut.state.views[0].url, PAGE);
-    assert.deepEqual(sut.state.views[0].options, { width: 288, height: 43, x: 816, y: 910, zIndex: 55, visible: false, focus: false });
+    assert.deepEqual(sut.state.views[0].options, { width: 52, height: 37, x: 934, y: 916, zIndex: 55, visible: false, focus: false });
     assert.equal(sut.state.indicator, true, "the mod's indicator stays until the page is up");
 
     sut.fromPage("voice:ready");
@@ -402,8 +405,8 @@ test("the indicator follows a change of the screen's size, once", () => {
     sut.state.screen = { width: 1280, height: 720 };
     sut.tick();
     sut.tick();
-    assert.deepEqual(sut.state.resized, [[1, 230, 38]]);
-    assert.deepEqual(sut.state.moved, [[1, 525, 597]]);
+    assert.deepEqual(sut.state.resized, [[1, 42, 30]]);
+    assert.deepEqual(sut.state.moved, [[1, 619, 605]]);
 });
 
 test("an indicator whose view fails is given up on and the mod's indicator comes back; the microphone goes on as it was", () => {
@@ -416,7 +419,7 @@ test("an indicator whose view fails is given up on and the mod's indicator comes
     assert.deepEqual(sut.state.destroyed, [1]);
     assert.equal(sut.state.indicator, true);
     assert.ok(sut.state.logs.some((line) => /o indicador falhou/.test(line)), sut.state.logs.join("|"));
-    assert.equal(sut.state.mode, "voiceActivity");
+    assert.equal(sut.state.mode, "pushToTalk");
     sut.state.throwOnEmit = false;
     sut.tick();
     sut.tick();
@@ -438,7 +441,7 @@ test("the first spells of speech are written to the log, with the loudest level 
     const spoken = sut.state.logs.filter((line) => /^voice: falou /.test(line));
     assert.equal(spoken.length, 1);
     assert.match(spoken[0], /nível máximo 0\.173/);
-    assert.match(spoken[0], /aberto, abre em 0\.04/);
+    assert.match(spoken[0], /apertar, abre em 0\.04/);
 
     for (let n = 0; n < 60; n += 1) {
         sut.state.talking = true;

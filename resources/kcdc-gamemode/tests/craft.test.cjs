@@ -6,8 +6,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const { profession } = require("./reachpatch.cjs");
-// The tables' own pace: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, 4 times in play): the tests of the pace set it.
-profession.professionXp.rate = 1;
+// The tables' own XP and no day's limit: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, the standard of 2026-11-03): the tests of the pace set it.
+profession.useTables();
 
 // The guilds' trades (src/server/craft.ts) over the real recipes (craft-data.js) and a fake game: the page's view, the work,
 // what it takes and gives, the XP, and alchemy's chosen potion.
@@ -19,9 +19,27 @@ const SALT = "b9ed56a7-7965-48e3-ab35-78aec6733f3d";
 const WATER = "0cb47176-06c5-42a9-8d70-969e917eb999";
 const PRETZEL = "c352d8ae-4021-4f9b-b49c-b1f087f2cd2c";
 const FLOUR_GUID = "aaaa0000-0000-0000-0000-00000000f10e";
+// What one piece of work is worth since 2026-11-01: the recipe's old worth times its level's share (`tools/make-craft-recipes.py`): the pretzel (level 1) was 8, the thread (level 0) 3.
+const PRETZEL_XP = 4;
+// Thread is a first step of a chain: a quarter of its recipe's 2 XP, never less than 1 (2026-11-03, craft.ts `CONVERSION_SHARE`).
+const THREAD_XP = 1;
 
 function load({ guilds = ["fogo", "alchemy", "smithing"], free = false, alchemyStations = [] } = {}) {
-    const state = { rows: [], revision: 1, nextRow: 1, timers: [], xp: [], emitted: [], knowledge: [], played: [], playedMs: [], stopped: 0, addRefuses: false, logs: [] };
+    // The body's own water (src/server/thirst.ts, 2026-10-30), as the real pace reads and spends it: never to under 10 points, all of a batch while thirst is off.
+    const body = { enabled: true, value: 100, spent: [] };
+    const thirstStub = {
+        thirstPace: {
+            pieces: (player, each, most) => (body.enabled ? Math.max(0, Math.min(most, Math.floor((body.value - 10) / each))) : most),
+            spend: (player, amount) => {
+                if (body.enabled && amount > 0) {
+                    body.value = Math.max(0, body.value - amount);
+                    body.spent.push(amount);
+                }
+                return body.value;
+            },
+        },
+    };
+    const state = { rows: [], revision: 1, nextRow: 1, timers: [], xp: [], emitted: [], knowledge: [], played: [], playedMs: [], stopped: 0, addRefuses: false, refuseQuality: false, adds: [], logs: [] };
     const dataSandbox = { exports: {} };
     vm.runInNewContext(dist("craft-data.js"), dataSandbox);
     const itemsSandbox = {
@@ -51,6 +69,9 @@ function load({ guilds = ["fogo", "alchemy", "smithing"], free = false, alchemyS
             "./food-decay-data.js": decaySandbox.exports,
             "./craft-animation.js": { playWork: (player, trade, options) => { state.played.push(trade); state.playedMs.push(options?.ms); return true; }, stopWork: () => { state.stopped += 1; } },
             "./guild-crafts.js": { mayCraft: (player, craft) => guilds.includes(craft), usesFreeCrafts: () => free },
+            // The cauldron cooked at is lit (pot-fires.ts, 2026-11-02): recorded.
+            "./pot-fires.js": { litForCooking: (player) => { (globalThis.__potsLit ??= []).push(player.id); return ""; } },
+            "./thirst.js": thirstStub,
         })[id] ?? assert.fail(`unexpected require ${id}`),
         console: { log: (line) => state.logs.push(line) },
         Date,
@@ -73,7 +94,10 @@ function load({ guilds = ["fogo", "alchemy", "smithing"], free = false, alchemyS
             },
             add: (player, request) => {
                 if (state.addRefuses && (state.addRefuses === true || request.item === PRETZEL)) return state.addRefuses === true ? { ok: false } : { ok: false, code: state.addRefuses };
-                state.rows.push({ id: `r${state.nextRow++}`, item: request.item, amount: request.amount });
+                // A tier the class is not made in (2026-10-31): the game says so, and the work asks again for the plain piece.
+                if (state.refuseQuality && request.metadata?.quality > 1) return { ok: false, code: "invalidQuality" };
+                state.adds.push(request);
+                state.rows.push({ id: `r${state.nextRow++}`, item: request.item, amount: request.amount, ...(request.metadata ? { metadata: request.metadata } : {}) });
                 state.revision += 1;
                 return { ok: true };
             },
@@ -84,6 +108,8 @@ function load({ guilds = ["fogo", "alchemy", "smithing"], free = false, alchemyS
         },
     };
     vm.runInNewContext(dist("craft.js"), context);
+    // The chance of a better piece is the test's: never, unless a test says so.
+    context.exports.craftSettings.random = () => 0.9999;
     const player = (levels = {}) => ({
         id: 1,
         nickname: "Hans",
@@ -98,7 +124,7 @@ function load({ guilds = ["fogo", "alchemy", "smithing"], free = false, alchemyS
     const has = (item) => state.rows.filter((row) => row.item === item).reduce((sum, row) => sum + row.amount, 0);
     const reports = [];
     const report = (p, outcome) => reports.push(plain(outcome));
-    return { api: context.exports, state, player, give, has, reports, report };
+    return { api: context.exports, state, player, give, has, reports, report, body };
 }
 
 const near = () => true;
@@ -150,9 +176,9 @@ test("work is played for the recipe's time; then what it takes is taken, what it
     assert.equal(sut.has(SALT), 0);
     assert.equal(sut.has(WATER), 0);
     assert.equal(sut.has(PRETZEL), 2);
-    assert.deepEqual(sut.state.xp, [["survival", 8]]);
+    assert.deepEqual(sut.state.xp, [["survival", PRETZEL_XP]]);
     assert.equal(sut.reports.at(-1).ok, true);
-    assert.match(sut.reports.at(-1).message, /2x .*\+8 XP/);
+    assert.match(sut.reports.at(-1).message, new RegExp(`2x .*\\+${PRETZEL_XP} XP`));
 });
 
 test("another trade's recipe, one above the level, away from the place, or with something missing is refused at once, saying why", () => {
@@ -410,7 +436,7 @@ test("a number of pieces at once (2026-10-27): the animation is laid over all th
 
     sut.state.timers[0].fn();
     assert.equal(sut.has(PRETZEL), 2);
-    assert.deepEqual(sut.state.xp, [["survival", 8]], "the XP of each piece, as it is made");
+    assert.deepEqual(sut.state.xp, [["survival", PRETZEL_XP]], "the XP of each piece, as it is made");
     assert.deepEqual(sut.reports, [], "nothing said yet");
     assert.equal(sut.api.isWorking(hans), true);
     assert.equal(sut.state.stopped, 0, "and the animation goes on");
@@ -420,12 +446,12 @@ test("a number of pieces at once (2026-10-27): the animation is laid over all th
     sut.state.timers[2].fn();
     assert.equal(sut.has(PRETZEL), 6);
     assert.equal(sut.has(FLOUR_GUID), 0);
-    assert.deepEqual(sut.state.xp, [["survival", 8], ["survival", 8], ["survival", 8]]);
+    assert.deepEqual(sut.state.xp, [["survival", PRETZEL_XP], ["survival", PRETZEL_XP], ["survival", PRETZEL_XP]]);
     assert.equal(sut.api.isWorking(hans), false);
     assert.equal(sut.state.stopped, 1);
     assert.equal(sut.reports.length, 1, "told once");
     assert.equal(sut.reports[0].ok, true);
-    assert.match(sut.reports[0].message, /^Feito: 6x .* \(\+24 XP\)\.$/);
+    assert.match(sut.reports[0].message, new RegExp(`^Feito: 6x .* \\(\\+${3 * PRETZEL_XP} XP\\)\\.$`));
 });
 
 test("a piece of one is as it was: no number on the bar, and the piece's own word at the end", () => {
@@ -436,7 +462,7 @@ test("a piece of one is as it was: no number on the bar, and the piece's own wor
     assert.deepEqual(sut.state.emitted[0].payload, { id: "fogo:pretzel", ms: 6000, doing: "Cozinhando" });
     assert.deepEqual(sut.state.playedMs, [6000]);
     sut.state.timers[0].fn();
-    assert.match(sut.reports.at(-1).message, /^Feito: 2x .* \(\+8 XP\)\.$/);
+    assert.match(sut.reports.at(-1).message, new RegExp(`^Feito: 2x .* \\(\\+${PRETZEL_XP} XP\\)\\.$`));
 });
 
 test("the whole order is asked for at the start (nothing is half begun), the number is held to ten, and whatever is not a number is one", () => {
@@ -479,9 +505,9 @@ test("what runs out in the middle ends the work there: what was made stays made,
     assert.equal(sut.state.stopped, 1);
     assert.equal(sut.reports.length, 1);
     assert.equal(sut.reports[0].ok, false);
-    assert.match(sut.reports[0].message, /^Feito 1 de 3: 2x .* \(\+8 XP\)\. Nada foi feito\. Falta: 1x Sal \(tem 0\)\.$/);
+    assert.match(sut.reports[0].message, new RegExp(`^Feito 1 de 3: 2x .* \\(\\+${PRETZEL_XP} XP\\)\\. Nada foi feito\\. Falta: 1x Sal \\(tem 0\\)\\.$`));
     assert.equal(sut.has(PRETZEL), 2);
-    assert.deepEqual(sut.state.xp, [["survival", 8]]);
+    assert.deepEqual(sut.state.xp, [["survival", PRETZEL_XP]]);
 
     // A bag with no room for the next piece is the same: the ones before are kept.
     const full = load();
@@ -504,7 +530,7 @@ test("stopping in the middle keeps what was made and says so; the piece in the m
     assert.equal(sut.api.isWorking(hans), false);
     assert.equal(sut.state.stopped, 1);
     assert.deepEqual(sut.reports.at(-1), { ok: false, message: sut.reports.at(-1).message });
-    assert.match(sut.reports.at(-1).message, /^Trabalho interrompido: 1 de 3 feitos \(2x .*, \+8 XP\)\.$/);
+    assert.match(sut.reports.at(-1).message, new RegExp(`^Trabalho interrompido: 1 de 3 feitos \\(2x .*, \\+${PRETZEL_XP} XP\\)\\.$`));
     sut.state.timers[1].fn();
     assert.equal(sut.has(PRETZEL), 2, "the piece that was being made is not made");
     assert.equal(sut.has(FLOUR_GUID), 2);
@@ -543,8 +569,8 @@ test("the page marks the rows that may be made a number at a time: every one mad
     assert.ok(forge.recipes.every((row) => row.batch === true));
 });
 
-test("the trades' XP is paid at the pace the administrators chose: four times the recipe's, in the page, in the chat and in the game (2026-10-27)", () => {
-    profession.professionXp.rate = 4;
+test("the trades' XP is paid at the trades' standard: the fire twice the recipe's, in the page, in the chat and in the game (2026-11-03; four times since 2026-10-27)", () => {
+    profession.useStandard();
     try {
         const sut = load();
         const hans = sut.player({ survival: 2 });
@@ -553,13 +579,479 @@ test("the trades' XP is paid at the pace the administrators chose: four times th
         sut.give(WATER, 1);
         sut.api.make(hans, "fogo:pretzel", near, sut.report);
         sut.state.timers[0].fn();
-        assert.deepEqual(sut.state.xp, [["survival", 32]], "8 of the table, four times");
-        assert.match(sut.reports.at(-1).message, /2x .*\+32 XP/);
+        assert.deepEqual(sut.state.xp, [["survival", 2 * PRETZEL_XP]], "the recipe's, twice");
+        assert.match(sut.reports.at(-1).message, new RegExp(`2x .*\\+${2 * PRETZEL_XP} XP`));
         // What the page says a piece gives is what it gives.
         const view = sut.api.viewFor(hans, "fogo");
         const row = view.recipes.find((recipe) => recipe.id === "fogo:pretzel");
-        assert.equal(row.xp, 32, "the page says what one piece of work gives: the recipe's 8, four times");
+        assert.equal(row.xp, 2 * PRETZEL_XP, "the page says what one piece of work gives: the recipe's, twice");
     } finally {
-        profession.professionXp.rate = 1;
+        profession.useTables();
     }
+});
+
+// Thread of the trades' own (2026-10-30, user: "adiciona a receita de linha que o artesão precisa para ele mesmo poder fabricar com linho e água potável; o taverneiro e alquimista podem
+// fazer usando a própria água do corpo, quanto mais ele faz mais sede ele fica"): the Artesão pays a flax and a flask of water, the fire's and the rack's workers a flax and the water of
+// their own bodies, a little with each piece.
+const FLAX = "5c9aa2cf-0117-46cc-a7c7-1eb8bcc59dc6";
+const THREAD = "guid-kcdc-craft:linha";
+
+test("the Artesão spins thread at the needle of a flax and a flask of potable water, three spools a piece, and his body pays nothing", () => {
+    const sut = load({ guilds: ["costura"] });
+    const maria = sut.player({ craftsmanship: 0 });
+    const view = plain(sut.api.viewFor(maria, "costura")).recipes.find((r) => r.id === "costura:linha");
+    assert.equal(view.cat, "Fios");
+    assert.equal(view.n, 3);
+    assert.deepEqual(view.ing, [[FLAX, 1, 0], [WATER, 1, 0]]);
+    assert.equal(view.th, undefined, "no water of the body on this one");
+    assert.equal(view.can, false);
+
+    sut.api.make(maria, "costura:linha", near, sut.report);
+    assert.match(sut.reports.at(-1).message, /Falta: 1x Linho \(tem 0\), 1x Água potável \(tem 0\)/);
+
+    sut.give(FLAX, 2);
+    sut.give(WATER, 2);
+    sut.api.make(maria, "costura:linha", near, sut.report, undefined, 2);
+    sut.state.timers[0].fn();
+    sut.state.timers[1].fn();
+    assert.equal(sut.has(THREAD), 6, "two pieces, three spools each");
+    assert.equal(sut.has(FLAX), 0);
+    assert.equal(sut.has(WATER), 0);
+    assert.deepEqual(sut.body.spent, [], "the flask was the water");
+    assert.equal(sut.body.value, 100);
+    assert.deepEqual(sut.state.xp, [["craftsmanship", THREAD_XP], ["craftsmanship", THREAD_XP]]);
+});
+
+test("the fire's and the rack's workers spin thread of a flax and their own water: each piece takes a little of the body's, the more they make the thirstier they get (2026-10-30)", () => {
+    for (const [guild, station, track] of [["fogo", "fogo", "survival"], ["secador", "secador", "alchemy"]]) {
+        const sut = load({ guilds: [guild] });
+        const hans = sut.player({ [track]: 0 });
+        sut.give(FLAX, 5);
+        const view = plain(sut.api.viewFor(hans, station)).recipes.find((r) => r.id === `${station}:linha`);
+        assert.deepEqual(view.ing, [[FLAX, 1, 5]], "no flask asked for");
+        assert.deepEqual(view.th, [8, 10], "eight points of water a piece, and a full body pays the whole batch of ten (80 of its 100)");
+        assert.equal(view.can, true);
+
+        sut.api.make(hans, `${station}:linha`, near, sut.report, undefined, 3);
+        sut.state.timers[0].fn();
+        sut.state.timers[1].fn();
+        assert.equal(sut.body.value, 100 - 16, "two pieces made, two payments");
+        sut.state.timers[2].fn();
+        assert.equal(sut.has(THREAD), 9);
+        assert.equal(sut.has(FLAX), 2);
+        assert.equal(sut.body.value, 100 - 24, "three pieces, the body is thirstier by each one");
+        assert.deepEqual(sut.body.spent, [8, 8, 8]);
+        assert.match(sut.reports.at(-1).message, new RegExp(`^Feito: 9x .* \\(\\+${3 * THREAD_XP} XP\\)\\.$`));
+        assert.deepEqual(plain(sut.api.viewFor(hans, station)).recipes.find((r) => r.id === `${station}:linha`).th, [8, 8], "and it pays one fewer now");
+    }
+});
+
+test("a body that is already dry cannot spin more: it is held to the pieces it can pay, never taken under the point where Desidratação begins, and nothing is taken for what is refused", () => {
+    const sut = load({ guilds: ["fogo"] });
+    const hans = sut.player({ survival: 0 });
+    sut.give(FLAX, 10);
+    sut.body.value = 30;
+    assert.deepEqual(plain(sut.api.viewFor(hans, "fogo")).recipes.find((r) => r.id === "fogo:linha").th, [8, 2]);
+    sut.api.make(hans, "fogo:linha", near, sut.report, undefined, 3);
+    assert.match(sut.reports.at(-1).message, /só tem água para 2 peças/);
+    assert.deepEqual(sut.state.timers, [], "none of it started");
+    assert.equal(sut.has(FLAX), 10);
+
+    sut.api.make(hans, "fogo:linha", near, sut.report, undefined, 2);
+    sut.state.timers[0].fn();
+    sut.state.timers[1].fn();
+    assert.equal(sut.body.value, 14, "thirsty, not parched");
+    assert.equal(sut.has(THREAD), 6);
+
+    // At 14 the body pays one more piece (14 - 8 = 6 is under the floor): none.
+    assert.deepEqual(plain(sut.api.viewFor(hans, "fogo")).recipes.find((r) => r.id === "fogo:linha").th, [8, 0]);
+    assert.equal(plain(sut.api.viewFor(hans, "fogo")).recipes.find((r) => r.id === "fogo:linha").can, false, "the button is off, flax or no flax");
+    sut.api.make(hans, "fogo:linha", near, sut.report);
+    assert.match(sut.reports.at(-1).message, /seco demais.*mate a sede/);
+});
+
+test("what the body runs out of in the middle ends the batch there: what was made stays made and is paid, and the rest is said", () => {
+    const sut = load({ guilds: ["secador"] });
+    const hans = sut.player({ alchemy: 0 });
+    sut.give(FLAX, 5);
+    sut.body.value = 27;
+    sut.api.make(hans, "secador:linha", near, sut.report, undefined, 2);
+    sut.state.timers[0].fn();
+    assert.equal(sut.body.value, 19);
+    sut.body.value = 12;
+    sut.state.timers[1].fn();
+    assert.equal(sut.has(THREAD), 3, "the first piece stays made");
+    assert.equal(sut.reports.at(-1).ok, false);
+    assert.match(sut.reports.at(-1).message, /Feito 1 de 2.*seco demais/);
+    assert.equal(sut.api.isWorking(hans), false);
+});
+
+test("with thirst off the body has water for the whole batch and none is spent", () => {
+    const sut = load({ guilds: ["fogo"] });
+    const hans = sut.player({ survival: 0 });
+    sut.give(FLAX, 10);
+    sut.body.enabled = false;
+    sut.body.value = 0;
+    assert.deepEqual(plain(sut.api.viewFor(hans, "fogo")).recipes.find((r) => r.id === "fogo:linha").th, [8, 10]);
+    sut.api.make(hans, "fogo:linha", near, sut.report, undefined, 10);
+    for (let index = 0; index < 10; index += 1) sut.state.timers[index].fn();
+    assert.equal(sut.has(THREAD), 30);
+    assert.deepEqual(sut.body.spent, []);
+});
+
+test("thread is the trades' to spin, each at its own place: the Artesão's recipe is no one else's, and a trade that is not theirs is refused (2026-10-30)", () => {
+    const smith = load({ guilds: ["smithing"] });
+    const hans = smith.player({ craftsmanship: 5, survival: 5, alchemy: 5 });
+    smith.give(FLAX, 3);
+    smith.give(WATER, 3);
+    for (const id of ["costura:linha", "fogo:linha", "secador:linha"]) {
+        smith.api.make(hans, id, near, smith.report);
+        assert.match(smith.reports.at(-1).message, /não é do seu ofício/, id);
+    }
+    const cook = load({ guilds: ["fogo"] });
+    const anna = cook.player({ survival: 5 });
+    cook.give(FLAX, 1);
+    cook.api.make(anna, "fogo:linha", far, cook.report);
+    assert.match(cook.reports.at(-1).message, /junto do fogo/, "the fire's thread is spun at the fire");
+});
+
+// Quality, nobles and towns (2026-10-31).
+const LINHO = "5c9aa2cf-0117-46cc-a7c7-1eb8bcc59dc6";
+const THREAD_CLASS = "guid-kcdc-craft:linha";
+/** Puts in the bag what a recipe takes, `times` over (our own items are known to the game by the class the harness gives them). */
+const stockFor = (sut, id, times = 1) => {
+    for (const [item, need] of sut.api.recipeById(id).ingredients) sut.give(item.startsWith("kcdc-craft:") ? `guid-${item}` : item, need * times);
+};
+
+test("the better the worker's level over the recipe's, the better the tier a piece can come out in: nothing at the recipe's own level, the best at fifteen levels over it", () => {
+    const sut = load();
+    const { expectedQuality, rollQuality, QUALITY_SPAN } = sut.api;
+    assert.equal(QUALITY_SPAN, 15);
+    assert.equal(expectedQuality(4, 4, 4), 1, "at the recipe's own level a piece is plain");
+    assert.equal(expectedQuality(0, 4, 4), 1, "under it the same (a level can be skipped by an administrator)");
+    assert.equal(expectedQuality(9, 4, 4), 2, "five levels over: the second tier");
+    assert.equal(expectedQuality(14, 4, 4), 3);
+    assert.equal(expectedQuality(19, 4, 4), 4, "fifteen over: the best");
+    assert.equal(expectedQuality(30, 4, 4), 4, "and no more");
+    assert.equal(expectedQuality(30, 4, 1), 1, "a class with one tier has no more to give");
+    // The fraction is the chance of one more.
+    assert.ok(Math.abs(expectedQuality(7, 4, 4) - 1.6) < 1e-9);
+    assert.equal(rollQuality(7, 4, 4, 0.5), 2, "a roll under the fraction takes the better tier");
+    assert.equal(rollQuality(7, 4, 4, 0.7), 1, "over it, the plainer");
+    assert.equal(rollQuality(19, 4, 4, 0), 4, "never past the best");
+    assert.equal(rollQuality(9, 4, 4, 0), 2, "a whole tier has no fraction to roll");
+    assert.deepEqual([1, 2, 3, 4].map((tier) => sut.api.romanOf(tier)), ["I", "II", "III", "IV"]);
+});
+
+test("a piece is made in the tier the level allows and the game is asked for it; the message and the batch say it; a class the game will not make so is given plain", () => {
+    const sut = load({ guilds: ["costura"] });
+    const hans = sut.player({ craftsmanship: 19 });
+    sut.give(LINHO, 5);
+    sut.give(THREAD_CLASS, 5);
+    // Level 4 recipe, level 19 worker: the best tier, whatever the roll.
+    sut.api.make(hans, "costura:HoseSeparate01_m21_D", near, sut.report, undefined, 2);
+    sut.state.timers[0].fn();
+    assert.deepEqual(plain(sut.state.adds.at(-1).metadata), { quality: 4 }, "the quality is asked of the game");
+    sut.state.timers[1].fn();
+    assert.match(sut.reports.at(-1).message, /^Feito: 2x .* \(\+\d+ XP\)\. Qualidade: 2x IV\.$/);
+    assert.ok(sut.state.logs.some((line) => /fez 1x .*, qualidade IV\)/.test(line)));
+
+    // A single piece says it in its own word.
+    sut.api.make(hans, "costura:HoseSeparate01_m21_D", near, sut.report);
+    sut.state.timers[2].fn();
+    assert.match(sut.reports.at(-1).message, /^Feito: 1x .* \(\+\d+ XP\), qualidade IV\.$/);
+
+    // The game turns the tier down: the plain piece, once, and nothing is lost.
+    sut.state.refuseQuality = true;
+    sut.api.make(hans, "costura:HoseSeparate01_m21_D", near, sut.report);
+    sut.state.timers[3].fn();
+    assert.equal(sut.reports.at(-1).ok, true);
+    assert.equal(sut.state.adds.at(-1).metadata, undefined, "asked again with no tier");
+    assert.match(sut.reports.at(-1).message, /^Feito: 1x .* \(\+\d+ XP\)\.$/);
+    assert.ok(sut.state.logs.some((line) => /o jogo não aceitou a qualidade 4 .*invalidQuality; saiu a comum/.test(line)));
+});
+
+test("at the recipe's own level a piece is plain and asks nothing of the game; a class with one tier never does", () => {
+    const sut = load({ guilds: ["costura", "fogo"] });
+    const novice = sut.player({ craftsmanship: 4, survival: 2 });
+    sut.give(LINHO, 1);
+    sut.give(THREAD_CLASS, 1);
+    sut.api.make(novice, "costura:HoseSeparate01_m21_D", near, sut.report);
+    sut.state.timers[0].fn();
+    assert.equal(sut.state.adds.at(-1).metadata, undefined, "no tier asked: the game's own plain piece");
+    assert.match(sut.reports.at(-1).message, /^Feito: 1x .* \(\+\d+ XP\)\.$/);
+
+    // A chance of one more, with the roll in its favour: level 7 over a level 4 recipe has 0.6 of a tier extra.
+    const lucky = load({ guilds: ["costura"] });
+    lucky.api.craftSettings.random = () => 0;
+    const one = lucky.player({ craftsmanship: 7 });
+    lucky.give(LINHO, 1);
+    lucky.give(THREAD_CLASS, 1);
+    lucky.api.make(one, "costura:HoseSeparate01_m21_D", near, lucky.report);
+    lucky.state.timers[0].fn();
+    assert.deepEqual(plain(lucky.state.adds.at(-1).metadata), { quality: 2 });
+
+    // Food has one tier: the work never asks for one.
+    sut.give(FLOUR_GUID, 1);
+    sut.give(SALT, 1);
+    sut.give(WATER, 1);
+    sut.api.craftSettings.random = () => 0;
+    sut.api.make(sut.player({ survival: 30 }), "fogo:pretzel", near, sut.report);
+    sut.state.timers.at(-1).fn();
+    assert.equal(sut.state.adds.at(-1).metadata, undefined);
+});
+
+test("the page is told the tiers a piece may come out in for this worker, and the best the class is made in", () => {
+    const sut = load({ guilds: ["costura"] });
+    const view = (level) => plain(sut.api.viewFor(sut.player({ craftsmanship: level }), "costura")).recipes.find((recipe) => recipe.id === "costura:HoseSeparate01_m21_D");
+    assert.deepEqual(view(4).q, [1, 1, 4], "plain at the recipe's level");
+    assert.deepEqual(view(7).q, [1, 2, 4], "a fraction of a tier over: it may come out in either");
+    assert.deepEqual(view(9).q, [2, 2, 4]);
+    assert.deepEqual(view(30).q, [4, 4, 4]);
+    assert.equal(plain(sut.api.viewFor(sut.player({ craftsmanship: 30 }), "costura")).recipes.find((recipe) => recipe.id === "costura:ring_silver_engraved").q, undefined, "a ring has one tier: nothing to say");
+});
+
+test("a noble's piece and a town's piece are refused to whoever is neither, with the reason; the page marks them; an administrator with every tool is never barred (2026-10-31)", () => {
+    const sut = load({ guilds: ["costura", "smithing"] });
+    // A noble's boots: the game gives them a wealth of 10 or more, and they are among the dearest of their kind (2026-10-31: both; wealth alone made a beggar's tunic a noble's).
+    const own = { exports: {} };
+    vm.runInNewContext(dist("craft-data.js"), own);
+    const NOBLE_BOOTS = own.exports.CRAFT_RECIPES.find((recipe) => recipe.station === "costura" && recipe.category === "Calçados" && recipe.noble === true && recipe.place === undefined).id;
+    let noble = false;
+    let town = "suchdol";
+    sut.api.setCraftGates({
+        isNoble: () => noble,
+        citizenOf: (player, towns) => towns.includes(town),
+        townName: (id) => ({ malesov: "Malešov", kuttenberg: "Kuttenberg", suchdol: "Suchdol" })[id] ?? id,
+    });
+    const hans = sut.player({ craftsmanship: 30 });
+    sut.give(LINHO, 20);
+    sut.give(THREAD_CLASS, 20);
+    // A noble's boots (a wealth level of 10 or more in the tables).
+    sut.api.make(hans, NOBLE_BOOTS, near, sut.report);
+    assert.equal(sut.reports.at(-1).message, "Apenas nobres e mestres do ofício fazem esta peça.");
+    assert.deepEqual(sut.state.timers, [], "none of it started");
+    // A coat of arms of Bergow: Malešov's.
+    sut.api.make(hans, "costura:Coat02_mBergov_D", near, sut.report);
+    assert.equal(sut.reports.at(-1).message, "Só cidadãos de Malešov fazem esta peça.");
+    const view = plain(sut.api.viewFor(hans, "costura")).recipes;
+    const boots = view.find((recipe) => recipe.id === NOBLE_BOOTS);
+    assert.deepEqual([boots.nb, boots.no, boots.can], [true, "Apenas nobres e mestres do ofício fazem esta peça.", false]);
+    const coat = view.find((recipe) => recipe.id === "costura:Coat02_mBergov_D");
+    assert.deepEqual([coat.pl, coat.no, coat.can], [["Malešov"], "Só cidadãos de Malešov fazem esta peça.", false]);
+    const plainHose = view.find((recipe) => recipe.id === "costura:HoseSeparate01_m21_D");
+    assert.deepEqual([plainHose.nb, plainHose.pl, plainHose.no], [undefined, undefined, undefined], "a plain piece carries none of it");
+
+    // The noble who lives in Malešov may make both (when they have what they take).
+    noble = true;
+    town = "malesov";
+    const lord = sut.player({ craftsmanship: 30 });
+    stockFor(sut, NOBLE_BOOTS, 2);
+    stockFor(sut, "costura:Coat02_mBergov_D");
+    sut.api.make(lord, NOBLE_BOOTS, near, sut.report);
+    assert.equal(sut.state.timers.length, 1, "the boots are begun");
+    const view2 = plain(sut.api.viewFor(lord, "costura")).recipes;
+    assert.equal(view2.find((recipe) => recipe.id === "costura:Coat02_mBergov_D").no, undefined);
+    assert.equal(view2.find((recipe) => recipe.id === NOBLE_BOOTS).no, undefined);
+
+    // The same checks when the work ends: a noble made a commoner in the meantime makes nothing and loses nothing.
+    const bagBefore = sut.state.rows.map((row) => `${row.item}:${row.amount}`).sort();
+    noble = false;
+    sut.state.timers[0].fn();
+    assert.match(sut.reports.at(-1).message, /Nada foi feito\. Apenas nobres e mestres do ofício fazem esta peça\./);
+    assert.deepEqual(sut.state.rows.map((row) => `${row.item}:${row.amount}`).sort(), bagBefore, "and what it takes is still in the bag");
+
+    // An administrator who asked for every tool is not held to either.
+    const free = load({ guilds: ["costura"], free: true });
+    free.api.setCraftGates({ isNoble: () => false, citizenOf: () => false, townName: (id) => id });
+    const admin = free.player({ craftsmanship: 0 });
+    stockFor(free, NOBLE_BOOTS);
+    free.api.make(admin, NOBLE_BOOTS, near, free.report);
+    assert.equal(free.state.timers.length, 1);
+});
+
+test("a garment is one recipe with its dyes: the page is told each dye's word and icon and whether a noble's; the dye picked is the one given, and a noble's dye is refused to a commoner (2026-10-31)", () => {
+    const sut = load({ guilds: ["costura"] });
+    let noble = false;
+    sut.api.setCraftGates({ isNoble: () => noble, citizenOf: () => true, townName: (id) => id });
+    const data = { exports: {} };
+    vm.runInNewContext(dist("craft-data.js"), data);
+    // A garment anybody makes, some of whose dyes are a noble's.
+    const mixed = data.exports.CRAFT_RECIPES.find((recipe) => recipe.station === "costura" && recipe.noble !== true && recipe.place === undefined && recipe.variants !== undefined && recipe.variants.some((v) => v[3] === 1) && recipe.variants.some((v) => v[3] === 0));
+    assert.ok(mixed !== undefined, "such a garment exists");
+    assert.equal(mixed.variants[0][3], 0, "the first dye is the least rich: the page opens on one anybody makes");
+    assert.equal(mixed.variants[0][0], mixed.output);
+    const rich = mixed.variants.findIndex((v) => v[3] === 1);
+    const free = mixed.variants.findIndex((v, at) => at > 0 && v[3] === 0);
+    assert.ok(rich > 0 && free > 0);
+
+    const hans = sut.player({ craftsmanship: 30 });
+    const row = (view) => plain(view).recipes.find((recipe) => recipe.id === mixed.id);
+    const told = row(sut.api.viewFor(hans, "costura"));
+    assert.equal(told.vs.length, mixed.variants.length);
+    assert.deepEqual(told.vs[0], [mixed.variants[0][1], mixed.variants[0][2], 0], "[colour, icon, 0 for anybody's]");
+    assert.equal(told.vs[rich][2], 2, "a noble's dye this worker may not make");
+    assert.equal(told.variants, undefined, "the classes stay on the server: the page sends back the number");
+    noble = true;
+    assert.equal(row(sut.api.viewFor(hans, "costura")).vs[rich][2], 1, "a noble's dye the worker may make");
+    noble = false;
+
+    // The dye picked is the one given.
+    stockFor(sut, mixed.id, 3);
+    sut.api.make(hans, mixed.id, near, sut.report, undefined, 1, free);
+    sut.state.timers.at(-1).fn();
+    assert.equal(sut.reports.at(-1).ok, true, sut.reports.at(-1).message);
+    assert.equal(sut.state.adds.at(-1).item, mixed.variants[free][0], "the class of the dye picked");
+    assert.match(sut.reports.at(-1).message, new RegExp(`\\(${mixed.variants[free][1]}\\)`), "and the message names the colour");
+    // The first dye when none is picked, and when the number is not one the garment has.
+    sut.api.make(hans, mixed.id, near, sut.report);
+    sut.state.timers.at(-1).fn();
+    assert.equal(sut.state.adds.at(-1).item, mixed.output);
+    sut.api.make(hans, mixed.id, near, sut.report, undefined, 1, 999);
+    sut.state.timers.at(-1).fn();
+    assert.equal(sut.state.adds.at(-1).item, mixed.output, "an unknown number is the first dye");
+
+    // A noble's dye is refused to a commoner, with the reason, and nothing starts; a noble makes it.
+    const timers = sut.state.timers.length;
+    sut.api.make(hans, mixed.id, near, sut.report, undefined, 1, rich);
+    assert.equal(sut.reports.at(-1).message, "Apenas nobres e mestres do ofício fazem esta peça.");
+    assert.equal(sut.state.timers.length, timers, "none of it started");
+    noble = true;
+    stockFor(sut, mixed.id, 1);
+    sut.api.make(hans, mixed.id, near, sut.report, undefined, 1, rich);
+    sut.state.timers.at(-1).fn();
+    assert.equal(sut.reports.at(-1).ok, true, sut.reports.at(-1).message);
+    assert.equal(sut.state.adds.at(-1).item, mixed.variants[rich][0]);
+
+    // What a page may send as the dye.
+    assert.deepEqual([undefined, null, "x", -1, 1.5, 0, 2, "3"].map((value) => sut.api.variantOf(value)), [0, 0, 0, 0, 0, 0, 2, 3]);
+});
+
+test("the garments in dyes are a recipe each, the dyes of a town's set are that town's alone, and no dye is listed twice (2026-10-31)", () => {
+    const data = { exports: {} };
+    vm.runInNewContext(dist("craft-data.js"), data);
+    const sewing = data.exports.CRAFT_RECIPES.filter((recipe) => recipe.station === "costura");
+    const dyed = sewing.filter((recipe) => recipe.variants !== undefined);
+    assert.ok(dyed.length >= 100 && dyed.every((recipe) => recipe.variants.length >= 2), `${dyed.length} garments with a picker`);
+    const classes = new Set();
+    for (const recipe of dyed) {
+        assert.equal(recipe.variants[0][0], recipe.output, `${recipe.id}: the first dye is the recipe's own`);
+        assert.ok(recipe.variants.every(([output, label, icon, rich]) => /^[0-9a-f-]{36}$/.test(output) && label !== "" && icon !== "" && (rich === 0 || rich === 1)), recipe.id);
+        for (const [output] of recipe.variants) {
+            assert.ok(!classes.has(output), `${recipe.id}: ${output} is in another picker too`);
+            classes.add(output);
+        }
+        assert.equal(recipe.place, undefined, `${recipe.id}: a town's piece is not in a picker for everybody`);
+        // A recipe is a noble's only when every dye is.
+        assert.equal(recipe.noble === true && recipe.level < 22, recipe.variants.every((v) => v[3] === 1) && recipe.level < 22, recipe.id);
+    }
+    assert.ok(!sewing.some((recipe) => recipe.variants === undefined && classes.has(recipe.output)), "a dye of a picker is not a recipe of its own as well");
+    // The crossbows and their bolts were the needle's (2026-10-31) and are the smith's since 2026-11-01 ("besta deve ser receita só do ferreiro e não do artesão"; "faltou no
+    // ferreiro o craft das setas, os dardos da besta").
+    assert.equal(sewing.filter((recipe) => recipe.category === "Bestas" || recipe.category === "Virotes" || /crossbow|^costura:bolt_/i.test(recipe.id)).length, 0, "no crossbow nor bolt at the needle");
+    const crossbows = data.exports.CRAFT_RECIPES.filter((recipe) => recipe.category === "Bestas");
+    assert.ok(crossbows.length >= 8 && crossbows.every((recipe) => recipe.station === "forja" && /^forja:crossbow/.test(recipe.id)), "the crossbows at the forge");
+    const bolts = data.exports.CRAFT_RECIPES.filter((recipe) => recipe.category === "Virotes");
+    assert.ok(bolts.length >= 10 && bolts.every((recipe) => recipe.station === "forja" && /^forja:bolt_/.test(recipe.id) && recipe.amount === 5), "the bolts at the forge, five to the batch");
+});
+
+test("a piece made in a town's own set stands in its own kind and says whose it is, and the data keeps the rules it was made with (2026-10-31)", () => {
+    const sut = load({ guilds: ["costura", "smithing"] });
+    const data = { exports: {} };
+    vm.runInNewContext(dist("craft-data.js"), data);
+    const recipes = data.exports.CRAFT_RECIPES;
+    const rules = recipes.filter((recipe) => recipe.station === "forja" || recipe.station === "costura");
+    assert.ok(rules.every((recipe) => recipe.maxq === undefined || (recipe.maxq > 1 && recipe.maxq <= 6)), "a tier count only where there is more than one");
+    // Every ring, necklace and brooch of the needle is a noble's.
+    const jewels = rules.filter((recipe) => recipe.category === "Anéis" || recipe.category === "Colares e broches");
+    assert.ok(jewels.length >= 12 && jewels.every((recipe) => recipe.noble === true));
+    // A horseshoe is no noble's, whatever wealth the tables give it.
+    assert.ok(rules.filter((recipe) => recipe.category === "Ferraduras").every((recipe) => recipe.noble !== true));
+    // The plain pieces of a trade stay open: most of what the trades make is nobody's alone.
+    assert.ok(rules.filter((recipe) => recipe.noble !== true && recipe.place === undefined).length > rules.length * 0.6);
+    const placed = rules.filter((recipe) => recipe.place !== undefined);
+    assert.ok(placed.length >= 20, `${placed.length} pieces belong to a town`);
+    const names = { kuttenberg: "Kuttenberg", malesov: "Malešov", raborsch: "Raborsch", suchdol: "Suchdol", pschitoky: "Pschitoky" };
+    for (const recipe of placed) {
+        const towns = recipe.place.split(",");
+        assert.ok(towns.every((id) => names[id] !== undefined), `${recipe.id}: ${recipe.place} are the towns of the file`);
+        // A town's piece stays in its kind (2026-10-31: no more "<town> · <kind>"): the page says whose it is on the piece.
+        assert.ok(!recipe.category.includes(" · "), `${recipe.id}: ${recipe.category}`);
+    }
+    assert.equal(sut.api.recipeById("forja:shortswordBergov").place, "malesov");
+    assert.equal(sut.api.recipeById("costura:Coat02_mBergov_D").place, "malesov");
+    assert.equal(sut.api.recipeById("costura:Coat02_mBergov_D").category, "Brasão: Bergow", "a coat of arms keeps its house for a category");
+});
+
+test("a recipe far under the worker's level gives less XP: the whole of it up to three levels under, 12% less for each level more, never under a tenth (2026-11-01)", () => {
+    const sut = load();
+    const { weakShare, xpFor, recipeById } = sut.api;
+    assert.equal(weakShare(0, 0), 1);
+    assert.equal(weakShare(4, 1), 1, "three levels over the recipe: all of it");
+    assert.equal(Math.round(weakShare(5, 1) * 100), 88);
+    assert.equal(Math.round(weakShare(9, 1) * 100), 40);
+    assert.equal(weakShare(30, 0), 0.1, "never under a tenth");
+    assert.equal(weakShare(0, 10), 1, "a recipe over the worker is never cut");
+    const pretzel = recipeById("fogo:pretzel");
+    assert.equal(xpFor(pretzel, 2), PRETZEL_XP);
+    assert.equal(xpFor(pretzel, 30), 1, "at least one");
+
+    const master = sut.player({ survival: 9 });
+    stock(sut, 1);
+    const row = plain(sut.api.viewFor(master, "fogo")).recipes.find((recipe) => recipe.id === "fogo:pretzel");
+    const paid = Math.max(1, Math.round(PRETZEL_XP * 0.4));
+    assert.equal(row.xp, paid, "the page says what this worker gets");
+    sut.api.make(master, "fogo:pretzel", near, sut.report);
+    sut.state.timers[0].fn();
+    assert.deepEqual(sut.state.xp, [["survival", paid]], "and the game is given that");
+    assert.match(sut.reports.at(-1).message, new RegExp(`\\(\\+${paid} XP\\)`));
+});
+
+test("a master of a guild or of a trade makes the nobles' pieces of their trade, the nobles' dyes too, without being a noble (2026-11-01)", () => {
+    const sut = load({ guilds: ["costura"] });
+    const own = { exports: {} };
+    vm.runInNewContext(dist("craft-data.js"), own);
+    const NOBLE_BOOTS = own.exports.CRAFT_RECIPES.find((recipe) => recipe.station === "costura" && recipe.category === "Calçados" && recipe.noble === true && recipe.place === undefined).id;
+    const mixed = own.exports.CRAFT_RECIPES.find((recipe) => recipe.station === "costura" && recipe.noble !== true && recipe.variants !== undefined && recipe.variants.some((v) => v[3] === 1));
+    const rich = mixed.variants.findIndex((v) => v[3] === 1);
+    let master = false;
+    sut.api.setCraftGates({ isNoble: () => false, isMaster: () => master, citizenOf: () => true, townName: (id) => id });
+    const hans = sut.player({ craftsmanship: 30 });
+    const row = () => plain(sut.api.viewFor(hans, "costura")).recipes.find((recipe) => recipe.id === NOBLE_BOOTS);
+    assert.equal(row().no, "Apenas nobres e mestres do ofício fazem esta peça.", "a commoner is barred, and told who may");
+    assert.equal(plain(sut.api.viewFor(hans, "costura")).recipes.find((recipe) => recipe.id === mixed.id).vs[rich][2], 2, "a noble's dye he may not make");
+    master = true;
+    assert.equal(row().no, undefined, "a master is not");
+    assert.equal(row().nb, true, "the piece is still marked as the nobles'");
+    assert.equal(plain(sut.api.viewFor(hans, "costura")).recipes.find((recipe) => recipe.id === mixed.id).vs[rich][2], 1, "and the nobles' dyes are his to make");
+    stockFor(sut, NOBLE_BOOTS, 1);
+    sut.api.make(hans, NOBLE_BOOTS, near, sut.report);
+    assert.equal(sut.state.timers.length, 1, "the boots are begun");
+    sut.state.timers[0].fn();
+    assert.equal(sut.reports.at(-1).ok, true, sut.reports.at(-1).message);
+    assert.equal(sut.api.mayMakeNoble(hans), true);
+    // Without the gate a server gives (the tests, a module that did not start), nobody is a master.
+    sut.api.setCraftGates({ isNoble: () => false, citizenOf: () => true, townName: (id) => id });
+    assert.equal(sut.api.mayMakeNoble(hans), false);
+});
+
+test("every potion, poison and ointment of the alchemists says what it does, in the game's own words, on its recipe (2026-11-02); the Saviour Schnapps says it saves nothing here", () => {
+    const sut = load({ guilds: ["alchemy"] });
+    const hans = sut.player({ alchemy: 30 });
+    const view = plain(sut.api.viewFor(hans, "alquimia"));
+    const named = (pattern) => view.recipes.find((recipe) => pattern.test(view.items[recipe.out]?.[0] ?? ""));
+    const marigold = named(/^Mistura de Cravo-de-defunto Fraca$/);
+    assert.equal(marigold.d, "Cura 15 pontos de Vida por um minuto e cura ressaca 50% mais rápido.");
+    assert.match(named(/^Acônito Fraca$/).d, /^Reduz a Vida em -110 em 60 segundos\./, "a poison says what it does too");
+    assert.match(named(/^Poção de mandrágora fraca$/).d, /^Acalma os pensamentos assustadores e as vozes ameaçadoras\. Cura 50 pontos de Vida/, "no markup");
+    assert.equal(named(/^Schnapps Salvador Fraco$/).d, "Sem efeito no servidor. Não salva o jogo: aqui o servidor guarda tudo sozinho.");
+    assert.match(named(/^Schnapps Salvador do Henry$/).d, /^Cura 30 pontos de Vida e ganha \+3 de Força.*Não salva o jogo/);
+    const potions = view.recipes.filter((recipe) => /^(Poção|Mistura|Bebida|Artemísia|Linimento|Raposa|Esopo|Galo|Sangue de Gamo|Aqua|Acônito|Cantiga|Infusão)/.test(view.items[recipe.out]?.[0] ?? ""));
+    assert.ok(potions.length >= 60, String(potions.length));
+    for (const recipe of potions) {
+        assert.ok(typeof recipe.d === "string" && recipe.d.length > 10 && !/[<>]|&lt;/.test(recipe.d), `${view.items[recipe.out][0]}: ${recipe.d}`);
+    }
+    // Elsewhere only what the alchemists make too says it (the tavern's aguardente): a roast says nothing.
+    const fire = plain(sut.api.viewFor(hans, "fogo"));
+    assert.ok(fire.recipes.filter((recipe) => recipe.d !== undefined).every((recipe) => /Aguardente/.test(fire.items[recipe.out]?.[0] ?? "")), JSON.stringify(fire.recipes.filter((recipe) => recipe.d !== undefined).map((recipe) => fire.items[recipe.out]?.[0])));
 });

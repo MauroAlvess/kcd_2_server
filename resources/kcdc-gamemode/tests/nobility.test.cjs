@@ -169,23 +169,3 @@ test("who may arrest: the ones that keep the peace by arms or judge, and the lor
         assert.ok(N.titleById(id) !== null, `${id} is a real title`);
     }
 });
-
-test("who hands out the guilds: the clerk, the masters, the town's officers, the lord's chancellor and burgrave, the lords and the Crown; the masters only their own", () => {
-    for (const id of ["escrivao", "mestre-guilda", "mestre-oficio", "burgomestre", "conselheiro", "alcaide", "chanceler", "burgrave", "lorde", "marques", "principe", "rei"]) {
-        assert.equal(N.mayGrantGuildWith([id]), true, id);
-    }
-    for (const id of ["soldado", "guarda-portoes", "padre", "cavaleiro", "escudeiro", "hetman", "nao-existe"]) {
-        assert.equal(N.mayGrantGuildWith([id]), false, id);
-    }
-    assert.equal(N.mayGrantGuildWith([]), false);
-    for (const id of N.GUILD_GRANT_TITLES) {
-        assert.ok(N.titleById(id) !== null, `${id} is a real title`);
-    }
-    assert.equal(N.grantsOwnGuildOnly(["mestre-oficio"]), true);
-    assert.equal(N.grantsOwnGuildOnly(["mestre-guilda", "mestre-oficio"]), true);
-    assert.equal(N.grantsOwnGuildOnly(["mestre-oficio", "escrivao"]), false, "a master who is also a clerk hands any guild");
-    assert.equal(N.grantsOwnGuildOnly(["escrivao"]), false);
-    assert.equal(N.grantsOwnGuildOnly(["soldado"]), false, "no power at all is not a master's power");
-    assert.equal(N.grantsOwnGuildOnly(["mestre-oficio", "soldado"]), true, "a title that gives no power does not change it");
-    assert.equal(N.grantsOwnGuildOnly([]), false);
-});

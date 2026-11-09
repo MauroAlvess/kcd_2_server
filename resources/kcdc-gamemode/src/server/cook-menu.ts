@@ -157,7 +157,7 @@ export function cancelCookMenu(player: Player): boolean {
 }
 
 /** The forges and the alchemy tables about a point (the level's and the ones this server put in the world), for the client's hint: kind, x, y, z. */
-function forgePoints(position: { x: number; y: number }, radius: number): Array<[Kind, number, number, number]> {
+export function forgePoints(position: { x: number; y: number }, radius: number): Array<[Kind, number, number, number]> {
     const ours = craftPlacesWithin(position, radius).map((place): [Kind, number, number, number] => [place.kind, place.x, place.y, place.z]);
     const stones = grindstonesWithin(position, radius).map((stone): [Kind, number, number, number] => ["amolar", stone[0], stone[1], stone[2]]);
     try {

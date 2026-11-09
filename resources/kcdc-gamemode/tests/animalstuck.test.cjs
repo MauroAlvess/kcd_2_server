@@ -36,7 +36,7 @@ function load({ seed } = {}) {
                 };
             }
             if (id === "./supporters.js") {
-                return { supporters: { get: () => (state.dog === "supporter" ? { dogName: "Rex" } : null), bringDog: (player) => { if (!state.dogBack) return null; const dog = { position: null, rotation: null }; player.dog = dog; return dog; } } };
+                return { supporters: { get: () => (state.dog === "supporter" ? { dogName: "Rex", ...(state.dogAway ? { dogAway: true } : {}) } : null), bringDog: (player) => { if (!state.dogBack) return null; const dog = { position: null, rotation: null }; player.dog = dog; return dog; } } };
             }
             assert.fail(`unexpected require ${id}`);
         },
@@ -132,6 +132,16 @@ test("the dog is put in front of its owner, or brought back when it is not in th
     const none = load();
     none.state.dog = "none";
     assert.match(none.api.unstickAnimal(none.player, "dog", undefined).message, /não tem um cão/);
+});
+
+test("a dog sent away is not brought by Animal preso: it is told to be called, and the wait is not spent (2026-10-30)", () => {
+    const sut = load();
+    sut.state.dogAway = true;
+    const outcome = sut.api.unstickAnimal(sut.player, "dog", undefined, sut.state.now);
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.message, "Seu cão foi embora: chame-o para ele voltar.");
+    assert.equal(sut.player.dog, null, "nothing was brought");
+    assert.equal(sut.api.stuckIn("dog", "", OWNER), 0);
 });
 
 test("a player with no Steam id cannot be given the wait, since it could not be kept", () => {

@@ -47,7 +47,7 @@ export interface Refill {
     readonly items: readonly string[];
     readonly min: number;
     readonly max: number;
-    /** Now and then a second stack beside the first: the feather a hen leaves in her nest (2026-10-27: the fletching of the arrows had only the smiths' vendors to come from). */
+    /** A second stack beside the first: the feathers a hen leaves in her nest (2026-10-27: the fletching of the arrows had only the smiths' vendors to come from; 2026-10-31, user: "nos galinheiros onde pega ovo coloque penas": no longer now and then, every nest has them). */
     readonly extra?: { readonly item: string; readonly chance: number; readonly min: number; readonly max: number };
 }
 
@@ -58,7 +58,7 @@ export const EGGS: Refill = {
     items: ["egg"],
     min: 1,
     max: 3,
-    extra: { item: "special_featherRooster", chance: 0.4, min: 1, max: 2 },
+    extra: { item: "special_featherRooster", chance: 1, min: 2, max: 4 },
 };
 export const FISH: Refill = { name: "traps", what: "armadilha(s) de pesca do nível ganham peixes", pattern: /fish_trap/i, items: ["perch", "trout", "crayfish"], min: 2, max: 4 };
 export const HONEY: Refill = { name: "hives", what: "colmeia(s) do nível ganham mel", pattern: /bee_?hive/i, items: ["honey"], min: 1, max: 2 };
@@ -100,8 +100,10 @@ export class Nests {
     fill(players: ReadonlyArray<{ readonly position: { readonly x: number; readonly y: number } }>): number {
         if (this.classes === null) {
             const known = this.resolve(this.kind.extra === undefined ? this.kind.items : [...this.kind.items, this.kind.extra.item]);
-            this.classes = this.kind.items.flatMap((name) => known.get(name) ?? []);
-            this.extraClass = this.kind.extra === undefined ? "" : (known.get(this.kind.extra.item) ?? "");
+            // The game's names are looked up as `resolveItems` keeps them, in lower case (2026-11-01: "special_featherRooster" was never found, and no nest had a feather).
+            const classOf = (name: string): string | undefined => known.get(name) ?? known.get(name.toLowerCase());
+            this.classes = this.kind.items.flatMap((name) => classOf(name) ?? []);
+            this.extraClass = this.kind.extra === undefined ? "" : (classOf(this.kind.extra.item) ?? "");
         }
         if (this.classes.length === 0) {
             return 0;
@@ -138,6 +140,15 @@ export class Nests {
     /** Whether the game knows any of the items to fill with. */
     ready(): boolean {
         return this.classes === null || this.classes.length > 0;
+    }
+
+    /** What the log says of the second stack: nothing when there is none, whether the game knew its item otherwise. */
+    extraNote(): string {
+        const extra = this.kind.extra;
+        if (extra === undefined || this.classes === null) {
+            return "";
+        }
+        return this.extraClass === "" ? `; sem ${extra.item}, que o jogo não conhece` : `; com ${extra.min} a ${extra.max} de ${extra.item} em cada um`;
     }
 
     /** A few of the kinds of container found, by name with the numbers taken out, for the log: it says what was filled. */
@@ -180,7 +191,7 @@ export function installNests(): void {
             for (const group of all) {
                 const found = group.count();
                 const filled = group.fill(players());
-                console.log(found === 0 ? `${group.kind.name}: o nível não tem esses baús` : `${group.kind.name}: ${found} ${group.kind.what} a cada ${nestSettings.everyMs / 60_000} min; ${filled} já cheios${group.ready() ? "" : " (o jogo não conhece o item)"}; por exemplo ${group.kinds().join(" | ")}`);
+                console.log(found === 0 ? `${group.kind.name}: o nível não tem esses baús` : `${group.kind.name}: ${found} ${group.kind.what} a cada ${nestSettings.everyMs / 60_000} min; ${filled} já cheios${group.ready() ? "" : " (o jogo não conhece o item)"}${group.extraNote()}; por exemplo ${group.kinds().join(" | ")}`);
             }
             // The containers that are due are filled every minute, with what was found; a container the level reports late joins them on a rarer look.
             timers.add(

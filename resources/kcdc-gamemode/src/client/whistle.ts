@@ -6,8 +6,7 @@
  * Only the physical X: the mod's key API names keys, not the game's controls, and `ActionHint` covers a fixed list of
  * controls that has no whistle in it. A whistle moved to another key in the controls menu calls nothing. And only while
  * the player is in the world: X also confirms on the game's screens (the dice, a trade, the time wheel), and pressing it
- * there must not call the horse (user, 2026-10-16). The pause menu is one of those since 2026-10-18 (the horse's bag is
- * the alforjes now, opened with E at the horse); and the server answers nothing to a rider or a seat of a cart.
+ * there must not call the horse (user, 2026-10-16). The pause menu is one of those since 2026-10-18; and the server answers nothing to a rider or a seat of a cart.
  */
 
 const RESOURCE = "kcdc-gamemode";

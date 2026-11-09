@@ -113,6 +113,9 @@ export function unstick(player: Player): Outcome {
         return { ok: false, message: `Fiquei preso só pode ser usado uma vez a cada 60 minutos. Disponível de novo em ${minutesText(wait)}.` };
     }
     const church = nearestChurch(player.position);
+    if (church === null) {
+        return { ok: false, message: "Este mapa não tem igrejas para onde levar você: peça a um administrador." };
+    }
     const point = wakePoint(church);
     // Out of a cart first: a body seated in one would be left behind by the move.
     for (const cart of Cart.all(player.virtualWorld)) {

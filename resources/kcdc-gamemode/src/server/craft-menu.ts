@@ -10,12 +10,13 @@
 
 import { stationsNear } from "./cooking.js";
 import type { CraftStation } from "./craft-data.js";
-import { alchemyGranted, atOwnAlchemyTable, batchOf, brew, cancelWork, chooseAlchemy, forgeNear, forgetCraft, isWorking, madeOnPage, make, recipeById, STATIONS, unlockedAt, viewFor } from "./craft.js";
+import { alchemyGranted, atOwnAlchemyTable, batchOf, brew, cancelWork, chooseAlchemy, forgeNear, forgetCraft, isWorking, madeOnPage, make, recipeById, STATIONS, unlockedAt, variantOf, viewFor } from "./craft.js";
 import type { NearCheck, Outcome } from "./craft.js";
 import { workSpot } from "./craft-spot.js";
 import { craftTitle } from "./craft-titles.js";
 import { emitLarge } from "./big-emit.js";
-import { canExtractAt, extract, extractView, EXTRACT_PREFIX, MODES } from "./extract.js";
+import { canExtractAt, checkExtraction, extract, extractView, EXTRACT_PREFIX, MODES } from "./extract.js";
+import { playWork, stopWork } from "./craft-animation.js";
 import { cancelPlanting, farmPageClosed, PROCESS_PREFIX, plantFromPage, processFromPage, RECIPE_PREFIX } from "./farm.js";
 import { mayCraft } from "./guild-crafts.js";
 import { REPAIR_PREFIX, repairFromPage, repairPageClosed } from "./repair.js";
@@ -27,6 +28,24 @@ const open = new Map<number, CraftStation>();
 
 /** The players whose forge or sewing page shows the extraction (2026-10-27, `extract.ts`) and not the recipes. */
 const extracting = new Set<number>();
+
+/**
+ * How long breaking one piece takes at the forge or the needle (2026-11-03, user: "ao tentar extrair não inicia a animação e continua a lista carregada"): the station's own work is
+ * played meanwhile and the page shows its bar, "Extraindo...", with Parar; then the piece is checked again and broken. It was done at once, with no animation and no item notice,
+ * and a page whose request was dropped (a station the server no longer had open for the player, a piece of work still going on) was never answered: the list stood as it was.
+ */
+export const EXTRACT_MS = 3_000;
+
+interface ExtractJob {
+    readonly timer: ReturnType<typeof setTimeout>;
+    readonly played: boolean;
+}
+
+/** The breakings going on, by player id. */
+const extractJobs = new Map<number, ExtractJob>();
+
+const BUSY = "Você já está trabalhando em algo.";
+const LOST_PAGE = "A página do ofício se perdeu: abra de novo a forja ou a costura.";
 
 /** What the page shows a player now: the extraction's list on its tab, the trade's recipes (with the tabs, where there are two) otherwise. */
 function viewOf(player: Player, station: CraftStation): object {
@@ -83,6 +102,59 @@ function report(player: Player, outcome: Outcome): void {
     }
 }
 
+/** Whether the player is breaking a piece now. */
+export const isExtracting = (player: Player): boolean => extractJobs.has(player.id);
+
+/** Begins the breaking of a piece: checked first, the station's work played for `EXTRACT_MS` a piece, then checked again and broken (`extract`), and the page told. */
+function startExtraction(player: Player, id: string, station: CraftStation, count: number): void {
+    const ready = checkExtraction(player, id, station, nearStation, count);
+    if (!ready.ok) {
+        report(player, ready);
+        return;
+    }
+    const pieces = ready.count ?? 1;
+    const ms = EXTRACT_MS * pieces;
+    let played = false;
+    try {
+        played = playWork(player, station, { ms, ...(workSpot(player, station) ?? {}) });
+    } catch (error: unknown) {
+        console.log(`craft-menu: a animação da extração de ${player.nickname} não começou: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const timer = setTimeout(() => {
+        extractJobs.delete(player.id);
+        if (played) {
+            stopWork(player);
+        }
+        let outcome: Outcome;
+        try {
+            outcome = extract(player, id, station, nearStation, pieces);
+        } catch (error: unknown) {
+            console.log(`craft-menu: a extração de ${player.nickname} (${id}) deu erro: ${error instanceof Error ? error.message : String(error)}`);
+            outcome = { ok: false, message: "Nada foi feito: a extração deu erro, e o equipamento ficou com você." };
+        }
+        report(player, outcome);
+    }, ms);
+    extractJobs.set(player.id, { timer, played });
+    player.emit(`${RESOURCE}:craft.progress`, JSON.stringify({ id, ms, doing: "Extraindo" }));
+}
+
+/** Stops a breaking that is going on: nothing is broken. `say` tells the page and the chat. */
+function cancelExtraction(player: Player, say: boolean): boolean {
+    const job = extractJobs.get(player.id);
+    if (job === undefined) {
+        return false;
+    }
+    clearTimeout(job.timer);
+    extractJobs.delete(player.id);
+    if (job.played) {
+        stopWork(player);
+    }
+    if (say) {
+        report(player, { ok: false, message: "Extração interrompida: nada foi quebrado." });
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------------------------------
 // The alchemy table: "Criar / Sair" first.
 
@@ -132,13 +204,23 @@ export function installCraftMenu(): void {
             repairFromPage(player, id);
             return;
         }
-        // And the forge's and the needle's second tab: "Extrair" is `extract.ts`'s (the rows are the pieces of the bag, `extrair:<row>`).
+        // And the forge's and the needle's second tab: "Extrair" is `extract.ts`'s (the rows are the pieces of the bag, `extrair:<row>`), a piece of work of a few seconds.
         if (id.startsWith(EXTRACT_PREFIX)) {
             const station = open.get(player.id);
             if (station === undefined || !canExtractAt(station)) {
+                report(player, { ok: false, message: LOST_PAGE });
                 return;
             }
-            report(player, isWorking(player) ? { ok: false, message: "Você já está trabalhando em algo." } : extract(player, id, station, nearStation));
+            if (isWorking(player) || isExtracting(player)) {
+                report(player, { ok: false, message: BUSY });
+                return;
+            }
+            startExtraction(player, id, station, count);
+            return;
+        }
+        // Nothing else is made while a piece is being broken.
+        if (isExtracting(player)) {
+            report(player, { ok: false, message: BUSY });
             return;
         }
         // A potion of the game's is chosen here and brewed at its table; a bandage is made here, like any other trade's work.
@@ -152,14 +234,24 @@ export function installCraftMenu(): void {
             report(player, chooseAlchemy(player, id));
             return;
         }
-        make(player, id, nearStation, report, workSpot, count);
+        make(player, id, nearStation, report, workSpot, count, variantOf(fieldsOf(payload)["v"]));
     });
     // The tabs of the forge's and the sewing page: the recipes ("fabricar") or the pieces to break ("extrair").
     Events.onClient(`${RESOURCE}:craft.mode`, (sender, payload) => {
         const player = sender as Player;
         const mode = fieldsOf(payload)["mode"];
         const station = open.get(player.id);
-        if (station === undefined || !canExtractAt(station) || (mode !== "fabricar" && mode !== "extrair") || isWorking(player)) {
+        // A tab asked for on a page the server no longer has open for the player is answered too: the page is to be opened again.
+        if (station === undefined && (mode === "fabricar" || mode === "extrair")) {
+            report(player, { ok: false, message: LOST_PAGE });
+            return;
+        }
+        if (station === undefined || !canExtractAt(station) || (mode !== "fabricar" && mode !== "extrair")) {
+            return;
+        }
+        // A tab asked for while a piece of work goes on is answered (it was left without a word, and the page stood on the list it had).
+        if (isWorking(player) || isExtracting(player)) {
+            report(player, { ok: false, message: "Termine o trabalho que está fazendo antes de trocar de aba." });
             return;
         }
         if (mode === "extrair") {
@@ -171,6 +263,8 @@ export function installCraftMenu(): void {
     });
     Events.onClient(`${RESOURCE}:craft.closed`, (sender) => {
         const player = sender as Player;
+        // A breaking ends with its page: nothing is broken (2026-11-03).
+        cancelExtraction(player, true);
         open.delete(player.id);
         extracting.delete(player.id);
         farmPageClosed(player);
@@ -180,7 +274,7 @@ export function installCraftMenu(): void {
     });
     Events.onClient(`${RESOURCE}:craft.cancel`, (sender) => {
         const player = sender as Player;
-        if (!cancelWork(player, report)) {
+        if (!cancelExtraction(player, true) && !cancelWork(player, report)) {
             cancelPlanting(player);
         }
     });
@@ -234,6 +328,7 @@ export function installCraftMenu(): void {
     });
 
     Events.on("playerDisconnect", (player) => {
+        cancelExtraction(player, false);
         open.delete(player.id);
         extracting.delete(player.id);
         toldAt.delete(player.id);

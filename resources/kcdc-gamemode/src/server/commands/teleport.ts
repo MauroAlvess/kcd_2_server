@@ -13,9 +13,10 @@ export const teleportCommand: Command = {
 
     run({ player, args, reply, usage }: CommandContext): void {
         if (args[0] === "list") {
+            // At most sixty names in the line (2026-11-02: a server of hundreds wrote one line of all of them).
             const players = Player.all();
-            const line = players.map((other) => `${other.nickname} (#${other.playerIndex}${other.id === player.id ? ", you" : ""})`).join(", ");
-            reply.line(`${players.length} player(s): ${line}`);
+            const line = players.slice(0, 60).map((other) => `${other.nickname} (#${other.playerIndex}${other.id === player.id ? ", you" : ""})`).join(", ");
+            reply.line(`${players.length} player(s): ${line}${players.length > 60 ? `, and ${players.length - 60} more` : ""}`);
             return;
         }
 

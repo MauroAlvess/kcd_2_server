@@ -6,8 +6,8 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const { profession } = require("./reachpatch.cjs");
-// The tables' own pace: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, 4 times in play): the tests of the pace set it.
-profession.professionXp.rate = 1;
+// The tables' own XP and no day's limit: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, the standard of 2026-11-03): the tests of the pace set it.
+profession.useTables();
 
 // The cows' milk (src/server/cows.ts, 2026-10-27): the Agricultores milk the living cow with E, the hunters find milk in the carcass they butcher.
 
@@ -17,6 +17,8 @@ function load({ farmer = true, hunter = true } = {}) {
         held: [], released: [], working: false, farming: false, gathering: false, full: false, carcassFails: false, nearby: [], players: [], level: 0,
     };
     const npcs = new Map();
+    // The work at an animal that the milking and the shearing share (src/server/livestock-work.ts): the real module, one for each load.
+    const livestock = (() => { const box = { exports: {} }; vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/livestock-work.js"), "utf8"), box); return box.exports.livestockWork; })();
     const context = {
         exports: {},
         require: (id) => ({
@@ -25,6 +27,7 @@ function load({ farmer = true, hunter = true } = {}) {
             "./farm.js": { isFarming: () => state.farming },
             "./gather.js": { isGathering: () => state.gathering },
             "./guild-crafts.js": { mayCraft: (player, craft) => (craft === "horta" ? farmer : craft === "abate" ? hunter : false) },
+            "./livestock-work.js": { livestockWork: livestock },
             "./torch-down.js": { lowerTorch: (player) => state.lowered.push(player.id) },
         })[id] ?? assert.fail(`unexpected require ${id}`),
         console: { log: (line) => state.logs.push(line) },
@@ -72,7 +75,7 @@ function load({ farmer = true, hunter = true } = {}) {
         return body;
     };
     const timer = (ms) => state.timers.filter((one) => one.ms === ms && !one.cleared).at(-1);
-    return { api: context.exports, state, cow, player, npcs, timer };
+    return { api: context.exports, state, cow, player, npcs, timer, livestock };
 }
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -97,6 +100,7 @@ test("a farmer at a cow is held in the picking animation for six seconds, then t
     assert.deepEqual(plain(sut.state.emitted.at(-1)), { to: "Greta", event: "cow.state", payload: { on: true } });
     assert.equal(sut.api.isMilking(greta), true);
     assert.equal(sut.timer(6_000) !== undefined, true);
+    assert.equal(sut.livestock.of(greta.id), "ordenha", "the work is written down for the shearing to see");
 
     sut.timer(6_000).fn();
     assert.equal(sut.state.added.at(-1)[0], "milk");
@@ -107,6 +111,7 @@ test("a farmer at a cow is held in the picking animation for six seconds, then t
     assert.match(sut.state.chat.at(-1), /^Ordenha: \dx Leite \(\+4 XP\)\.$/);
     assert.equal(sut.api.isMilking(greta), false);
     assert.deepEqual(plain(sut.state.released), [77], "and walks again when the work is done");
+    assert.equal(sut.livestock.of(greta.id), "", "and nothing is left at the animal for the next work to find");
 
     // The same cow, at once: it has given.
     assert.match(sut.api.startMilking(greta, 77, Date.now()), /Esta vaca foi ordenhada há pouco: volte em (29|30) min\./);
@@ -155,6 +160,9 @@ test("only a farmer, on foot and alive, at a living cow within reach, not workin
         assert.equal(sut.api.startMilking(greta, 77, T0), "ocupado", busy);
         sut.state[busy] = false;
     }
+    sut.livestock.begin(greta.id, "tosquia");
+    assert.equal(sut.api.startMilking(greta, 77, T0), "ocupado", "shearing a sheep");
+    sut.livestock.end(greta.id);
     assert.deepEqual(sut.state.played, []);
     assert.equal(sut.state.added.length, 0);
 });
@@ -292,8 +300,8 @@ test("installed: the press asks, the step stops, the butchering adds the milk, a
     assert.equal(sut.api.isMilking(hunter), false);
 });
 
-test("the milking pays the trades' pace: four times the table's XP, said as it was paid (2026-10-27)", () => {
-    profession.professionXp.rate = 4;
+test("the milking pays the trades' standard: four times the table's XP, said as it was paid (2026-10-27; the standard of 2026-11-03 keeps it)", () => {
+    profession.useStandard();
     try {
         const sut = load();
         sut.cow();
@@ -303,6 +311,6 @@ test("the milking pays the trades' pace: four times the table's XP, said as it w
         assert.deepEqual(sut.state.xp, [["survival", 16]]);
         assert.match(sut.state.chat.at(-1), /^Ordenha: \dx Leite \(\+16 XP\)\.$/);
     } finally {
-        profession.professionXp.rate = 1;
+        profession.useTables();
     }
 });

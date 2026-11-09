@@ -78,7 +78,8 @@ function load({ admin = new Set(), twoDoors = false, locked = {}, lockSet = true
             if (id === "./properties.js") return fakeProperties;
             if (id === "./item-names.js") return { itemLine: (row) => `${row.amount}x ${row.name ?? row.item}` };
             if (id === "./rooms.js") return { holdsRoomPart: (player, guid) => (state.rooms[guid] ?? []).includes(player.steamId) };
-            if (id === "./thieves.js") return { noteTheft: (steamId, name, chestGuid, reason) => { calls.marks.push({ steamId, name, chest: chestGuid, reason }); return { count: 1, mark: null }; } };
+            // Each lock of somebody else's picked is counted (`thieves.ts` gives the mark at the third, 2026-11-02).
+            if (id === "./thieves.js") return { noteBreakIn: (steamId, name, part, what, now) => { calls.marks.push({ steamId, name, part, what, now }); return { count: calls.marks.length, mark: null }; } };
             if (id === "./family.js") return { sameFamily: (a, b) => state.family.some((pair) => pair.includes(a) && pair.includes(b) && a !== b) };
             if (id === "./store.js") {
                 return {
@@ -304,6 +305,12 @@ test("a lockpick begun at a door or chest warns the owner; the sweep finding it 
     assert.match(sut.told("zeca").at(-1), /Você arrombou Casa 03\./);
     assert.match(sut.told("hans").at(-1), /Alguém arrombou Casa 03!/);
     assert.ok(sut.calls.logs.some((line) => /zeca arrombou Casa 03/.test(line)));
+    // The lock of somebody else's picked is what counts toward a thief's mark (2026-11-01, user: "a tag só se aplica se o jogador arrombar um baú ou portão";
+    // the mark at the third since 2026-11-02, `thieves.ts`).
+    assert.equal(sut.calls.marks.length, 1);
+    assert.equal(sut.calls.marks[0].steamId, "zeca");
+    assert.equal(sut.calls.marks[0].part, DOOR);
+    assert.equal(sut.calls.marks[0].what, "Casa 03 (de Hans)");
 
     sut.locks.chest(zeca, { levelGuid: CHEST }, "lockpick");
     assert.match(sut.told("hans").at(-1), /tentando arrombar Casa 03 · Baú 1/);
@@ -311,7 +318,24 @@ test("a lockpick begun at a door or chest warns the owner; the sweep finding it 
     sut.locks.picked(CHEST);
     assert.equal(sut.told("zeca").filter((text) => /Baú 1/.test(text)).length, 0, "a picker of long ago is not named");
     assert.ok(sut.calls.logs.some((line) => /alguém arrombou Casa 03 · Baú 1/.test(line)));
+    assert.equal(sut.calls.marks.length, 1, "a picker of long ago is not marked either");
     assert.equal(sut.locks.chest(zeca, { levelGuid: CHEST }, "open"), undefined, "an opening is never refused");
+});
+
+test("picking a lock of one's own house, or of a house one has the key of or a relative owns, marks nobody (2026-11-01)", () => {
+    const sut = load({ locked: { [DOOR]: true } });
+    const hans = sut.makePlayer("hans");
+    sut.locks.door(hans, { guid: DOOR }, "lockpick", true);
+    sut.locks.picked(DOOR);
+    assert.ok(sut.told("hans").some((line) => /Você arrombou Casa 03\./.test(line)), "the picker is told, though he is the owner too");
+    const ana = sut.makePlayer("ana");
+    sut.give("ana", KEY);
+    sut.locks.chest(ana, { levelGuid: CHEST }, "lockpick");
+    sut.locks.picked(CHEST);
+    sut.state.family.push(["hans", "rui"]);
+    sut.locks.chest(sut.makePlayer("rui"), { levelGuid: CHEST }, "lockpick");
+    sut.locks.picked(CHEST);
+    assert.equal(sut.calls.marks.length, 0);
 });
 
 test("a door no area claims learns its sides from the game's own word at each press, and keeps them", () => {
@@ -340,28 +364,19 @@ test("a door no area claims learns its sides from the game's own word at each pr
     assert.equal(again.locks.sideOf(again.makePlayer("dan", { x: 98.5, y: 100, z: 10 }), DOOR), true, "what was learned before the restart still says the side");
 });
 
-test("what is taken from somebody else's chest is a theft; the owner, a key holder and a relative are free, and putting in is only written down", () => {
+test("what is taken from somebody else's chest is written down and marks nobody: since 2026-11-01 the mark is the picked lock's", () => {
     const sut = load();
     const change = (before, after) => ({ items: [{ before: before === null ? null : { item: "bread", amount: before, name: "Pão" }, after: after === null ? null : { item: "bread", amount: after, name: "Pão" } }] });
     const stash = { levelGuid: CHEST };
     const zeca = sut.makePlayer("zeca");
     sut.locks.taken(stash, zeca, change(3, 1));
-    assert.equal(sut.calls.marks.length, 1);
-    assert.match(sut.calls.marks[0].reason, /tirou itens de Casa 03 · Baú 1 \(de Hans\)/);
     assert.ok(sut.calls.logs.some((line) => /baús: zeca em Casa 03 · Baú 1 \(de Hans\): tirou 2x Pão/.test(line)));
-
     sut.locks.taken(stash, zeca, change(1, 4));
-    assert.equal(sut.calls.marks.length, 1, "putting in is no theft");
+    assert.ok(sut.calls.logs.some((line) => /baús: zeca em Casa 03 · Baú 1 \(de Hans\): pôs 3x Pão/.test(line)));
     sut.locks.taken(stash, sut.makePlayer("hans"), change(4, 0));
-    const ana = sut.makePlayer("ana");
-    sut.give("ana", KEY);
-    sut.locks.taken(stash, ana, change(4, 0));
-    sut.state.family.push(["hans", "rui"]);
-    sut.locks.taken(stash, sut.makePlayer("rui"), change(4, 0));
-    assert.equal(sut.calls.marks.length, 1, "the owner, a key holder and a relative take freely");
     sut.locks.taken(stash, null, change(4, 0));
     sut.locks.taken({ levelGuid: "ffff000000000000" }, zeca, change(4, 0));
-    assert.equal(sut.calls.marks.length, 1);
+    assert.equal(sut.calls.marks.length, 0);
 });
 
 test("everything is wired: the game's door and chest events, the client's E, look and F, the sweep's picks, and the stop", () => {

@@ -27,8 +27,7 @@
  * can join as another Steam id can load that character; closing that needs `enforce` tickets, not this file.
  */
 
-import { leaveOutCombos, takeOutCombos } from "./esgrima.js";
-import { cleanSnapshot } from "./perk-guard.js";
+import { cleanSnapshot, giveStrongPerks, isStrongKeeper, KEEPER_GRANT_MS, strongName } from "./perk-guard.js";
 import { ensureDir, read, write } from "./store.js";
 
 const DIR = "playerdata/characters";
@@ -252,6 +251,39 @@ export function keepClimbs(live: ProgressionSnapshot, saved: ProgressionSnapshot
     return { snapshot: kept.length === 0 ? live : { ...live, tracks }, kept };
 }
 
+/** The level every track of a new character starts at. */
+const START_LEVEL = 5;
+
+/**
+ * Whether the live progression is a new character's where the saved one had climbed: every track saved above the start reads at the start. Then it is not the player's (a restore
+ * that did not hold, or the game handed the body a fresh one), and neither are its perks and points. A track or two behind with the rest where it was (an XP that read a little
+ * low) is not that: the perks and points the player has now are theirs.
+ */
+export function looksFresh(live: ProgressionSnapshot, saved: ProgressionSnapshot | null): boolean {
+    if (saved === null) {
+        return false;
+    }
+    const climbed = Object.entries(saved.tracks).filter(([name, was]) => !DERIVED_TRACKS.has(name) && typeof was?.level === "number" && was.level > START_LEVEL);
+    return climbed.length > 0 && climbed.every(([name]) => (live.tracks[name]?.level ?? START_LEVEL) <= START_LEVEL);
+}
+
+/**
+ * What of the live progression may be written over the saved one (2026-11-03): the tracks that read behind are put back (`keepClimbs`), and when the live progression is a new
+ * character's (`looksFresh`) its perks and points are not written either, the saved ones are kept. Until then only the tracks were kept: on 2026-11-02 the game handed Lev,
+ * Arthur, Agnes and Ludmilla a fresh progression in the middle of a session, the periodic look put their levels back, and the next save wrote the new character's perks and
+ * points over theirs: every passive and every point was lost (Lev had 150 perks on 10-30 and 26 after).
+ */
+export function keepProgression(live: ProgressionSnapshot, saved: ProgressionSnapshot | null): { readonly snapshot: ProgressionSnapshot; readonly kept: string[]; readonly fresh: boolean } {
+    const climbed = keepClimbs(live, saved);
+    if (saved === null || climbed.kept.length === 0 || !looksFresh(live, saved)) {
+        return { ...climbed, fresh: false };
+    }
+    return { snapshot: { ...climbed.snapshot, perks: [...saved.perks], perkPoints: { ...saved.perkPoints } }, kept: climbed.kept, fresh: true };
+}
+
+/** How long after a restore that sent the perks a keeper's strong passives are handed back (the restore replaced the perk set). */
+const REGRANT_AFTER_MS = 3_000;
+
 /**
  * Looks at the player's progression against what is saved and, when a track reads lower, asks the game to take it again: in the first looks
  * after the restore everything that was asked for (`whole`: the perks and points too, which a restore that did not hold lost with the levels),
@@ -263,15 +295,29 @@ function verifyProgression(player: Player, session: Session, when: string, whole
     if (saved === null || live === null || !session.tracked || session.locked || !session.progressionRestored || session.repairs >= MAX_REPAIRS) {
         return;
     }
-    const { snapshot, kept } = keepClimbs(live, saved);
+    const { snapshot, kept, fresh } = keepProgression(live, saved);
     if (kept.length === 0) {
         return;
     }
     session.repairs += 1;
     const lines = kept.map((name) => `${name} ${live.tracks[name]?.level ?? 0} < ${saved.tracks[name]?.level ?? 0}`).join(", ");
-    // Later only the tracks: a restore replaces the perk set it is given, and since KCDC 1.7.2 leaves a blocked perk (a weapon combo, `esgrima.ts`) out of it, so the live perks are not sent back.
-    const accepted = player.restoreProgression((whole ? { ...saved, tracks: snapshot.tracks } : { tracks: snapshot.tracks }) as ProgressionSnapshot);
-    console.log(`characters: ${player.nickname}: ${kept.length} trilha(s) abaixo do salvo (${lines}); ${accepted ? "restaurei de novo" : "o jogo não aceitou restaurar de novo"} (${when}, vez ${session.repairs})`);
+    // Later only the tracks: a restore replaces the perk set it is given, and since KCDC 1.7.2 leaves a blocked perk out of it, so the live perks are not
+    // sent back. Unless the live progression is a new character's (2026-11-03): then the perks and points of the file go back with the levels, and a keeper's strong
+    // passives are handed over again a moment after.
+    const sendsPerks = whole || fresh;
+    const accepted = player.restoreProgression((sendsPerks ? { ...saved, tracks: snapshot.tracks } : { tracks: snapshot.tracks }) as ProgressionSnapshot);
+    console.log(`characters: ${player.nickname}: ${kept.length} trilha(s) abaixo do salvo (${lines}); ${accepted ? (fresh && !whole ? "o jogo deu um personagem novo: restaurei de novo, com as passivas e os pontos" : "restaurei de novo") : "o jogo não aceitou restaurar de novo"} (${when}, vez ${session.repairs})`);
+    if (accepted && fresh && !whole) {
+        setTimeout(() => {
+            const again = Player.getById(player.id);
+            if (again === null || !again.ready || sessions.get(player.id) !== session) {
+                return;
+            }
+            if (isStrongKeeper(again.steamId)) {
+                giveStrongPerks(again);
+            }
+        }, REGRANT_AFTER_MS);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -322,6 +368,33 @@ export function kitsOf(player: Player): readonly string[] {
 // An administrator's hand on the file of a character who is not here (`commands/nivel.ts`).
 
 /** What the file says of a character's progression, or null when there is no file or no progression in it. */
+/** How long what a file says of when a player was last here is believed before it is read again. */
+const SEEN_CACHE_MS = 10 * 60_000;
+const seenCache = new Map<string, { readonly at: number | null; readonly readAt: number }>();
+
+/**
+ * When a player was last in the game: now for one who is here; otherwise when their character was last written (`savedAt`: while they play and when they leave), or null
+ * for one with no character at all. For a lord's taking back a house of somebody who stopped coming (`properties.ts`, `reclaimHouse`).
+ */
+export function lastSeenAt(steamId: string, now = Date.now()): number | null {
+    for (const session of sessions.values()) {
+        if (session.steamId === steamId) {
+            return now;
+        }
+    }
+    if (!STEAM_ID.test(steamId)) {
+        return null;
+    }
+    const cached = seenCache.get(steamId);
+    if (cached !== undefined && now - cached.readAt < SEEN_CACHE_MS) {
+        return cached.at;
+    }
+    const loaded = read<{ savedAt?: unknown }>(pathFor(steamId));
+    const at = loaded.status === "ok" && typeof loaded.value?.savedAt === "number" && loaded.value.savedAt > 0 ? loaded.value.savedAt : null;
+    seenCache.set(steamId, { at, readAt: now });
+    return at;
+}
+
 export function savedProgression(steamId: string): ProgressionSnapshot | null {
     if (!STEAM_ID.test(steamId)) {
         return null;
@@ -528,8 +601,7 @@ function collect(player: Player, session: Session, now: number): CharacterRecord
     if (session.progressionRestored) {
         const progression = player.progression;
         if (progression !== null) {
-            // The weapon combos are the Esgrima's, in its own file: never saved here (what the game holds of them may be an administrator's loan).
-            next.progression = leaveOutCombos(keepClimbs(progression, session.record.progression).snapshot);
+            next.progression = keepProgression(progression, session.record.progression).snapshot;
         }
     }
 
@@ -705,18 +777,34 @@ export function installCharacterState(): void {
             return;
         }
         if (session.record.progression !== null) {
-            // A perk the alchemy tables cannot work with (`perk-guard.ts`) is left out, and its point given back.
-            const cleaned = cleanSnapshot(session.record.progression);
-            if (cleaned.removed.length > 0) {
+            // A perk the alchemy tables cannot work with, or a passive too strong for the server (`perk-guard.ts`), is left out, and its point given back; a keeper's strong ones come back by `addPerk`.
+            const cleaned = cleanSnapshot(session.record.progression, player.steamId);
+            if (cleaned.removed.length > 0 || cleaned.kept.length > 0) {
                 session.record.progression = cleaned.snapshot;
-                Chat.sendToPlayer(player, `Você tinha ${cleaned.removed.join(" e ")}, que impede as mesas de alquimia de funcionarem no servidor por enquanto: o talento foi tirado e o ponto voltou para você, para gastar em outro.`);
-                console.log(`characters: ${player.nickname}: ${cleaned.removed.join(", ")} tirado(s), o ponto devolvido`);
             }
-            // The weapon combos are the Esgrima's to keep (`esgrima.ts`): left out of what the game is asked to restore, written down there and put back by it a little after.
-            session.record.progression = takeOutCombos(player.steamId, session.record.progression);
+            const alchemy = cleaned.removed.filter((perk) => !cleaned.strong.includes(perk));
+            if (alchemy.length > 0) {
+                Chat.sendToPlayer(player, `Você tinha ${alchemy.join(" e ")}, que impede as mesas de alquimia de funcionarem no servidor por enquanto: o talento foi tirado e o ponto voltou para você, para gastar em outro.`);
+                console.log(`characters: ${player.nickname}: ${alchemy.join(", ")} tirado(s), o ponto devolvido`);
+            }
+            if (cleaned.strong.length > 0) {
+                const named = cleaned.strong.map(strongName);
+                const many = named.length > 1;
+                Chat.sendToPlayer(player, `${many ? "As passivas" : "A passiva"} ${named.join(", ")} ${many ? "foram desativadas" : "foi desativada"} no servidor, por ser${many ? "em" : ""} forte${many ? "s" : ""} demais para o RP: ${many ? `os ${named.length} pontos voltaram` : "o ponto voltou"} para você, para gastar em outra${many ? "s" : ""}.`);
+                console.log(`characters: ${player.nickname}: ${cleaned.strong.join(", ")} tirada(s) (forte demais), ${cleaned.strong.length} ponto(s) devolvido(s)`);
+            }
             if (!player.restoreProgression(session.record.progression)) {
                 console.log(`characters: ${player.nickname}: a progressão salva não foi aceita`);
             }
+        }
+        // The keepers of the strong passives get them by `addPerk`, a while after (a blocked perk is left out of the restore).
+        if (isStrongKeeper(player.steamId)) {
+            setTimeout(() => {
+                const again = Player.getById(player.id);
+                if (again !== null && again.ready && sessions.get(player.id) === session) {
+                    giveStrongPerks(again);
+                }
+            }, KEEPER_GRANT_MS);
         }
         session.restored = session.record.progression;
         session.progressionRestored = true;

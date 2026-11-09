@@ -4,15 +4,23 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-function load({ navigationReady = true, floor = (point) => ({ x: point.x + 1, y: point.y, z: point.z - 0.4 }), doors = [] } = {}) {
+function load({ kuttenberg = true, navigationReady = true, floor = (point) => ({ x: point.x + 1, y: point.y, z: point.z - 0.4 }), doors = [] } = {}) {
     const handlers = new Map();
     const timers = [];
     const cleared = [];
     const players = new Map();
     const logs = [];
+    // The verses of the death screen: the real module, which needs nothing.
+    const verses = (() => { const box = { exports: {}, Math }; vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/death-verses.js"), "utf8"), box); return box.exports; })();
+    const modules = {
+        "./heal.js": { cure: (player, what) => { player.cures.push(what); return true; } },
+        "./language.js": { languageOf: (player) => player.language ?? "pt" },
+        "./level.js": { onKuttenberg: () => kuttenberg },
+        "./death-verses.js": verses,
+    };
     const context = {
         exports: {},
-        require: (id) => (id === "./heal.js" ? { cure: (player, what) => { player.cures.push(what); return true; } } : assert.fail(`unexpected require ${id}`)),
+        require: (id) => modules[id] ?? assert.fail(`unexpected require ${id}`),
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
         setTimeout: (fn, ms) => { timers.push({ fn, ms, done: false }); return timers.length; },
         clearTimeout: (id) => cleared.push(id),
@@ -41,9 +49,10 @@ function load({ navigationReady = true, floor = (point) => ({ x: point.x + 1, y:
             maxHealth: 100,
             setStat(stat, value) { this.stats.push([stat, value]); return true; },
             reviveAnswer: true,
-            revive() { this.revived += 1; return this.reviveAnswer; },
-            spawn(point) { this.spawned.push({ ...point }); return true; },
-            emit(name, payload) { this.notes.push({ name, payload: JSON.parse(payload) }); },
+            order: [],
+            revive() { this.revived += 1; this.order.push("revive"); return this.reviveAnswer; },
+            spawn(point) { this.spawned.push({ ...point }); this.order.push("spawn"); return true; },
+            emit(name, payload) { this.notes.push({ name, payload: JSON.parse(payload) }); this.order.push(name.replace("kcdc-gamemode:", "")); },
         };
         players.set(id, player);
         return player;
@@ -60,7 +69,7 @@ function load({ navigationReady = true, floor = (point) => ({ x: point.x + 1, y:
     };
     // The first timer is the churches' doors, a little after the start.
     timers[0].done = true;
-    return { api: context.exports, handlers, timers, cleared, players, logs, makePlayer, runTimers, die: (player) => handlers.get("playerDied")(player) };
+    return { api: context.exports, verses, handlers, timers, cleared, players, logs, makePlayer, runTimers, die: (player) => handlers.get("playerDied")(player) };
 }
 
 test("the nearest church is the one whose donation box is nearest on the map", () => {
@@ -78,8 +87,9 @@ test("a player who dies is told where they will wake, revived after a while, the
     const hans = sut.makePlayer(4, "76561198000000001", { x: 700, y: 3300, z: 140 });
     sut.die(hans);
 
-    assert.match(hans.chat[0], /Você caiu gravemente ferido\. Em 8 segundos você é levado para a igreja de Suchdol\./);
-    assert.equal(sut.timers[1].ms, 8000);
+    assert.match(hans.chat[0], /Você caiu gravemente ferido\. Em 10 segundos você é levado para a igreja de Suchdol\./);
+    assert.equal(sut.timers[1].ms, 10000, "ten seconds, the counter of the death screen");
+    assert.equal(sut.api.RESPAWN_DELAY_MS, 10_000);
     assert.equal(hans.revived, 0, "the body stays down for the delay");
 
     sut.runTimers();
@@ -92,6 +102,45 @@ test("a player who dies is told where they will wake, revived after a while, the
     assert.ok(hans.notes.some((note) => /arrastado até a igreja/.test(note.payload.text)), "also on the game's notification line");
     assert.deepEqual(hans.stats, [["health", 30]], "and wakes hurt: 30% of the health");
     assert.deepEqual(hans.cures, ["sangramento"], "but not bleeding: one who died bleeding woke and died again (Garcia, 2026-10-19)");
+});
+
+test("the death screen: the player is sent the verse, its reference, the line over the counter and the ten seconds when the body falls, and told it is over once they are where they wake (2026-10-31)", () => {
+    const sut = load();
+    const hans = sut.makePlayer(4, "76561198000000001", { x: 700, y: 3300, z: 140 });
+    sut.die(hans);
+    const begin = hans.notes.find((note) => note.name === "kcdc-gamemode:death.begin");
+    assert.ok(begin, "the client is asked for the screen");
+    assert.equal(begin.payload.seconds, 10);
+    assert.equal(begin.payload.label, "Você volta a si em");
+    assert.ok(sut.verses.VERSES.some((verse) => verse.pt === begin.payload.text && verse.ref.pt === begin.payload.ref), "a verse of the list, with its own reference");
+    assert.equal(hans.notes.filter((note) => note.name === "kcdc-gamemode:death.end").length, 0, "not over yet");
+
+    sut.runTimers();
+    assert.deepEqual(hans.order.filter((name) => ["death.begin", "revive", "spawn", "death.end"].includes(name)), ["death.begin", "revive", "spawn", "death.end"], "begin, the body raised, taken to the church, and then the end: the camera glides back to whoever stands there");
+    assert.equal(hans.notes.filter((note) => note.name === "kcdc-gamemode:death.end").length, 1);
+});
+
+test("the death screen speaks the language the player chose, and a player who left in the meantime is sent nothing", () => {
+    const sut = load();
+    const kat = sut.makePlayer(5, "76561198000000002", { x: 700, y: 3300, z: 140 });
+    kat.language = "en";
+    sut.die(kat);
+    const begin = kat.notes.find((note) => note.name === "kcdc-gamemode:death.begin");
+    assert.equal(begin.payload.label, "You will rise again in");
+    assert.ok(sut.verses.VERSES.some((verse) => verse.en === begin.payload.text && verse.ref.en === begin.payload.ref));
+
+    const gone = sut.makePlayer(6, "76561198000000003", { x: 700, y: 3300, z: 140 });
+    sut.die(gone);
+    sut.handlers.get("playerDisconnect")(gone);
+    sut.runTimers();
+    assert.equal(gone.notes.filter((note) => note.name === "kcdc-gamemode:death.end").length, 0);
+    // A client that cannot take the message does not stop the wake-up.
+    const deaf = sut.makePlayer(7, "76561198000000004", { x: 700, y: 3300, z: 140 });
+    const emitted = deaf.emit.bind(deaf);
+    deaf.emit = (name, payload) => { if (name.includes("death.")) throw new Error("gone"); emitted(name, payload); };
+    sut.die(deaf);
+    sut.runTimers();
+    assert.equal(deaf.revived, 1);
 });
 
 test("without a navigation mesh the player wakes just above the box's spot", () => {
@@ -110,6 +159,7 @@ test("somebody already up (an administrator revived them) is not moved", () => {
     hans.reviveAnswer = false;
     sut.runTimers();
     assert.deepEqual(hans.spawned, []);
+    assert.equal(hans.notes.filter((note) => note.name === "kcdc-gamemode:death.end").length, 1, "but the death screen goes: somebody raised them");
 });
 
 test("a player who left is not revived, and their network id going to somebody else moves nobody", () => {
@@ -173,4 +223,26 @@ test("a citizen wakes in their town, said so; somebody the resolver knows nothin
     sut.runTimers();
     assert.match(other.chat.at(-1), /arrastado até a igreja de Suchdol/);
     assert.equal(other.spawned.length, 1);
+});
+
+// Another level (2026-11-09, "coloque nosso servidor do zero com o mapa 1 de kcd2"): the churches and the towns are Kuttenberg's coordinates, so on Trosky nobody is taken to them.
+
+test("on another level there are no churches, and nobody is taken to one", () => {
+    const { api } = load({ kuttenberg: false });
+    assert.equal(api.CHURCHES.length, 0);
+    assert.equal(api.nearestChurch({ x: 760, y: 3260 }), null);
+    assert.equal(load().api.CHURCHES.length, 8, "Kuttenberg's eight are as they were");
+});
+
+test("on another level a player who dies is told they will get up where they fell, is revived, and is not moved: the screen goes, the wound comes", () => {
+    const sut = load({ kuttenberg: false });
+    const hans = sut.makePlayer(4, "76561198000000001", { x: 700, y: 3300, z: 140 });
+    sut.die(hans);
+    assert.match(hans.chat[0], /Você caiu gravemente ferido\. Em 10 segundos você se levanta onde caiu\./);
+    sut.runTimers();
+    assert.equal(hans.revived, 1);
+    assert.deepEqual(hans.spawned, [], "no move to a church that is not there");
+    assert.ok(hans.chat.some((line) => /levantou-se onde caiu/.test(line)), hans.chat.join(" | "));
+    assert.ok(sut.logs.some((line) => /respawn: P4 acordou onde caiu/.test(line)), sut.logs.join(" | "));
+    assert.ok(hans.notes.some((note) => note.name === "kcdc-gamemode:death.end"), "the death screen is taken off");
 });

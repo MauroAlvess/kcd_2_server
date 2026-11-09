@@ -8,7 +8,7 @@ const RESOURCE = "kcdc-gamemode";
 const dist = (name) => fs.readFileSync(path.join(__dirname, "../dist/server", name), "utf8");
 const MINUTE = 60_000;
 
-function load({ saved = null, carts = [] } = {}) {
+function load({ saved = null, carts = [], kuttenberg = true } = {}) {
     const files = new Map();
     if (saved !== null) files.set("playerdata/stuck.json", saved);
     const writes = [];
@@ -20,7 +20,7 @@ function load({ saved = null, carts = [] } = {}) {
     const clock = { now: 10_000_000 };
 
     const respawn = { exports: {} };
-    vm.runInNewContext(dist("respawn.js"), { exports: respawn.exports, require: () => ({ cure: () => true }), Navigation: { ready: false }, Events: { on() {} }, Chat: {}, Player: {}, Door: {} });
+    vm.runInNewContext(dist("respawn.js"), { exports: respawn.exports, require: (id) => (id === "./level.js" ? { onKuttenberg: () => kuttenberg } : { cure: () => true }), Navigation: { ready: false }, Events: { on() {} }, Chat: {}, Player: {}, Door: {} });
     const store = {
         ensureDir() {},
         read: (file) => (files.has(file) ? (files.get(file) === "corrupt" ? { status: "corrupt", reason: "bad" } : { status: "ok", value: JSON.parse(files.get(file)) }) : { status: "missing" }),
@@ -166,4 +166,15 @@ test("the panel's event answers with a notice and the new state, and the status 
     assert.equal(sut.payloads.length, 1);
     assert.deepEqual(JSON.parse(JSON.stringify(sut.payloads[0](player))), { stuck: { readyIn: 3600 } });
     assert.deepEqual(JSON.parse(JSON.stringify(sut.payloads[0](body(2, 0, 0)))), { stuck: { readyIn: 0 } });
+});
+
+test("Fiquei preso on a level with no churches takes nobody anywhere, says why, and does not use up the hour (2026-11-09)", () => {
+    const sut = load({ kuttenberg: false });
+    const player = body(1, 760, 3240);
+    const outcome = sut.api.unstick(player);
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.message, /Este mapa não tem igrejas/);
+    assert.deepEqual(player.moves, [], "no teleport to a place of another level");
+    assert.equal(sut.api.stuckLog.remaining(`7656119800000000${1}`), 0, "the hour is not started: asking again is not refused for it");
+    assert.equal(sut.writes.length, 0, "and nothing is written");
 });

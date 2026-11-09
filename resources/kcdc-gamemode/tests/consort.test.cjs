@@ -39,7 +39,7 @@ test("the wife of a lord is a Lady, called by her own character's name; the wife
         names: { [WIFE]: "Elisabeth of England" },
         titles: { [LORD]: ["lorde"] },
     });
-    assert.deepEqual(plain(sut.consortsOf(LORD)), [{ label: "Lady", name: "Elisabeth of England", courtesy: true, text: "Lady Elisabeth of England" }], "the tree's own word for her is not what she is called: her character's name is");
+    assert.deepEqual(plain(sut.consortsOf(LORD)), [{ label: "Lady", name: "Elisabeth of England", courtesy: true, text: "Lady Elisabeth of England", steamId: WIFE }], "the tree's own word for her is not what she is called: her character's name is");
 
     for (const [title, label] of [["marques", "Marquesa"], ["principe", "Princesa"], ["rei", "Rainha"], ["cavaleiro", "Dama"], ["escudeiro", "Dama"], ["pequeno-nobre", "Dama"]]) {
         const other = load({ spouses: { [LORD]: [{ steamId: null, name: "Kath", relation: "esposa" }] }, genders: { [LORD]: "male" }, titles: { [LORD]: [title] } });
@@ -50,13 +50,13 @@ test("the wife of a lord is a Lady, called by her own character's name; the wife
 
 test("a spouse of somebody with no rank of the blood, and a husband, are only a spouse: the name, and the plain word in brackets", () => {
     const burgher = load({ spouses: { [BURGHER]: [{ steamId: null, name: "Kath", relation: "esposa" }] }, genders: { [BURGHER]: "male" }, titles: { [BURGHER]: ["burgomestre"] } });
-    assert.deepEqual(plain(burgher.consortsOf(BURGHER)), [{ label: "Esposa", name: "Kath", courtesy: false, text: "Kath (esposa)" }], "a burgomaster's wife is no lady");
+    assert.deepEqual(plain(burgher.consortsOf(BURGHER)), [{ label: "Esposa", name: "Kath", courtesy: false, text: "Kath (esposa)", steamId: null }], "a burgomaster's wife is no lady");
 
     const commoner = load({ spouses: { [BURGHER]: [{ steamId: null, name: "Kath", relation: "esposa" }] } });
     assert.equal(commoner.consortsOf(BURGHER)[0].label, "Esposa", "nor a commoner's");
 
     const lady = load({ spouses: { [LORD]: [{ steamId: null, name: "Jan", relation: "esposo" }] }, genders: { [LORD]: "female" }, titles: { [LORD]: ["lorde"] } });
-    assert.deepEqual(plain(lady.consortsOf(LORD)), [{ label: "Esposo", name: "Jan", courtesy: false, text: "Jan (esposo)" }], "a Lady in her own right has a husband, not a lord's courtesy for him");
+    assert.deepEqual(plain(lady.consortsOf(LORD)), [{ label: "Esposo", name: "Jan", courtesy: false, text: "Jan (esposo)", steamId: null }], "a Lady in her own right has a husband, not a lord's courtesy for him");
 });
 
 test("who a spouse is comes from the character when the spouse is a player: the gender of the body, and the name; unknown, and the word is Consorte", () => {
@@ -66,7 +66,7 @@ test("who a spouse is comes from the character when the spouse is a player: the 
         names: { [WIFE]: "Dorota Capon" },
         titles: { [LORD]: ["lorde"], [KNIGHT]: ["cavaleiro"] },
     });
-    assert.deepEqual(plain(sut.consortsOf(LORD)), [{ label: "Consorte", name: "Dorota Capon", courtesy: false, text: "Dorota Capon (consorte)" }], "another tree names her and her body's gender is not known: no style is guessed");
+    assert.deepEqual(plain(sut.consortsOf(LORD)), [{ label: "Consorte", name: "Dorota Capon", courtesy: false, text: "Dorota Capon (consorte)", steamId: WIFE }], "another tree names her and her body's gender is not known: no style is guessed");
 
     const known = load({
         spouses: { [LORD]: [{ steamId: WIFE, name: "", relation: null }, { steamId: KNIGHT, name: "Ivan", relation: "esposa" }] },

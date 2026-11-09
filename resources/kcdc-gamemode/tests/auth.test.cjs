@@ -467,13 +467,10 @@ test("/admin is one of the commands a plain player may run, and takes exactly on
     const replies = [];
     const usages = [];
     const refreshed = [];
-    const changed = [];
     const status = { sendSocial: (target) => refreshed.push(target.id) };
-    // The weapon combos follow the role (esgrima.ts): all of them for an administrator, only their own for a player.
-    const esgrima = { esgrima: { roleChanged: (target) => changed.push(target.id) } };
     const context = {
         exports: {},
-        require: (id) => (id === "../auth.js" ? sut.api : id === "../status.js" ? status : id === "../esgrima.js" ? esgrima : assert.fail(`unexpected require ${id}`)),
+        require: (id) => (id === "../auth.js" ? sut.api : id === "../status.js" ? status : assert.fail(`unexpected require ${id}`)),
     };
     vm.runInNewContext(fs.readFileSync(path.join(ROOT, "dist/server/commands/admin.js"), "utf8"), context);
     const run = (args) => context.exports.adminCommand.run({ player, args, reply: { line: (text) => replies.push(text) }, usage: () => usages.push("usage") });
@@ -484,17 +481,14 @@ test("/admin is one of the commands a plain player may run, and takes exactly on
     assert.deepEqual(replies, []);
 
     assert.deepEqual(refreshed, [], "nothing to tell the panel while nothing changed");
-    assert.deepEqual(changed, [], "nor the combos");
 
     await run([`admin.${ADMIN_SECRET}`]);
     assert.match(replies.at(-1), /agora é administrador/);
     assert.equal(sut.api.roleOf(player), "admin");
     assert.deepEqual(refreshed, [player.id], "the panel hears the new role at once, so F3 opens without F2 first");
-    assert.deepEqual(changed, [player.id], "and the weapon combos are given at once (2026-10-26)");
 
     await run(["sair"]);
     assert.equal(sut.api.roleOf(player), "player");
-    assert.deepEqual(changed, [player.id, player.id], "and taken out of the game again when the role goes");
 });
 
 test("/admin sair turns an administrator back into a common player until they leave, and the ticket makes them one again", async () => {

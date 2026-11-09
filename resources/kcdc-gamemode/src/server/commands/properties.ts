@@ -3,6 +3,7 @@ import type { Command, CommandContext } from "../command.js";
 import { retarget } from "../players.js";
 import {
     assignOwner,
+    attachDoors,
     clearOwner,
     describeCastle,
     describeCensus,
@@ -17,6 +18,7 @@ import {
     mapRegion,
     ownerOf,
     propertiesNear,
+    propertyOfDoor,
     regionNames,
     registerProperty,
     REGIONS,
@@ -57,6 +59,7 @@ export const propertyCommand: Command = {
         "/propriedade regioes  -- as regiões que já existem",
         "/propriedade trancar <id>  |  /propriedade destrancar <id>",
         '/propriedade registrar "<nome>" [região]  -- a porta mais próxima vira essa propriedade, trancada',
+        "/propriedade porta <id>  -- a porta mais perto de você (até 4 m) que não é de nenhuma propriedade passa a ser desta (uma casa que ficou sem uma porta)",
         "/propriedade remover <id>",
         "/propriedade listar [região]",
         "/propriedade lugar [região]  -- junta numa propriedade só cada lugar da região (a estalagem, o haras, a Toca do Diabo)",
@@ -124,6 +127,30 @@ export const propertyCommand: Command = {
                     `Lugares que o mapa nomeia (${places.length}); qualquer um serve para /propriedade mapear "<nome>":`,
                     ...places.map((place) => `  ${place.name} -- em torno de ${((place.box.minX + place.box.maxX) / 2).toFixed(0)} ${((place.box.minY + place.box.maxY) / 2).toFixed(0)}, ${(place.box.maxX - place.box.minX).toFixed(0)} x ${(place.box.maxY - place.box.minY).toFixed(0)} m`),
                 ]);
+                return;
+            }
+
+            case "porta": {
+                const id = rest.join(" ").replace(/^"|"$/g, "");
+                if (id === "") {
+                    reply.line("Uso: /propriedade porta <id>, de pé junto da porta que falta (até 4 m).");
+                    return;
+                }
+                if (getProperty(id) === null) {
+                    reply.line(`Nenhuma propriedade '${id}'.`);
+                    return;
+                }
+                const near = Door.all()
+                    .filter((door) => !door.spawned && propertyOfDoor(door.guid) === null)
+                    .map((door) => ({ door, distance: Math.hypot(door.position.x - player.position.x, door.position.y - player.position.y) }))
+                    .filter((entry) => entry.distance <= 4)
+                    .sort((a, b) => a.distance - b.distance)[0];
+                if (near === undefined) {
+                    reply.line("Nenhuma porta solta a menos de 4 m de você (as que já são de uma propriedade ficam como estão).");
+                    return;
+                }
+                const report = attachDoors(id, [near.door.guid]);
+                reply.line(report.added.length > 0 ? `${report.message} (a porta a ${near.distance.toFixed(1)} m).` : report.message);
                 return;
             }
 

@@ -67,7 +67,9 @@ function load({ saved = LOOK, money: coinsHeld = 1000 } = {}) {
             }
             if (id === "./creator-catalog.js") return catalog;
             if (id === "./money.js") return money;
-            if (id === "./townsfolk.js") return { installPosts: () => ({ standing: () => new Map() }) };
+            if (id === "./townsfolk.js") return { installPosts: () => ({ standing: () => new Map(), sleep() {}, wake: () => null }), placeOf: (spot) => spot };
+            // The barbers' chosen places (2026-11-02): none kept.
+            if (id === "./store.js") return { ensureDir() {}, read: () => ({ status: "missing" }), write() {} };
             assert.fail(`unexpected require ${id}`);
         },
     };

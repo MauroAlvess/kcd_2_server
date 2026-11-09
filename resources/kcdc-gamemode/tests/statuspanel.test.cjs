@@ -404,20 +404,18 @@ test("a section name that is not a plain word is not remembered", () => {
     assert.deepEqual({ ...tab.payload }, { tab: "players" });
 });
 
-test("the page's guild, faction and showcase choices reach the server as the strings it chose", () => {
+test("the page's guild choice reaches the server as the string it chose; the oath of a faction and the showcase are not relayed any more (2026-11-09)", () => {
     const { state, press, page, pageReady } = load();
     press();
     pageReady();
     state.sent.length = 0;
 
+    assert.equal(state.pageHandlers.get("status:selectFaction"), undefined, "the oath of a faction is not relayed any more");
+    assert.equal(state.pageHandlers.get("status:selectShowcase"), undefined, "the Cidadania tab beside the guild left with its section: nothing picks the showcase any more");
     page("status:selectGuild", { guildId: "venatores" });
-    page("status:selectFaction", { factionId: "corvo" });
-    page("status:selectShowcase", { showcase: "faction" });
 
     assert.deepEqual(state.sent, [
         { name: "kcdc-gamemode:status.selectGuild", payload: JSON.stringify({ guildId: "venatores" }) },
-        { name: "kcdc-gamemode:status.selectFaction", payload: JSON.stringify({ factionId: "corvo" }) },
-        { name: "kcdc-gamemode:status.selectShowcase", payload: JSON.stringify({ showcase: "faction" }) },
     ]);
 });
 
@@ -427,11 +425,11 @@ test("a choice that is not a string never reaches the server", () => {
     pageReady();
     state.sent.length = 0;
 
-    for (const name of ["status:selectGuild", "status:selectFaction", "status:selectShowcase"]) {
+    for (const name of ["status:selectGuild"]) {
         page(name, null);
-        page(name, "corvo");
+        page(name, "venatores");
         page(name, {});
-        page(name, { guildId: 7, factionId: 7, showcase: 7 });
+        page(name, { guildId: 7 });
     }
     assert.deepEqual(state.sent, []);
 });
@@ -479,11 +477,14 @@ test("removing a relative and setting a surname reach the server, an empty surna
     page("status:familySurname", { surname: "Capon" });
     page("status:familySurname", { surname: "" });
     page("status:familySurname", { surname: null });
+    page("status:familyProfile", { description: "A casa dos Capon", crest: "https://example.com/c.png", other: 1 });
+    page("status:familyProfile", { description: 7, crest: "x" });
 
     assert.deepEqual(state.sent, [
         { name: "kcdc-gamemode:status.familyRemove", payload: JSON.stringify({ id: "p3" }) },
         { name: "kcdc-gamemode:status.familySurname", payload: JSON.stringify({ surname: "Capon" }) },
         { name: "kcdc-gamemode:status.familySurname", payload: JSON.stringify({ surname: "" }) },
+        { name: "kcdc-gamemode:status.familyProfile", payload: JSON.stringify({ description: "A casa dos Capon", crest: "https://example.com/c.png" }) },
     ]);
 });
 

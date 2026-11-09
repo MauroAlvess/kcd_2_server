@@ -81,8 +81,8 @@ export const TITLES: readonly TitleDef[] = [
     },
     // The great lords.
     {
-        id: "principe", male: "Príncipe", female: "Princesa", branch: "great", tier: 1, kind: "blood",
-        gloss: "Grande senhor territorial: governa um território de alto status.",
+        id: "principe", male: "Príncipe", female: "Princesa", native: "kníže", branch: "great", tier: 1, kind: "blood",
+        gloss: "Grande senhor territorial: governa um território de alto status. Na Boêmia, o kníže era o duque de um ducado, como os da Silésia, vassalos da Coroa.",
         appoints: ["lorde", ...NOBILITY_BELOW_LORD, ...LORDSHIP_OFFICES, ...TOWN_OFFICES],
     },
     {
@@ -102,7 +102,7 @@ export const TITLES: readonly TitleDef[] = [
         appoints: ["escudeiro", "pequeno-nobre", "soldado"],
     },
     {
-        id: "escudeiro", male: "Escudeiro", female: "Escudeira", branch: "lesser", tier: 2, kind: "blood",
+        id: "escudeiro", male: "Escudeiro", female: "Escudeira", native: "panoš", branch: "lesser", tier: 2, kind: "blood",
         gloss: "Pequena nobreza: pode possuir uma propriedade modesta, servir militarmente e buscar o reconhecimento de uma casa maior.",
     },
     {
@@ -113,53 +113,53 @@ export const TITLES: readonly TitleDef[] = [
     { id: "burgrave", male: "Burgrave", female: "Burgrave", native: "purkrabí", branch: "lesser", tier: 3, kind: "office", gloss: "Administra um castelo, uma fortaleza ou um domínio em nome de uma autoridade superior." },
     { id: "hetman", male: "Hetman", female: "Hetman", native: "hejtman", branch: "lesser", tier: 3, kind: "office", gloss: "Comanda forças militares ou exerce funções de administração territorial, conforme o contexto." },
     { id: "capitao-guarda", male: "Capitão da guarda", female: "Capitã da guarda", branch: "lesser", tier: 4, kind: "office", gloss: "Comanda os guardas de um castelo ou de uma residência nobre.", reportsTo: ["burgrave"] },
-    { id: "chanceler", male: "Chanceler", female: "Chanceler", branch: "lesser", tier: 4, kind: "office", gloss: "Cuida de documentos oficiais, cartas, selos e registros." },
+    { id: "chanceler", male: "Chanceler", female: "Chanceler", native: "kancléř", branch: "lesser", tier: 4, kind: "office", gloss: "Cuida de documentos oficiais, cartas, selos e registros." },
     { id: "juiz-senhorial", male: "Juiz senhorial", female: "Juíza senhorial", branch: "lesser", tier: 4, kind: "office", gloss: "Julga disputas e infrações dentro da jurisdição do senhor." },
     { id: "mordomo", male: "Mordomo", female: "Mordoma", branch: "lesser", tier: 4, kind: "office", gloss: "Organiza a casa nobre, os criados, os suprimentos e as despesas." },
-    { id: "tesoureiro", male: "Tesoureiro", female: "Tesoureira", branch: "lesser", tier: 4, kind: "office", gloss: "Controla tributos, aluguéis, dívidas e pagamentos; é o coletor de rendas." },
-    { id: "bailio", male: "Bailio", female: "Bailia", branch: "lesser", tier: 5, kind: "office", gloss: "Oficial de justiça: executa ordens, fiscaliza obrigações e auxilia na administração da justiça." },
-    { id: "meirinho", male: "Meirinho", female: "Meirinha", branch: "lesser", tier: 5, kind: "office", gloss: "Administrador senhorial: supervisiona terras, trabalhadores, rendas e deveres dos habitantes." },
-    { id: "arauto", male: "Arauto", female: "Arauta", branch: "lesser", tier: 5, kind: "office", gloss: "Anuncia decretos, transmite mensagens e participa de cerimônias." },
+    { id: "tesoureiro", male: "Tesoureiro", female: "Tesoureira", native: "pokladník", branch: "lesser", tier: 4, kind: "office", gloss: "Controla tributos, aluguéis, dívidas e pagamentos; é o coletor de rendas." },
+    { id: "bailio", male: "Bailio", female: "Bailia", native: "biřic", branch: "lesser", tier: 5, kind: "office", gloss: "Oficial de justiça: executa ordens, fiscaliza obrigações e auxilia na administração da justiça." },
+    { id: "meirinho", male: "Administrador do domínio", female: "Administradora do domínio", native: "správce panství, šafář", branch: "lesser", tier: 5, kind: "office", gloss: "Administrador senhorial: supervisiona terras, trabalhadores, rendas e deveres dos habitantes." },
+    { id: "arauto", male: "Arauto", female: "Arauta", native: "herold", branch: "lesser", tier: 5, kind: "office", gloss: "Anuncia decretos, transmite mensagens e participa de cerimônias." },
     // The soldier (user, 2026-10-29: "vamos criar o título de soldado"): the last rung of the arms, under the captains, with the power to arrest.
     { id: "soldado", male: "Soldado", female: "Soldada", branch: "lesser", tier: 5, kind: "office", gloss: "Serve em armas a um senhor ou à cidade: guarda a ordem e prende quem a quebra, sob as ordens dos capitães.", reportsTo: ["capitao-guarda", "capitao-milicia", "hetman"] },
     // The Church, with a ladder of its own.
     {
-        id: "arcebispo", male: "Arcebispo", female: "Arcebispa", branch: "church", tier: 1, kind: "lordly",
+        id: "arcebispo", male: "Arcebispo", female: "Arcebispa", native: "arcibiskup", branch: "church", tier: 1, kind: "lordly",
         gloss: "Autoridade eclesiástica de alto nível, responsável por uma província religiosa. Praga era uma arquidiocese.",
         appoints: ["bispo", "abade", "prior", ...LOWER_CLERGY],
     },
     {
-        id: "bispo", male: "Bispo", female: "Bispa", branch: "church", tier: 2, kind: "lordly",
+        id: "bispo", male: "Bispo", female: "Bispa", native: "biskup", branch: "church", tier: 2, kind: "lordly",
         gloss: "Governa uma diocese e supervisiona o clero sob a sua jurisdição.",
         appoints: ["abade", "prior", ...LOWER_CLERGY],
     },
     {
-        id: "abade", male: "Abade", female: "Abadessa", branch: "church", tier: 3, kind: "lordly",
+        id: "abade", male: "Abade", female: "Abadessa", native: "opat", branch: "church", tier: 3, kind: "lordly",
         gloss: "Lidera um mosteiro ou uma comunidade religiosa e pode administrar propriedades e rendas significativas.",
         appoints: ["monge", "frade", "acolito"],
     },
     {
-        id: "prior", male: "Prior", female: "Priora", branch: "church", tier: 3, kind: "lordly",
+        id: "prior", male: "Prior", female: "Priora", native: "převor", branch: "church", tier: 3, kind: "lordly",
         gloss: "Lidera um priorado ou ajuda o abade; pode administrar propriedades e rendas.",
         appoints: ["monge", "frade", "acolito"],
     },
-    { id: "padre", male: "Padre", female: "Padre", branch: "church", tier: 4, kind: "office", gloss: "Pároco: celebra missas, administra sacramentos, aconselha os habitantes e participa da vida comunitária." },
-    { id: "monge", male: "Monge", female: "Monja", branch: "church", tier: 5, kind: "office", gloss: "Vive e serve em um mosteiro. Um monge não é necessariamente sacerdote." },
+    { id: "padre", male: "Padre", female: "Padre", native: "farář", branch: "church", tier: 4, kind: "office", gloss: "Pároco: celebra missas, administra sacramentos, aconselha os habitantes e participa da vida comunitária." },
+    { id: "monge", male: "Monge", female: "Monja", native: "mnich", branch: "church", tier: 5, kind: "office", gloss: "Vive e serve em um mosteiro. Um monge não é necessariamente sacerdote." },
     { id: "frade", male: "Frade", female: "Freira", branch: "church", tier: 5, kind: "office", gloss: "Religioso de uma ordem que serve entre o povo. Não tem a autoridade de um padre." },
-    { id: "diacono", male: "Diácono", female: "Diaconisa", branch: "church", tier: 5, kind: "office", gloss: "Auxilia o padre nas funções religiosas, sem a autoridade dele." },
-    { id: "acolito", male: "Acólito", female: "Acólita", branch: "church", tier: 6, kind: "office", gloss: "Serve ao altar e auxilia o clero nas cerimônias." },
+    { id: "diacono", male: "Diácono", female: "Diaconisa", native: "jáhen", branch: "church", tier: 5, kind: "office", gloss: "Auxilia o padre nas funções religiosas, sem a autoridade dele." },
+    { id: "acolito", male: "Acólito", female: "Acólita", native: "akolyta", branch: "church", tier: 6, kind: "office", gloss: "Serve ao altar e auxilia o clero nas cerimônias." },
     // The towns and the guilds.
-    { id: "burgomestre", male: "Burgomestre", female: "Burgomestre", branch: "town", tier: 1, kind: "office", gloss: "Prefeito: administra a cidade, coordena decisões municipais e representa seus interesses perante a nobreza." },
-    { id: "conselheiro", male: "Conselheiro municipal", female: "Conselheira municipal", branch: "town", tier: 2, kind: "office", gloss: "Participa das decisões sobre impostos, mercados, manutenção urbana e leis locais.", reportsTo: ["burgomestre"] },
-    { id: "alcaide", male: "Alcaide da aldeia", female: "Alcaide da aldeia", branch: "town", tier: 2, kind: "office", gloss: "Representante da aldeia: recolhe informações, comunica ordens, organiza as obrigações da comunidade e serve de intermediário com o senhor local." },
-    { id: "mestre-guilda", male: "Mestre de guilda", female: "Mestra de guilda", branch: "town", tier: 2, kind: "office", gloss: "Lidera uma corporação profissional, fiscaliza a qualidade dos produtos e negocia privilégios para seus membros." },
+    { id: "burgomestre", male: "Burgomestre", female: "Burgomestre", native: "purkmistr", branch: "town", tier: 1, kind: "office", gloss: "Prefeito: administra a cidade, coordena decisões municipais e representa seus interesses perante a nobreza." },
+    { id: "conselheiro", male: "Conselheiro municipal", female: "Conselheira municipal", native: "konšel", branch: "town", tier: 2, kind: "office", gloss: "Participa das decisões sobre impostos, mercados, manutenção urbana e leis locais.", reportsTo: ["burgomestre"] },
+    { id: "alcaide", male: "Chefe da aldeia", female: "Chefe da aldeia", native: "rychtář", branch: "town", tier: 2, kind: "office", gloss: "Representante da aldeia: o rychtář recolhe informações, comunica ordens, organiza as obrigações da comunidade e serve de intermediário com o senhor local." },
+    { id: "mestre-guilda", male: "Mestre de guilda", female: "Mestra de guilda", native: "cechmistr", branch: "town", tier: 2, kind: "office", gloss: "Lidera uma corporação profissional, fiscaliza a qualidade dos produtos e negocia privilégios para seus membros." },
     { id: "chefe-mercado", male: "Chefe de mercado", female: "Chefe de mercado", branch: "town", tier: 3, kind: "office", gloss: "Cuida da ordem, dos lugares e das medidas na praça do mercado.", reportsTo: ["burgomestre"] },
     { id: "coletor-pedagios", male: "Coletor de pedágios", female: "Coletora de pedágios", branch: "town", tier: 3, kind: "office", gloss: "Cobra a passagem em pontes, portões e estradas.", reportsTo: ["burgomestre"] },
     { id: "guarda-portoes", male: "Guarda dos portões", female: "Guarda dos portões", branch: "town", tier: 4, kind: "office", gloss: "Vigia as entradas da cidade e controla quem passa.", reportsTo: ["capitao-milicia", "capitao-guarda"] },
     { id: "capitao-milicia", male: "Capitão da milícia urbana", female: "Capitã da milícia urbana", branch: "town", tier: 3, kind: "office", gloss: "Comanda os cidadãos armados que defendem a cidade.", reportsTo: ["burgomestre"] },
-    { id: "escrivao", male: "Escrivão", female: "Escrivã", branch: "town", tier: 3, kind: "office", gloss: "Escreve e guarda os registros, as cartas e as contas.", reportsTo: ["burgomestre"] },
-    { id: "mestre-oficio", male: "Mestre de ofício", female: "Mestra de ofício", branch: "town", tier: 3, kind: "office", gloss: "Mestre reconhecido de um ofício, que ensina aprendizes e responde pela qualidade do trabalho.", reportsTo: ["mestre-guilda"] },
-    { id: "administrador-hospedaria", male: "Administrador de hospedaria", female: "Administradora de hospedaria", branch: "town", tier: 3, kind: "office", gloss: "Tem a seu cargo uma hospedaria: os quartos, a cozinha e os criados." },
+    { id: "escrivao", male: "Escrivão", female: "Escrivã", native: "písař", branch: "town", tier: 3, kind: "office", gloss: "Escreve e guarda os registros, as cartas e as contas.", reportsTo: ["burgomestre"] },
+    { id: "mestre-oficio", male: "Mestre de ofício", female: "Mestra de ofício", branch: "town", tier: 3, kind: "office", gloss: "Mestre reconhecido de um ofício, que ensina aprendizes e responde pela qualidade do trabalho.", reportsTo: ["mestre-guilda", "burgomestre"] },
+    { id: "administrador-hospedaria", male: "Administrador de hospedaria", female: "Administradora de hospedaria", native: "hostinský", branch: "town", tier: 3, kind: "office", gloss: "Tem a seu cargo uma hospedaria: os quartos, a cozinha e os criados." },
 ];
 
 const BY_ID = new Map<string, TitleDef>(TITLES.map((title) => [title.id, title]));
@@ -432,36 +432,10 @@ export function mayArrestWith(held: readonly string[]): boolean {
     return known(held).some((title) => ARREST_TITLES.includes(title.id));
 }
 
-/**
- * The titles whose holders hand out the guilds (user, 2026-10-29: "um mestre de ofício ou guilda, ou cargos acima que façam sentido ... a seção Escrivão"): the clerk who
- * writes the documents, the masters of the guilds and of the trades, the town's own officers who answer for the registers, the lord's chancellor and burgrave, and the
- * lords and the Crown. The masters hand out only their own guild; the rest, any. An administrator may always.
- */
-export const GUILD_GRANT_TITLES: readonly string[] = [
-    "rei",
-    "principe",
-    "marques",
-    "lorde",
-    "burgrave",
-    "chanceler",
-    "burgomestre",
-    "conselheiro",
-    "alcaide",
-    "escrivao",
-    "mestre-guilda",
-    "mestre-oficio",
-];
-
-/** The titles that hand out only the guild their holder belongs to. */
+/** The masters of a guild and of a trade. */
 export const GUILD_MASTER_TITLES: readonly string[] = ["mestre-guilda", "mestre-oficio"];
 
-/** Whether any of the held titles gives the power to hand out guilds. */
-export function mayGrantGuildWith(held: readonly string[]): boolean {
-    return known(held).some((title) => GUILD_GRANT_TITLES.includes(title.id));
-}
-
-/** Whether the guilds a holder may hand out are only their own: every title of theirs that gives the power is a master's. */
-export function grantsOwnGuildOnly(held: readonly string[]): boolean {
-    const giving = known(held).filter((title) => GUILD_GRANT_TITLES.includes(title.id));
-    return giving.length > 0 && giving.every((title) => GUILD_MASTER_TITLES.includes(title.id));
+/** Whether any of the held titles is a master's, of a guild or of a trade: they make the nobles' pieces of their own trade (2026-11-01, `craft.ts`). */
+export function isMasterWith(held: readonly string[]): boolean {
+    return known(held).some((title) => GUILD_MASTER_TITLES.includes(title.id));
 }

@@ -16,6 +16,9 @@
  *   Each supporter's dog is a different one (2026-10-26, user: "vamos randomizar os cachorros, eles só são dados por apoiador mas
  *   tem que ser diferentes"): the first time it comes it is drawn at random from the village dogs' souls (`dog-souls.ts`), one that
  *   no other supporter's dog wears while any is left, and the record keeps it, so that the dog looks the same at every entry.
+ *   A supporter may send the dog away (2026-10-30, user: "no cachorro deve ter uma opção mandar embora, isso faz o cachorro sumir e o chamar traz ele de volta ao mundo"):
+ *   the panel's "Mandar embora" and `/cachorro embora` take it out of the world and the record keeps it away, so it is not brought at any entry either, until a call
+ *   (`/cachorro`, or "Chamar" on the panel) brings it back.
  *
  * A hand-over given by mistake is taken back from the same page (`revoke`, 2026-10-25, user: "na aba jogadores deve ter como retirar benefícios
  * de um jogador, para o caso de ceder errado"): the clothes and arms still in the bag, the horses the hand-overs gave, the dog and the record.
@@ -26,7 +29,7 @@
 import { getCharacter } from "./characters.js";
 import { DOG_SOULS } from "./dog-souls.js";
 import { keyOfHorse, removeHorse } from "./horses.js";
-import { inFrontOf } from "./place.js";
+import { groundForward, inFrontOf, yawTowards } from "./place.js";
 import { ensureDir, read, write } from "./store.js";
 
 const DIR = "playerdata";
@@ -53,6 +56,32 @@ export const DOG_SOUL_TRIES = 3;
 export const DOG_NAME_MIN = 2;
 export const DOG_NAME_MAX = 24;
 
+/**
+ * A dog told to stay is left where it sits (user, 2026-10-30: "quando sair ou voltar do jogo onde mandou o cachorro ficar ele deve continuar lá"; "se eu mando o cachorro ficar, ao ir longe e
+ * voltar ele buga, ficando andando: preciso mandar seguir e depois ficar para ele realmente ficar"). The spot is written down with the order, the dog comes back to it at every entry once its
+ * owner is near (`STAY_BRING_M`), and the dog that is there is held to it: the game's own Wait does not always take after a long walk away (it reads `mode` 0 while the dog follows), so
+ * a dog that is following or has drifted off its spot is told to wait again, and brought anew at the spot if that does not help.
+ */
+export const STAY_BRING_M = 60;
+/** More than this from its spot, or following, a dog left staying is not staying. */
+export const STAY_DRIFT_M = 3.5;
+/** How often the dogs left staying are looked at, and how long a dog told to follow is left following before it is told to wait again. */
+export const STAY_LOOK_MS = 2_000;
+export const STAY_REASSERT_MS = 400;
+/** The game's own objectives (`E_DogObjective`) that mean the dog is not waiting: Follow and FollowHeel. */
+const FOLLOWING_OBJECTIVES: readonly number[] = [4, 5];
+
+/** Where a dog was left staying, and which way it faced (a unit vector on the ground). */
+export interface DogStay {
+    x: number;
+    y: number;
+    z: number;
+    fx: number;
+    fy: number;
+}
+
+const flat2 = (a: { readonly x: number; readonly y: number }, b: { readonly x: number; readonly y: number }): number => Math.hypot(a.x - b.x, a.y - b.y);
+
 /** The dog's companion modes the command offers, by the game's own numbers (`E_DogCompanionMode`). */
 export const DOG_ORDERS: Readonly<Record<string, { readonly mode: number; readonly said: string }>> = {
     seguir: { mode: 1, said: "Seu cão vai seguir você." },
@@ -75,6 +104,10 @@ export interface SupporterRecord {
     dogName: string;
     /** The soul (a GUID of `dog-souls.ts`) the dog is spawned against, which decides how it looks: drawn once and kept. None until the dog first comes. */
     dogSoul?: string;
+    /** Where the dog was left staying (the order `sentar` or `esperar`), until it is told to follow or is called; none when it goes with its owner. */
+    dogStay?: DogStay;
+    /** Whether the dog was sent away (the panel's "Mandar embora", `/cachorro embora`): out of the world, not brought at any entry, until it is called. */
+    dogAway?: boolean;
     /** The keys (`horses.ts`) of the horses the hand-overs gave, so a hand-over given by mistake can take them back. None for a hand-over before 2026-10-25. */
     horseKeys?: string[];
 }
@@ -144,8 +177,23 @@ function date(at: number): string {
     return `${two(day.getDate())}/${two(day.getMonth() + 1)}/${day.getFullYear()}`;
 }
 
+/** A spot written in the file, or null for anything that is not one. */
+function stayOf(raw: unknown): DogStay | null {
+    if (typeof raw !== "object" || raw === null) {
+        return null;
+    }
+    const spot = raw as Partial<Record<keyof DogStay, unknown>>;
+    const numbers = [spot.x, spot.y, spot.z, spot.fx, spot.fy];
+    if (!numbers.every((value) => typeof value === "number" && Number.isFinite(value))) {
+        return null;
+    }
+    return { x: spot.x as number, y: spot.y as number, z: spot.z as number, fx: spot.fx as number, fy: spot.fy as number };
+}
+
 export class Supporters {
     private records: Record<string, SupporterRecord> = {};
+    /** How many looks in a row found a dog left staying off its spot or following, by Steam id. */
+    private readonly drift = new Map<string, number>();
     private pending: Record<string, PendingItem> = {};
     /** False while the file could not be read: nothing is written over it then. */
     private writable = true;
@@ -154,6 +202,7 @@ export class Supporters {
     constructor(
         private readonly now: () => number = () => Date.now(),
         private readonly random: () => number = () => Math.random(),
+        private readonly later: (fn: () => void, ms: number) => void = (fn, ms) => void setTimeout(fn, ms),
     ) {}
 
     load(): void {
@@ -183,6 +232,8 @@ export class Supporters {
                 name: text(entry.name),
                 dogName: text(entry.dogName).slice(0, DOG_NAME_MAX),
                 ...(typeof entry.dogSoul === "string" && SOUL_GUID.test(entry.dogSoul) ? { dogSoul: entry.dogSoul } : {}),
+                ...(stayOf(entry.dogStay) === null ? {} : { dogStay: stayOf(entry.dogStay) as DogStay }),
+                ...(entry.dogAway === true ? { dogAway: true } : {}),
                 ...(Array.isArray(entry.horseKeys) ? { horseKeys: entry.horseKeys.filter((key): key is string => typeof key === "string" && key !== "").slice(0, 50) } : {}),
             };
         }
@@ -470,10 +521,19 @@ export class Supporters {
         if (player.dog !== null) {
             return player.dog;
         }
+        // A dog sent away is not brought, at an entry or by anything else: only a call brings it back.
+        if (record.dogAway === true) {
+            return null;
+        }
         if (!player.ready || !player.alive) {
             return null;
         }
-        const { position, rotation } = inFrontOf(player, DOG_DISTANCE);
+        // A dog left staying is where it was left: not brought to its owner, but to its spot, once they are near it (`keepStays` brings it when they come).
+        const stay = record.dogStay;
+        if (stay !== undefined && flat2(stay, player.position) > STAY_BRING_M) {
+            return null;
+        }
+        const { position, rotation } = stay === undefined ? inFrontOf(player, DOG_DISTANCE) : { position: { x: stay.x, y: stay.y, z: stay.z }, rotation: yawTowards(stay.fx, stay.fy) };
         const name = record.dogName === "" ? undefined : record.dogName;
         // The soul it has worn, or a draw at its first coming. Should the game turn a soul down another is drawn, and the game's generic dog is the last resort.
         const tried: string[] = [];
@@ -490,15 +550,27 @@ export class Supporters {
                     this.persist();
                     console.log(`supporters: o cão de ${player.nickname} é a alma ${soulName(soul)}`);
                 }
+                if (stay !== undefined) {
+                    dog.mode = 0;
+                }
                 return dog;
             } catch (error: unknown) {
                 console.log(`supporters: o cão de ${player.nickname} não veio com a alma ${soulName(soul)}: ${error instanceof Error ? error.message : String(error)}`);
             }
         }
         try {
-            return Dog.spawn(player, position, rotation, undefined, name);
+            const dog = Dog.spawn(player, position, rotation, undefined, name);
+            if (stay !== undefined) {
+                dog.mode = 0;
+            }
+            return dog;
         } catch (error: unknown) {
-            console.log(`supporters: o cão de ${player.nickname} não pôde vir: ${error instanceof Error ? error.message : String(error)}`);
+            console.log(`supporters: o cão de ${player.nickname} não pôde vir${stay === undefined ? "" : " ao lugar onde ficou"}: ${error instanceof Error ? error.message : String(error)}`);
+            // A spot the game will not put a dog on is not tried every two seconds for ever: the dog comes beside its owner instead.
+            if (stay !== undefined) {
+                this.dropStay(player.steamId);
+                return this.bringDog(player);
+            }
             return null;
         }
     }
@@ -517,9 +589,39 @@ export class Supporters {
             return { ok: false, message: "Seu cão já está vindo. Espere um pouco antes de chamar de novo." };
         }
         this.calledAt.set(player.id, now);
+        // Called, it is no longer left where it sat, nor away.
+        this.dropStay(player.steamId);
+        const record = this.records[player.steamId];
+        const wasAway = record?.dogAway === true;
+        if (record !== undefined && wasAway) {
+            delete record.dogAway;
+            this.persist();
+        }
         // Brought anew beside the owner: the dog's body is run by its owner's game, so moving it from here would not hold.
         player.dog?.destroy();
-        return this.bringDog(player) === null ? { ok: false, message: "Seu cão não pôde vir agora. Tente de novo em instantes." } : { ok: true, message: "Seu cão veio para perto de você." };
+        return this.bringDog(player) === null
+            ? { ok: false, message: "Seu cão não pôde vir agora. Tente de novo em instantes." }
+            : { ok: true, message: wasAway ? "Seu cão voltou ao mundo e veio para perto de você." : "Seu cão veio para perto de você." };
+    }
+
+    /**
+     * `/cachorro embora` and the panel's "Mandar embora": the dog leaves the world and stays away, at every entry too, until it is called. It need not be in the world to be sent away
+     * (a dog far off, or one that never came), and a spot where it was left staying is forgotten.
+     */
+    sendAway(player: Player): Outcome {
+        const record = this.records[player.steamId];
+        if (record === undefined) {
+            return { ok: false, message: "Só quem apoia o servidor tem um cão." };
+        }
+        if (record.dogAway === true && player.dog === null) {
+            return { ok: false, message: "Seu cão já foi embora. Chame-o (/cachorro, ou Chamar na seção Animais) para ele voltar." };
+        }
+        record.dogAway = true;
+        delete record.dogStay;
+        this.drift.delete(player.steamId);
+        player.dog?.destroy();
+        this.persist();
+        return { ok: true, message: "Seu cão foi embora e some do mundo. Chame-o quando quiser: /cachorro, ou Chamar na seção Animais." };
     }
 
     /** `/cachorro nome`: names the dog, now and at every entry. An empty name gives it back the game's own. */
@@ -551,13 +653,88 @@ export class Supporters {
             return { ok: false, message: "Você não tem um cão por perto. /cachorro chama o seu." };
         }
         dog.mode = order.mode;
+        const record = this.records[player.steamId];
+        if (record !== undefined) {
+            if (order.mode === 0) {
+                // Sitting where it is: written down, so that it is there at the next entry and is held there.
+                const at = dog.position;
+                const ahead = groundForward(dog.rotation as Quaternion);
+                record.dogStay = { x: round2(at.x), y: round2(at.y), z: round2(at.z), fx: round2(ahead.x), fy: round2(ahead.y) };
+                this.drift.delete(player.steamId);
+                this.persist();
+            } else {
+                this.dropStay(player.steamId);
+            }
+        }
         return { ok: true, message: order.said };
+    }
+
+    /** The dog is no longer left anywhere (it follows, runs free, or was called). */
+    private dropStay(steamId: string): void {
+        const record = this.records[steamId];
+        this.drift.delete(steamId);
+        if (record?.dogStay !== undefined) {
+            delete record.dogStay;
+            this.persist();
+        }
+    }
+
+    /**
+     * Every `STAY_LOOK_MS`: the dogs left staying are brought back at their spot when their owner comes near it, and held there. A dog that is following (the owner's game reports
+     * what it does, `objective`) or has wandered off its spot was not left staying: it is told to follow and, a moment later, to wait again (the game takes no notice of a mode it
+     * already has), and the third look in a row finds it still wrong, it is brought anew at its spot. One far from its spot with its owner far from it too was taken away: it goes.
+     */
+    keepStays(players: readonly Player[]): void {
+        if (!Object.values(this.records).some((record) => record.dogStay !== undefined)) {
+            return;
+        }
+        for (const player of players) {
+            const record = this.records[player.steamId];
+            if (record?.dogStay === undefined || !player.ready || !player.alive) {
+                continue;
+            }
+            const stay = record.dogStay;
+            const near = flat2(stay, player.position) <= STAY_BRING_M;
+            const dog = player.dog;
+            if (dog === null) {
+                if (near) {
+                    this.bringDog(player);
+                }
+                continue;
+            }
+            const off = flat2(dog.position, stay) > STAY_DRIFT_M || FOLLOWING_OBJECTIVES.includes(dog.objective);
+            if (!off) {
+                this.drift.delete(player.steamId);
+                continue;
+            }
+            if (!near) {
+                this.drift.delete(player.steamId);
+                dog.destroy();
+                continue;
+            }
+            const looks = (this.drift.get(player.steamId) ?? 0) + 1;
+            this.drift.set(player.steamId, looks);
+            if (looks <= 2) {
+                dog.mode = 1;
+                this.later(() => {
+                    if (player.dog === dog) {
+                        dog.mode = 0;
+                    }
+                }, STAY_REASSERT_MS);
+                continue;
+            }
+            this.drift.delete(player.steamId);
+            dog.destroy();
+            this.bringDog(player);
+        }
     }
 
     forget(player: Player): void {
         this.calledAt.delete(player.id);
     }
 }
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 export const supporters = new Supporters();
 
@@ -581,5 +758,12 @@ export function installSupporters(): void {
         }, DOG_DELAY_MS);
     });
     Events.on("playerDisconnect", (player) => supporters.forget(player));
+    // The dogs left staying: brought back at their spot, and held there.
+    const stays = setInterval(() => supporters.keepStays(Player.all()), STAY_LOOK_MS);
+    Events.on("resourceStop", (name) => {
+        if (name === "kcdc-gamemode") {
+            clearInterval(stays);
+        }
+    });
     console.log(`supporters: ${supporters.count()} apoiador(es); o cão de cada um volta a cada entrada`);
 }

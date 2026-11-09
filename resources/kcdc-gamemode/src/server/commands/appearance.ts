@@ -60,9 +60,13 @@ export const appearanceCommand: Command = {
         // The replication check: change a body on one client, read it here
         // from another.
         if (subcommand === "who") {
+            // Thirty lines at most (2026-11-02: a server of hundreds wrote a line for each).
             const players = Player.all();
             reply.line(`${players.length} player(s):`);
-            reply.lines(players.map((other) => `  ${other.nickname}${other.id === player.id ? " (you)" : ""} -- ${describe(other.appearance)}`));
+            reply.lines(players.slice(0, 30).map((other) => `  ${other.nickname}${other.id === player.id ? " (you)" : ""} -- ${describe(other.appearance)}`));
+            if (players.length > 30) {
+                reply.line(`  ... and ${players.length - 30} more`);
+            }
             return;
         }
 

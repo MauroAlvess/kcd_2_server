@@ -27,6 +27,7 @@ export function craftItemGuid(id: string): string | null {
     return registered.get(id) ?? null;
 }
 
+
 /** The class an inventory row of this recipe item is: a game item's GUID, or the GUID ours was registered under. */
 export function classOf(item: string): string {
     return (registered.get(item) ?? item).toLowerCase();

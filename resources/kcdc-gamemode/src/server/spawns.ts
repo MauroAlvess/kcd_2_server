@@ -1,3 +1,4 @@
+import { onKuttenberg } from "./level.js";
 import { placeBack } from "./position.js";
 
 /**
@@ -32,6 +33,10 @@ export const spawnPoints: SpawnPoint[] = [
 
 /** One point drawn by weight, restricted to `tag` when given. Null when nothing matches. */
 export function pickSpawnPoint(tag?: string): SpawnPoint | null {
+    // The points above are Kuttenberg's road: on another level they are somewhere else, so a newcomer lands on the level's own start point (2026-11-09).
+    if (!onKuttenberg()) {
+        return null;
+    }
     const candidates = tag ? spawnPoints.filter((point) => point.tags?.includes(tag)) : spawnPoints;
     const total = candidates.reduce((sum, point) => sum + Math.max(0, point.weight ?? 1), 0);
     if (total <= 0) {

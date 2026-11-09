@@ -19,7 +19,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
 /** The pages: each is written in ui-src/<name>.html and packed into ui/<name>.html. */
-export const PAGES = ["status", "creator", "freecam", "chat", "craft", "emotes", "voice", "welcome", "mural"];
+export const PAGES = ["status", "creator", "freecam", "chat", "craft", "emotes", "voice", "mural", "entry", "death"];
 
 const note = (name) => `<!-- Written by scripts/pack-ui.mjs from ui-src/${name}.html: edit that one. -->`;
 

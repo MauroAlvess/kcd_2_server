@@ -38,7 +38,7 @@ export const muralCommand: Command = {
         if (sub === "quadros") {
             const boards = muralBoards();
             if (boards.length === 0) {
-                reply.line("Nenhum quadro de avisos foi encontrado: a exportação quadros-de-aviso está em mod.world_resources?");
+                reply.line("Nenhum quadro de avisos foi encontrado: a exportação dos quadros está em mod.world_resources?");
                 return;
             }
             reply.line(`Quadros de avisos (${boards.length}):`);

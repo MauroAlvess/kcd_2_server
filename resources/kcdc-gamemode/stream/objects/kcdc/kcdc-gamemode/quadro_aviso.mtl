@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<Material AlphaTest="0.5" Emittance="1,1,1,0.5" Diffuse="0.5882353,0.5882353,0.5882353" GenMask="20000000000000" LayerAct="1" MatTemplate="" MtlFlags="524290" Opacity="1" Shader="Illum" Shininess="9.999999" Specular="0,0,0" StringGenMask="%SUBSURFACE_SCATTERING" SurfaceType="" vertModifType="0">
+	<Textures>
+		<Texture File="textures/kcdc/kcdc-gamemode/quadro_aviso_diff.dds" Map="Diffuse" />
+		<Texture File="textures/kcdc/kcdc-gamemode/quadro_aviso_diff.dds" Map="Emittance" />
+	</Textures>
+	<PublicParams EmittanceMapGamma="1" RockDarkeningPrePostDetail="1" RockDarkeningSoftEdge="0" RockDarkeningStrength="0" RockDarkeningThreshold="0" SSSIndex="0" />
+</Material>

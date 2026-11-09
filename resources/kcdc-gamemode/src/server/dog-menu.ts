@@ -24,7 +24,7 @@ export const dogMenu = {
     nearM: reachTo(EDGE_M.dog),
     askM: allowedTo(EDGE_M.dog),
     /** The client is told of the dog this often, and only when it has moved on, come into reach or gone out of it: a dog on the trot changes place. */
-    nearEveryMs: 300,
+    nearEveryMs: 500,
     /** A choice this soon after the menu opened is the same E that asked for it (the game's E also confirms a choice list), not a choice: the menu is put back up. */
     sameKeyMs: 250,
     /** A caress is not repeated sooner than this: it is as long as the animation. */

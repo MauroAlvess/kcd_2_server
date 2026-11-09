@@ -18,9 +18,9 @@
  *
  * **How a horse is won.** E at it (`horse-menu.ts` hooks, "Domar") opens a menu: "Oferecer" a carrot, an apple, a pear, a beet, a turnip or
  * bread from the bag, once a `feedCooldownMs`, each worth some trust of `tameAt`; the Domador pets it (the game's own petting, for a man)
- * and the menu comes back with how much it trusts them. At the full trust the menu offers **Montar** and **Mandar seguir**: either makes the
- * horse theirs (`giveTo`: `horses.ts` files it, and it is in their Animais, to name, give or leave), and the second sends it
- * after them (`horse-follow.ts`). Nobody who is not a Domador may mount a wild horse; the game's own climb is refused.
+ * and the menu comes back with how much it trusts them. At the full trust the menu offers **Montar**: it makes the
+ * horse theirs (`giveTo`: `horses.ts` files it, and it is in their Animais, to name, give or leave) and puts them in the saddle. Nobody who is not a Domador may mount a wild horse; the
+ * game's own climb is refused.
  *
  * **More than the carrot (user, 2026-10-28: "além da cenoura poder dar maçã e pera, assim dando mais chance de domar o cavalo").** The apple and the pear were
  * already treats (since 2026-10-22), but the menu showed one row, "Oferecer cenoura", the best the bag had, and a player with apples and pears never saw them.
@@ -33,6 +33,12 @@
  * treat down (35% at no trust, fading to none at half); and what is not kept up fades: after twenty minutes without a feeding the trust goes
  * down a point every six.
  *
+ * **Breeds are not alike, and the tamer grows (user, 2026-11-04: "à medida que o domador vai ficando mais forte deve ser mais fácil também domar cavalos mais difíceis").**
+ * Each breed has a hardness (`BREED_HARDNESS`: 0 ordinary, 1 of good stock, 2 noble, 3 legendary), and the tamer a skill: their Equitação (`horse_riding`) from 5, a beginner's, to 30. A hard
+ * breed gives less trust for the same treat and is likelier to turn it down, to a beginner; as the skill rises that gap closes, and at 30 even a legendary horse is won faster than an ordinary
+ * one was by a beginner (`easeOf`, `refusalChance`). The menu says what the horse is and how it looks to the tamer ("nobre, difícil para você"). The game's tables give no stats of the breeds
+ * (the server cannot read their health or stamina), so the hardness of each breed is the server's own judgement, in the one table.
+ *
  * **Dressed (same day: "quando um cavalo ficar 100% domado ele recebe sela e coisas básicas para poder montar já setados nele via códigos").**
  * The horse that becomes theirs is put in the game's plain tack before it is given: a saddle, a bridle and horseshoes, one of the generic
  * `horse_common` sets (`BASIC_TACK`), or the same pieces by name when the preset is not there. The saddle brings the saddlebags.
@@ -40,8 +46,7 @@
 
 import { farmData } from "./farm-data.js";
 import { mayCraft } from "./guild-crafts.js";
-import { startFollowing } from "./horse-follow.js";
-import { askExtras, grantClimb, nearExtras } from "./horse-menu.js";
+import { askExtras, nearExtras } from "./horse-menu.js";
 import { languageOf, translate } from "./language.js";
 import { ensureDir, read, write } from "./store.js";
 import { lowerTorch } from "./torch-down.js";
@@ -103,7 +108,7 @@ export const TREATS: ReadonlyArray<{ readonly guid: string; readonly name: strin
     { guid: "86e4ff24-88db-4024-abe6-46545fa0fbd1", name: "pão", the: "o pão", trust: 2 },
 ];
 
-/** At most this many kinds of treat get a row of their own in the menu (a page has eight rows, and Montar, Mandar seguir and Sair take three). */
+/** At most this many kinds of treat get a row of their own in the menu (a page has eight rows, and Montar and Sair take two). */
 const MENU_TREATS = 4;
 
 /**
@@ -116,6 +121,78 @@ export const PLAIN_PIECES = { saddle: "BasicSaddle01_m03", head: "BasicBridle01_
 
 /** The breeds a wild horse may be (the ones the game sells, with its plain riding horse), those the server's `Horse.breeds()` knows. */
 const BREEDS = ["horse", "pebbles", "bitterklee", "soldier", "tarant", "kasztanka", "khartoum", "crow", "artax", "erdel", "shlamhak", "bill", "mark", "kincsem", "pisek_lad", "gavora", "napoli", "svadilfari", "veillantif", "windwurf", "kluger_hans", "jarmilka", "acorn", "meadow"];
+
+/**
+ * How hard each breed is to win over: 0 an ordinary riding horse, 1 one of good stock, 2 a noble one, 3 a legendary one. The game's tables carry no breed stats the server can read, so this is
+ * the server's own judgement (2026-11-04): the plain and farm horses are 0, the better-bred riding horses 1, the war and famous horses 2 and the ones of legend 3. A breed not here is 1.
+ */
+export const BREED_HARDNESS: Readonly<Record<string, 0 | 1 | 2 | 3>> = {
+    horse: 0,
+    pebbles: 0,
+    bitterklee: 0,
+    acorn: 0,
+    meadow: 0,
+    mark: 0,
+    bill: 0,
+    kasztanka: 0,
+    crow: 1,
+    jarmilka: 1,
+    gavora: 1,
+    erdel: 1,
+    shlamhak: 1,
+    tarant: 1,
+    soldier: 2,
+    artax: 2,
+    khartoum: 2,
+    kluger_hans: 2,
+    pisek_lad: 2,
+    napoli: 2,
+    svadilfari: 3,
+    veillantif: 3,
+    windwurf: 3,
+    kincsem: 3,
+};
+
+export const HARDNESS_WORDS: readonly string[] = ["comum", "de boa linhagem", "nobre", "lendário"];
+
+/** The skill that says how strong a tamer is: Henry's riding. It starts at 5 and tops at 30. */
+export const TAMER_TRACK = "horse_riding";
+
+/** What each degree of hardness costs a beginner: the treat is worth `1 / (1 + cost)` of what it is for an ordinary horse. */
+const HARDNESS_COST: readonly number[] = [0, 0.4, 0.9, 1.6];
+
+export function hardnessOf(breed: string): number {
+    return BREED_HARDNESS[breed] ?? 1;
+}
+
+/** The tamer's level in the riding skill, 5 to 30 (5 when the game has not said). */
+export function tamerLevel(player: { readonly getTrack?: (track: string) => { readonly level?: number } | null | undefined }): number {
+    try {
+        const level = typeof player.getTrack === "function" ? player.getTrack(TAMER_TRACK)?.level : undefined;
+        return typeof level === "number" && Number.isFinite(level) ? Math.max(5, Math.min(30, level)) : 5;
+    } catch {
+        return 5;
+    }
+}
+
+/** How far a tamer has come, 0 for a beginner (level 5) to 1 at the top (30). */
+export function skillOf(level: number): number {
+    return Math.max(0, Math.min(1, (level - 5) / 25));
+}
+
+/**
+ * How readily a tamer of this level wins a horse of this hardness over: 1 for a beginner with an ordinary horse. The skill makes every horse easier (up to a third more trust for the treat) and
+ * takes away the hardness of the breed (a legendary horse is 2.6 times harder to a beginner, and a third easier than an ordinary one to a master).
+ */
+export function easeOf(hardness: number, level: number): number {
+    const skill = skillOf(level);
+    return (1 + 0.35 * skill) / (1 + (HARDNESS_COST[hardness] ?? HARDNESS_COST[1]!) * (1 - skill));
+}
+
+/** How the horse looks to this tamer, in a word. */
+export function effortWord(ease: number): string {
+    return ease >= 1.1 ? "fácil para você" : ease >= 0.8 ? "no seu alcance" : ease >= 0.55 ? "difícil para você" : "muito difícil para você";
+}
 
 interface Bond {
     trust: number;
@@ -187,9 +264,13 @@ export function trustNow(bond: { readonly trust: number; readonly fedAt: number 
     return idle <= 0 ? bond.trust : Math.max(0, bond.trust - Math.floor(idle / wildHorseSettings.forgetEveryMs));
 }
 
-/** The chance a horse turns a treat down at this trust: `refuseChance` at none, fading to nothing at `refuseUntil`. */
-export function refusalChance(trust: number): number {
-    return wildHorseSettings.refuseChance * Math.max(0, 1 - trust / wildHorseSettings.refuseUntil);
+/**
+ * The chance a horse turns a treat down at this trust: `refuseChance` at none, fading to nothing at `refuseUntil`. A harder breed refuses more (half as much again for each degree), and a
+ * tamer with the skill is refused less (down to two fifths at the top); the defaults are an ordinary horse and a beginner. Never above nine in ten.
+ */
+export function refusalChance(trust: number, hardness = 0, level = 5): number {
+    const base = wildHorseSettings.refuseChance * Math.max(0, 1 - trust / wildHorseSettings.refuseUntil);
+    return Math.min(0.9, base * (1 + 0.5 * hardness) * (1 - 0.6 * skillOf(level)));
 }
 
 /** A bar of ten for a trust: "■■■□□□□□□□". */
@@ -649,13 +730,16 @@ export function menuPageFor(player: Player, horse: Horse, now = Date.now()): Dia
                   const wait = waitFor(bond, treat.guid, now);
                   return { id: row === 0 ? "feed" : `feed:${TREATS.indexOf(treat)}`, text: wait > 0 ? `Oferecer ${treat.name} (daqui a ${Math.ceil(wait / 1000)} s)` : `Oferecer ${treat.name}`, enabled: wait <= 0 };
               });
+    // What the horse is, to this tamer: its stock and how hard it is for them (nothing said of an ordinary horse that is no more than their match).
+    const hardness = hardnessOf(wild.slot.soul);
+    const effort = effortWord(easeOf(hardness, tamerLevel(player)));
+    const about = hardness === 0 && effort === "no seu alcance" ? "" : ` (${[hardness === 0 ? "" : HARDNESS_WORDS[hardness] ?? "", effort].filter((part) => part !== "").join(", ")})`;
     return {
-        line: `${wildHorseSettings.name}: ${trustLabel(trust)}. Confiança ${trustBar(trust)} ${Math.round(trust)}/${wildHorseSettings.tameAt}.`,
+        line: `${wildHorseSettings.name}${about}: ${trustLabel(trust)}. Confiança ${trustBar(trust)} ${Math.round(trust)}/${wildHorseSettings.tameAt}.`,
         onRight: false,
         options: [
             ...feedRows,
             { id: "mount", text: tame ? "Montar" : "Montar (ele ainda não confia)", enabled: tame },
-            { id: "follow", text: tame ? "Mandar seguir" : "Mandar seguir (ele ainda não confia)", enabled: tame },
             { id: "leave", text: "Sair", enabled: true },
         ],
     };
@@ -677,7 +761,7 @@ export function openTamingMenu(player: Player, horse: Horse, now = Date.now()): 
         return null;
     }
     if (!mayCraft(player, "domar")) {
-        tell(player, "Só os domadores (guilda Domitores) sabem amansar um cavalo selvagem. Escolha a guilda no painel (F2), em Guildas.");
+        tell(player, "Só os domadores (guilda Domitores) sabem amansar um cavalo selvagem. Aprenda o ofício com o comerciante da guilda da sua cidade.");
         return false;
     }
     if (!player.ready || !player.alive || player.horse || !horse.alive || horse.rider !== null || Dialogue.sessionOf(player.id) !== 0) {
@@ -753,8 +837,11 @@ export function feed(player: Player, horse: Horse, now = Date.now(), random: () 
         tell(player, text);
         return text;
     }
+    const hardness = hardnessOf(wild.slot.soul);
+    const level = tamerLevel(player);
+    const ease = easeOf(hardness, level);
     // A horse that does not trust them yet may turn the treat down: it is not taken, and the minute and a half of that kind starts all the same.
-    if (random() < refusalChance(before)) {
+    if (random() < refusalChance(before, hardness, level)) {
         bond.trust = before;
         bond.fed = { ...(bond.fed ?? Object.fromEntries(TREATS.map((each) => [each.guid, bond.fedAt]))), [treat.guid]: now };
         bond.fedAt = now;
@@ -774,7 +861,7 @@ export function feed(player: Player, horse: Horse, now = Date.now(), random: () 
     if (!takeOne(player, treat.guid)) {
         return "";
     }
-    bond.trust = Math.min(wildHorseSettings.tameAt, before + treat.trust);
+    bond.trust = Math.min(wildHorseSettings.tameAt, before + treat.trust * ease);
     // A bond kept from before the kinds had their own wait counts its last feeding for all of them, once.
     bond.fed = { ...(bond.fed ?? Object.fromEntries(TREATS.map((each) => [each.guid, bond.fedAt]))), [treat.guid]: now };
     bond.fedAt = now;
@@ -783,9 +870,9 @@ export function feed(player: Player, horse: Horse, now = Date.now(), random: () 
     wild.heldUntil = now + wildHorseSettings.petMs + wildHorseSettings.heldMs;
     const done = bond.trust >= wildHorseSettings.tameAt;
     const text = done
-        ? `O cavalo come ${treat.the} da sua mão e encosta o focinho em você: ele confia em você agora. Monte, ou mande-o seguir.`
+        ? `O cavalo come ${treat.the} da sua mão e encosta o focinho em você: ele confia em você agora. Monte nele.`
         : `O cavalo aceita ${treat.the} (${trustLabel(bond.trust)}, confiança ${Math.round(bond.trust)}/${wildHorseSettings.tameAt}).`;
-    console.log(`wild-horses: ${player.nickname} deu ${treat.name} ao cavalo de ${wild.slot.id}: confiança ${Math.round(bond.trust)}`);
+    console.log(`wild-horses: ${player.nickname} deu ${treat.name} ao cavalo de ${wild.slot.id} (${wild.slot.soul}, ${HARDNESS_WORDS[hardness] ?? "?"}; equitação ${level}, facilidade ${ease.toFixed(2)}): confiança ${Math.round(bond.trust)}`);
     tell(player, text);
     // The menu comes back when the petting is over.
     setTimeout(() => {
@@ -830,7 +917,7 @@ export function dress(horse: Horse, where: string): string {
 }
 
 /** The horse becomes the player's: no longer wild, theirs in the Animais; in the game's plain tack, a saddle and bridle and horseshoes. */
-export function tame(player: Player, horse: Horse, then: "mount" | "follow", now = Date.now()): boolean {
+export function tame(player: Player, horse: Horse, now = Date.now()): boolean {
     const wild = wilds.get(horse.id);
     if (wild === undefined || !horse.alive) {
         return false;
@@ -854,13 +941,8 @@ export function tame(player: Player, horse: Horse, then: "mount" | "follow", now
     }
     console.log(`wild-horses: ${player.nickname} amansou o cavalo de ${wild.slot.id}${tack === "" ? ", que ficou sem sela" : `, vestido com ${tack}`}`);
     tell(player, tack === "" ? "O cavalo agora é seu: veja em Animais (F2) para dar um nome. Ele ainda não tem sela nem arreios." : "O cavalo agora é seu: veja em Animais (F2) para dar um nome. Ele já vem com sela, rédeas e ferraduras simples.");
-    if (then === "follow") {
-        tell(player, startFollowing(horse, player).message);
-    } else {
-        grantClimb(player, horse, now);
-        if (!player.mount(horse)) {
-            tell(player, "Não consegui pôr você na sela agora. Chegue-se a ele e aperte E.");
-        }
+    if (!player.mount(horse)) {
+        tell(player, "Não consegui pôr você na sela agora. Chegue-se a ele e aperte E.");
     }
     return true;
 }
@@ -880,6 +962,10 @@ function choose(session: number, player: Player, option: string): void {
         tell(player, "Você se afastou demais do cavalo.");
         return;
     }
+    if (option === "back") {
+        openTamingMenu(player, horse, Date.now());
+        return;
+    }
     if (option === "feed") {
         feed(player, horse);
     } else if (option.startsWith("feed:")) {
@@ -887,8 +973,8 @@ function choose(session: number, player: Player, option: string): void {
         if (treat !== undefined) {
             feed(player, horse, Date.now(), Math.random, treat.guid);
         }
-    } else if (option === "mount" || option === "follow") {
-        tame(player, horse, option);
+    } else if (option === "mount") {
+        tame(player, horse);
     }
 }
 

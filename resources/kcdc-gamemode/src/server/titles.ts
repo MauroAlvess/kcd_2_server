@@ -2,16 +2,20 @@
  * Who holds which title (`nobility.ts` has the catalog and the rules), kept by Steam id in `playerdata/titles.json`, and the
  * one place a title shows in the world: the game's own nametag.
  *
- * Names stay hidden (`encounters.ts`). A player's nametag is off unless they chose to wear one of their titles (the
- * "Título sobre a cabeça" option of the panel): then it shows that title, in gold, and nothing else. The social status
+ * Names stay hidden (`encounters.ts`). A player's title is over their head only if they chose to wear one of their titles (the
+ * "Título sobre a cabeça" option of the panel), in gold; a marked thief wears "Ladrão" in red instead. The social status
  * (plebeius, nobilis) is never written over a head.
+ *
+ * Since 2026-11-04 (user: "título na cabeça e título de ladrão só aparece acima da cabeça para quem já se apresentou") the text is not the
+ * game's nametag, which everybody would read: the native nametag is a blank line that the text hangs on, and the text itself goes only to
+ * the players who know the wearer, one by one (`head-labels.ts`, the client's `Nametags.setLabel`). `headOf` says what the text is.
  *
  * A record keeps who named each title and when, so the hierarchy can say whose man somebody is, and the name the holder
  * had when last seen, so it can list them while they are away.
  */
 
 import { getCharacter } from "./characters.js";
-import { bloodTitleOf, known, labelOf, order, titleById, TITLES } from "./nobility.js";
+import { bloodTitleOf, known, labelOf, levelOf, order, titleById, TITLES } from "./nobility.js";
 import type { TitleDef } from "./nobility.js";
 import { ensureDir, read, write } from "./store.js";
 import { onThiefChange, thiefMark } from "./thieves.js";
@@ -26,6 +30,25 @@ export interface Grant {
     readonly by: string;
     readonly byName: string;
     readonly at: number;
+    /**
+     * The town the title is of (an id of `citizenship.ts`): "Cavaleiro de Suchdol" (2026-10-31, user: "ao nomear um jogador deve se escolher qual região ... isso manterá a árvore organizada").
+     * None for a title of no place (the King's), and for one the migration did not find a town for.
+     */
+    readonly region?: string;
+}
+
+/** What a town is called, to write it after a title; the town's own name for one the catalog has (`index.ts` hands it in). */
+let regionName: (id: string) => string = (id) => id;
+
+export function setRegionNamer(namer: (id: string) => string): void {
+    regionName = namer;
+}
+
+const REGION_ID = /^[a-z0-9-]{1,40}$/;
+
+/** A title as its holder is called by it: "Cavaleiro", and "Cavaleiro de Suchdol" when it is of a region. */
+export function labelWithRegion(title: TitleDef, female: boolean, region: string | undefined): string {
+    return region === undefined || region === "" ? labelOf(title, female) : `${labelOf(title, female)} de ${regionName(region)}`;
 }
 
 interface Holder {
@@ -76,7 +99,7 @@ function normalize(raw: unknown): Record<string, Holder> {
             const grants: Grant[] = [];
             for (const grant of holder.grants as Array<Partial<Grant>>) {
                 if (typeof grant?.id === "string" && titleById(grant.id) !== null && !grants.some((have) => have.id === grant.id)) {
-                    grants.push({ id: grant.id, by: typeof grant.by === "string" ? grant.by : "admin", byName: typeof grant.byName === "string" ? grant.byName : "", at: typeof grant.at === "number" ? grant.at : 0 });
+                    grants.push({ id: grant.id, by: typeof grant.by === "string" ? grant.by : "admin", byName: typeof grant.byName === "string" ? grant.byName : "", ...(typeof grant.region === "string" && REGION_ID.test(grant.region) ? { region: grant.region } : {}), at: typeof grant.at === "number" ? grant.at : 0 });
                 }
             }
             if (grants.length > 0) {
@@ -195,12 +218,44 @@ export interface TitleLine {
     readonly branch: TitleDef["branch"];
 }
 
-/** A player's titles as the panel reads them: the label for their body, the highest first. */
+/** The town a player's title is of ("" for none): the town they were named for. */
+export function regionOfTitle(steamId: string, titleId: string): string {
+    return grantsOf(steamId).find((grant) => grant.id === titleId)?.region ?? "";
+}
+
+/** A player's titles as the panel reads them: the label for their body (and the town it is of), the highest first. */
 export function titleLines(steamId: string, female: boolean): TitleLine[] {
     return titlesOf(steamId).flatMap((id) => {
         const title = titleById(id);
-        return title === null ? [] : [{ id, label: labelOf(title, female), kind: title.kind, branch: title.branch }];
+        return title === null ? [] : [{ id, label: labelWithRegion(title, female, regionOfTitle(steamId, id)), kind: title.kind, branch: title.branch }];
     });
+}
+
+/**
+ * Links the titles that were given before they had a place to the town their holder is a citizen of (2026-10-31, user: "nos jogadores que já têm título vamos vinculá-los a sua cidadania"):
+ * a title with no town (the King's has none to have) takes `townOf(steamId)`, when the holder has one. Idempotent. How many titles were linked.
+ */
+export function linkTitlesToTowns(townOf: (steamId: string) => string | null): number {
+    const store = load();
+    let linked = 0;
+    for (const [steamId, holder] of Object.entries(store)) {
+        const town = townOf(steamId);
+        if (town === null || town === "") {
+            continue;
+        }
+        holder.grants = holder.grants.map((grant) => {
+            const title = titleById(grant.id);
+            if (grant.region !== undefined || title === null || levelOf(title) <= 1) {
+                return grant;
+            }
+            linked += 1;
+            return { ...grant, region: town };
+        });
+    }
+    if (linked > 0) {
+        persist();
+    }
+    return linked;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -222,7 +277,7 @@ export interface Granted {
  * Gives a player a title, with the checks of `nobility.ts` already made. A blood title takes the place of the one
  * they held; a title only one may hold is taken from whoever had it.
  */
-export function addTitle(steamId: string, name: string, id: string, by: Namer): Granted {
+export function addTitle(steamId: string, name: string, id: string, by: Namer, region = ""): Granted {
     const title = titleById(id);
     if (title === null || steamId === "") {
         return { replaced: null, displaced: null };
@@ -250,7 +305,10 @@ export function addTitle(steamId: string, name: string, id: string, by: Namer): 
         }
     }
     if (!holder.grants.some((grant) => grant.id === id)) {
-        holder.grants.push({ id, by: by.steamId, byName: by.name, at: Date.now() });
+        holder.grants.push({ id, by: by.steamId, byName: by.name, at: Date.now(), ...(region !== "" && REGION_ID.test(region) ? { region } : {}) });
+    } else if (region !== "" && REGION_ID.test(region)) {
+        // The title they hold is named again for another town: it is of that one now.
+        holder.grants = holder.grants.map((grant) => (grant.id === id ? { ...grant, region } : grant));
     }
     store[steamId] = holder;
     persist();
@@ -322,28 +380,54 @@ export function isFemale(player: Player): boolean {
     return (getCharacter(player.steamId)?.appearance.gender ?? player.appearance.gender) === "female";
 }
 
-/** Puts the title the player chose over their head, or keeps their nametag off when they chose none. */
-export function applyNametag(player: Player): void {
+/**
+ * What is over a player's head for those who know them: the thief's mark ("Ladrão", "Ladra", in red) over whatever title they hold, else the title they chose to wear (in gold,
+ * "Cavaleiro de Suchdol" when it is of a place); null when there is nothing. Who may read it is `head-labels.ts`'s to say.
+ */
+export function headOf(player: Player): { readonly text: string; readonly colour: number } | null {
+    if (thiefMark(player.steamId) !== null) {
+        return { text: isFemale(player) ? "Ladra" : "Ladrão", colour: THIEF_COLOUR };
+    }
     const chosen = shownOf(player.steamId);
     const title = chosen === null ? null : titleById(chosen);
+    return title === null ? null : { text: labelWithRegion(title, isFemale(player), regionOfTitle(player.steamId, title.id)), colour: TITLE_COLOUR };
+}
+
+/**
+ * The name drawn on a head that has something to say: a line of one no-break space, which draws nothing, so that the label of `head-labels.ts` has a nametag to hang on and
+ * the player's own name is not read there ("empty restores the name": an empty text would show it).
+ */
+export const BLANK_NAME = "\u00a0";
+
+/** Who is told when a head changes (`head-labels.ts`). */
+const headListeners: Array<(player: Player) => void> = [];
+
+export function onHeadChange(listener: (player: Player) => void): void {
+    headListeners.push(listener);
+}
+
+/** Puts a blank nametag on the player when they have something over their head (the text goes to whoever knows them), or keeps their nametag off when they have not. */
+export function applyNametag(player: Player): void {
     try {
-        if (thiefMark(player.steamId) !== null) {
-            player.setNametagText(isFemale(player) ? "Ladra" : "Ladrão");
-            player.setNametagColor(THIEF_COLOUR);
-            player.setNametagHealthVisible(false);
-            player.setNametagVisible(true);
-        } else if (title === null) {
+        if (headOf(player) === null) {
             player.setNametagVisible(false);
             player.setNametagText("");
             player.setNametagColor(PLAIN_COLOUR);
         } else {
-            player.setNametagText(labelOf(title, isFemale(player)));
-            player.setNametagColor(TITLE_COLOUR);
+            player.setNametagText(BLANK_NAME);
+            player.setNametagColor(PLAIN_COLOUR);
             player.setNametagHealthVisible(false);
             player.setNametagVisible(true);
         }
     } catch {
         // A player gone between the event and here.
+    }
+    for (const listener of headListeners) {
+        try {
+            listener(player);
+        } catch (error: unknown) {
+            console.log(`titles: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
 }
 

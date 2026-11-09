@@ -1,5 +1,5 @@
 /**
- * The status panel: character, guild and faction information, a full-screen CEF view
+ * The status panel: character and guild information, a full-screen CEF view
  * separate from the F4 debug panel (`panel.ts` manages exactly one view, so
  * this one keeps its own state rather than share it).
  *
@@ -262,6 +262,8 @@ function create(): boolean {
         const tab = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>).tab : undefined;
         if (typeof tab === "string" && /^[a-z]{1,24}$/.test(tab)) {
             lastTabOf[mode] = tab;
+            // The server sends the data of the section on screen and of no other (2026-10-31): it is told which one opened.
+            Events.emitServer(`${RESOURCE}:status.section`, JSON.stringify({ tab }));
         }
     });
 
@@ -274,34 +276,40 @@ function create(): boolean {
     });
 
     relay("status:selectGuild", { guildId: "string" });
-    relay("status:selectFaction", { factionId: "string" });
-    relay("status:selectShowcase", { showcase: "string" });
     relay("status:grantKey", { propertyId: "string", targetId: "number?", doorIndex: "number?" });
     relay("status:propSave", { id: "string", name: "string", description: "string", region: "string?" });
     relay("status:propOwner", { id: "string", targetId: "number?" });
     relay("status:propDisown", { id: "string" });
+    // A lord takes back a house of their region whose owner stopped coming (2026-11-02).
+    relay("status:propReclaim", { id: "string" });
     relay("status:familyAdd", { relation: "string", name: "string", degree: "number?", linkId: "number?" });
     relay("status:familyEdit", { id: "string", relation: "string?", deceased: "number?", linkId: "number?" });
     relay("status:familyRemove", { id: "string" });
     relay("status:familyAnswer", { key: "string", accept: "number" });
     relay("status:familySurname", { surname: "string" });
+    relay("status:familyProfile", { description: "string", crest: "string" });
     relay("status:roster", { tag: "string?", q: "string?", page: "number?", filter: "string?" });
+    // The administrator's NPCs page (guild-vendors.ts, 2026-10-31): the vendors by region and village, with their ids.
+    relay("status:npcs", {});
+    relay("status:npcDisable", { id: "string", off: "number" });
     relay("status:guildMembers", { guildId: "string", page: "number" });
     relay("status:unstick", {});
     relay("status:lang", { lang: "string" });
-    relay("status:citizenChoose", { town: "string" });
-    relay("status:citizens", { town: "string", page: "number" });
-    relay("status:citizenDepose", { town: "string", key: "string", page: "number" });
-    relay("status:citizenClose", { town: "string", closed: "number" });
-    // The Escrivão section (scribe.ts, 2026-10-29): the list with its filters, the guild handed, the guild taken off.
-    relay("status:scribe", { guild: "string?", town: "string?", search: "string?", page: "number?" });
-    relay("status:scribeGrant", { key: "string", guild: "string", fguild: "string?", ftown: "string?", fsearch: "string?", fpage: "number?" });
-    relay("status:scribeRevoke", { key: "string", fguild: "string?", ftown: "string?", fsearch: "string?", fpage: "number?" });
+    // The Cidadania section left the panel (2026-11-09): the citizenship, its lords' lists and the wars have no page to ask for them; the server keeps them (`/cidadania`).
+    // The Cartas section (letters.ts, 2026-11-02): the lists asked for, a letter opened (its text; one received is read from then on), one written and sent, one
+    // thrown away from a list, and how long the courier would take to somebody. A letter's style comes flat: this side carries strings and numbers only.
+    relay("status:lettersAsk", {});
+    relay("status:letterOpen", { id: "string" });
+    relay("status:letterSend", { to: "number", title: "string", body: "string", font: "string", bold: "number", spacing: "string", align: "string", anon: "number", seal: "string" });
+    relay("status:letterDrop", { id: "string" });
+    relay("status:letterQuote", { to: "number" });
     relay("status:supporterGrant", { targetId: "number" });
     relay("status:supporterRevoke", { targetId: "number" });
     relay("status:ban", { targetId: "number" });
     relay("status:animalStuck", { kind: "string", key: "string?" });
     relay("status:unban", { targetId: "number" });
+    relay("status:execute", { targetId: "number" });
+    relay("status:pardon", { targetId: "number" });
     relay("status:propLock", { id: "string", locked: "number" });
     relay("status:propGates", { id: "string", open: "number" });
     relay("status:resetCharacter", { confirm: "number" });
@@ -309,7 +317,8 @@ function create(): boolean {
     relay("status:remakeLook", { confirm: "number" }, true);
     relay("status:setSocial", { targetId: "number", status: "string", family: "number" });
     // The Nomeação section (nominations.ts): naming and taking away a title, the title worn over the head, and the hierarchy.
-    relay("status:nominate", { targetId: "number", title: "string" });
+    // `via` says it is given in the Crown's name (the Jogadores page), `region` the town the title is of (2026-10-31; `via` was left out of the list and never reached the server).
+    relay("status:nominate", { targetId: "number", title: "string", via: "string?", region: "string?" });
     relay("status:revokeTitle", { targetId: "number?", key: "string?", title: "string", self: "number?" });
     relay("status:shownTitle", { title: "string" });
     relay("status:hierarchy", {});
@@ -329,14 +338,11 @@ function create(): boolean {
     relay("status:roomDelete", { room: "string" });
     relay("status:regionCede", { region: "string", targetId: "number?", confirm: "number?", remove: "number?" });
     relay("status:animals", {});
-    // Esgrima (esgrima.ts): the combos a player knows, what one of them is, and teaching and taking one away.
-    relay("status:esgrima", {});
-    relay("status:esgrimaInfo", { id: "string" });
-    relay("status:esgrimaTeach", { id: "string", targetId: "number" });
-    relay("status:esgrimaRetire", { id: "string", targetId: "number" });
     relay("status:animalName", { kind: "string", key: "string?", name: "string" });
     relay("status:animalCall", { kind: "string", key: "string?" });
-    relay("status:horseBags", { key: "string" }, true);
+    relay("status:animalAway", { kind: "string" });
+    // A horse let go to the free world, after the panel's own question (`horses.ts`, `letHorseGo`).
+    relay("status:horseRelease", { key: "string" });
     relay("status:cartName", { key: "string", name: "string" });
     relay("status:cartBring", { key: "string" });
     relay("status:animalGive", { kind: "string", key: "string", targetId: "number" });
@@ -424,6 +430,8 @@ function hide(): void {
         Web.focusView(view, false);
         Web.hideView(view);
         destroy();
+        // Nothing of the panel is worked out at the server while it is closed: the next page asks for its own section when it opens (2026-10-31).
+        Events.emitServer(`${RESOURCE}:status.section`, JSON.stringify({ tab: "closed" }));
     }
 }
 
@@ -603,14 +611,16 @@ export function installStatus(): void {
     });
     Events.on(`${RESOURCE}:status.roster`, (payload) => keep("status:roster", payload));
     Events.on(`${RESOURCE}:status.guildMembers`, (payload) => keep("status:guildMembers", payload));
-    Events.on(`${RESOURCE}:status.citizens`, (payload) => keep("status:citizens", payload));
-    Events.on(`${RESOURCE}:status.scribe`, (payload) => keep("status:scribe", payload));
+    // The letters' lists and a letter's text may be long (`emitLarge`); the courier's time and the answer to a letter sent are short.
+    onLarge("status.letters", (payload) => keep("status:letters", payload));
+    onLarge("status.letter", (payload) => keep("status:letter", payload));
+    Events.on(`${RESOURCE}:status.letterQuote`, (payload) => keep("status:letterQuote", payload));
+    Events.on(`${RESOURCE}:status.letterResult`, (payload) => keep("status:letterResult", payload));
     Events.on(`${RESOURCE}:status.notice`, (payload) => keep("status:notice", payload));
     Events.on(`${RESOURCE}:status.animals`, (payload) => keep("status:animals", payload));
-    Events.on(`${RESOURCE}:status.esgrima`, (payload) => keep("status:esgrima", payload));
-    Events.on(`${RESOURCE}:status.esgrimaInfo`, (payload) => keep("status:esgrimaInfo", payload));
     // The hierarchy is asked for while its page is open and is not kept: it goes stale in seconds.
     onLarge("status.hierarchy", (payload) => keep("status:hierarchy", payload));
+    onLarge("status.npcs", (payload) => keep("status:npcs", payload));
     onLarge("status.image", (payload) => keep("status:image", payload));
     Events.onLocal("camera.state", (payload) => keep("status:options", payload));
     Events.onLocal("voice.state", (payload) => keep("status:voice", payload));

@@ -82,7 +82,7 @@ test("a page is packed whole: style, script and markup, with a note on where it 
 
 test("the pages the players download are the current ones, and are smaller than the pages as they are written", async () => {
     const { packPage, PAGES } = await packer();
-    assert.deepEqual([...PAGES], ["status", "creator", "freecam", "chat", "craft", "emotes", "voice", "welcome", "mural"]);
+    assert.deepEqual([...PAGES], ["status", "creator", "freecam", "chat", "craft", "emotes", "voice", "mural", "entry", "death"]);
     for (const name of PAGES) {
         const source = fs.readFileSync(path.join(root, "ui-src", `${name}.html`), "utf8");
         const shipped = fs.readFileSync(path.join(root, "ui", `${name}.html`), "utf8");
@@ -133,6 +133,20 @@ test("the creator page's script is a script, and the page and its client script 
         if (event !== "creator:ready") assert.ok(sent.has(event), `the client handles ${event}, which the page never sends`);
     }
     assert.ok(sent.has("creator:ready") && handled.has("creator:ready"));
+});
+
+test("the creator page's steps (2026-11-09): a newcomer goes from the body to the clothes in order, and there is no place of birth", () => {
+    const written = fs.readFileSync(path.join(root, "ui-src", "creator.html"), "utf8");
+    const shipped = fs.readFileSync(path.join(root, "ui", "creator.html"), "utf8");
+    const script = shipped.slice(shipped.indexOf("<script>") + 8, shipped.indexOf("</script>"));
+    for (const id of ["back", "next", "save"]) {
+        assert.match(written, new RegExp(`id="${id}"`), `the page has #${id}`);
+    }
+    assert.doesNotMatch(written, /data-pane="birth"/, "no third tab");
+    assert.doesNotMatch(shipped, /creator:birth/, "no places of birth reach the page");
+    assert.match(written, /const paneList = \(\) => \["rows"\]\.concat\(clothes \? \["clothes"\] : \[\]\);/);
+    assert.match(written, /const stepped = \(\) => !existing;/, "the steps are a newcomer's: a character that exists has its tabs free");
+    assert.doesNotThrow(() => new vm.Script(script));
 });
 
 test("the free camera page's script is a script, and the page and the camera speak the same events", () => {
@@ -256,27 +270,6 @@ test("the voice page's script is a script, and the page and the voice indicator 
     assert.deepEqual(listened, emitted);
 });
 
-test("the welcome page's script is a script, and the page and the welcome client speak the same events", () => {
-    const shipped = fs.readFileSync(path.join(root, "ui", "welcome.html"), "utf8");
-    const script = shipped.slice(shipped.indexOf("<script>") + 8, shipped.indexOf("</script>"));
-    assert.doesNotThrow(() => new vm.Script(script));
-
-    const client = fs.readFileSync(path.join(root, "src", "client", "welcome.ts"), "utf8");
-    const handled = [...new Set([...client.matchAll(/Web\.on\(view, "(welcome:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
-    const sent = [...new Set([...script.matchAll(/send\("(welcome:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
-    assert.deepEqual(handled, ["welcome:accept", "welcome:ready"]);
-    assert.deepEqual(sent, handled, "everything the page says is heard, and nothing is heard that the page never says");
-
-    const emitted = [...new Set([...client.matchAll(/Web\.emit\(view, "(welcome:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
-    const listened = [...new Set([...script.matchAll(/addEventListener\("(welcome:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
-    assert.deepEqual(emitted, ["welcome:done", "welcome:open"]);
-    assert.deepEqual(listened, emitted);
-
-    // It has no way out but its button: no Escape, no close button.
-    assert.doesNotMatch(script, /keydown|keyCode|Escape/);
-    assert.doesNotMatch(shipped, /class="close"/);
-});
-
 test("the notice board's page: its script is a script, it and the client speak the same events, and the fonts and pictures it names are in the package", () => {
     const shipped = fs.readFileSync(path.join(root, "ui", "mural.html"), "utf8");
     const script = shipped.slice(shipped.indexOf("<script>") + 8, shipped.indexOf("</script>"));
@@ -285,7 +278,7 @@ test("the notice board's page: its script is a script, it and the client speak t
     const client = fs.readFileSync(path.join(root, "src", "client", "mural.ts"), "utf8");
     const handled = [...new Set([...client.matchAll(/Web\.on\(view, "(mural:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
     const sent = [...new Set([...script.matchAll(/send\("(mural:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
-    assert.deepEqual(handled, ["mural:close", "mural:publish", "mural:ready", "mural:remove"]);
+    assert.deepEqual(handled, ["mural:citizen", "mural:close", "mural:publish", "mural:ready", "mural:remove"]);
     assert.deepEqual(sent, handled, "everything the page says is heard, and nothing is heard that the page never says");
 
     const emitted = [...new Set([...client.matchAll(/(?:Web\.emit\(view, |toPage\()"(mural:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
@@ -301,4 +294,26 @@ test("the notice board's page: its script is a script, it and the client speak t
     // A way out: its button and Escape.
     assert.match(script, /Escape/);
     assert.match(shipped, /id="close"/);
+});
+
+test("the door's page (the ten questions): its script is a script, it and the client speak the same events, it listens to no key, and nothing but the server closes it (2026-10-29, no trailer since 2026-11-09)", () => {
+    const shipped = fs.readFileSync(path.join(root, "ui", "entry.html"), "utf8");
+    const script = shipped.slice(shipped.indexOf("<script>") + 8, shipped.indexOf("</script>"));
+    assert.doesNotThrow(() => new vm.Script(script));
+
+    const client = fs.readFileSync(path.join(root, "src", "client", "entry.ts"), "utf8");
+    const handled = [...new Set([...client.matchAll(/Web\.on\(view, "(entry:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
+    const sent = [...new Set([...script.matchAll(/send\("(entry:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
+    assert.deepEqual(handled, ["entry:answer", "entry:finish", "entry:lang", "entry:ready", "entry:start"]);
+    assert.deepEqual(sent, handled, "everything the page says is heard, and nothing is heard that the page never says");
+
+    const emitted = [...new Set([...client.matchAll(/Web\.emit\(view, "(entry:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
+    const listened = [...new Set([...script.matchAll(/addEventListener\("(entry:[A-Za-z]+)"/g)].map((match) => match[1]))].sort();
+    assert.deepEqual(emitted, ["entry:close", "entry:open", "entry:questions", "entry:result"]);
+    assert.deepEqual(listened, emitted);
+
+    // It listens to no key and has no close button: only the server's `entry.close` ends it.
+    assert.equal([...script.matchAll(/keydown/g)].length, 0);
+    assert.doesNotMatch(shipped, /class="close"/);
+    assert.doesNotMatch(shipped, /<video|id="trailer"|class="esc"/);
 });

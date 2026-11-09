@@ -22,7 +22,8 @@ import { playWork, stopWork } from "./craft-animation.js";
 import { craftItemGuid } from "./craft-items.js";
 import { mayCraft } from "./guild-crafts.js";
 import { languageOf, translate } from "./language.js";
-import { paid } from "./profession-xp.js";
+import { award, paid } from "./profession-xp.js";
+import type { Trade } from "./profession-xp.js";
 import { allowedTo } from "./reach.js";
 import { workBegins, workEnds } from "./work-sound.js";
 
@@ -75,9 +76,13 @@ export const gatherSettings = {
     /** The chance that a strike brings silver ore: the rocks of the Kuttenberg country and of its quarries more than any other. */
     silver: 0.01,
     silverKutnohorsko: 0.03,
-    /** The condition (of 1) a log or a strike takes off the tool; a tool at `worn` or below does not work. */
-    wear: 0.015,
-    worn: 0.02,
+    /**
+     * The condition (of 1) a log or a strike takes off the tool. 0.009 since 2026-10-31 ("a durabilidade está quebrando muito rápido", `wear-ease.ts`): it was 0.015. A tool worn to
+     * `broken` or below breaks and leaves the bag (2026-11-04, the rule of `wear-break.ts` for everything worn: "chegar a 0 de durabilidade deve quebrar e sumir"); until then it
+     * works. Before, it stopped at 2% and waited for a repair.
+     */
+    wear: 0.009,
+    broken: 0.0005,
     /** How seldom the same player is told the same thing (not of the guild). */
     hintMs: 60_000,
 };
@@ -340,10 +345,14 @@ export function toolFor(player: Player, kind: GatherKind): InventoryRow | null {
  * split first: the worn tool is added as a row of its own, and then one is taken out of the stack. The add comes first, so a bag with no room
  * leaves the tools as they were (the work is free once) instead of losing one; should the removal fail, the added tool is taken out again.
  */
-function wearTool(player: Player, row: InventoryRow): boolean {
+function wearTool(player: Player, row: InventoryRow, kind: GatherKind): boolean {
     const metadata: Record<string, unknown> = { ...row.metadata };
     delete metadata["health"];
     metadata["condition"] = Math.max(0, conditionOf(row) - gatherSettings.wear);
+    // Worn to nothing: the tool breaks and goes, one of the stack (2026-11-04).
+    if ((metadata["condition"] as number) <= gatherSettings.broken) {
+        return breakTool(player, row, kind);
+    }
     try {
         if (row.amount > 1) {
             const added = Inventory.add(player, { item: row.item, amount: 1, metadata });
@@ -367,6 +376,20 @@ function wearTool(player: Player, row: InventoryRow): boolean {
     }
 }
 
+/** A tool with nothing left breaks: one is taken out of its row, and the player is told. False when the bag would not let it go. */
+function breakTool(player: Player, row: InventoryRow, kind: GatherKind): boolean {
+    try {
+        if (!Inventory.remove(player, { units: [{ id: row.id, amount: 1 }] }).ok) {
+            return false;
+        }
+    } catch {
+        return false;
+    }
+    console.log(`coleta: ${player.nickname}: ${kind === "tree" ? "o machado" : "a picareta"} quebrou com o uso e saiu do inventário`);
+    tell(player, BROKEN_TOOL[kind]);
+    return true;
+}
+
 function give(player: Player, item: string): boolean {
     try {
         return Inventory.add(player, { item: craftItemGuid(item) ?? item, amount: 1 }).ok;
@@ -375,9 +398,9 @@ function give(player: Player, item: string): boolean {
     }
 }
 
-function addXp(player: Player, track: string, xp: number): void {
+function addXp(player: Player, track: string, xp: number, trade: Trade): void {
     try {
-        player.addXp(track, paid(xp));
+        player.addXp(track, award(player.steamId, track, paid(xp, trade)));
     } catch (error: unknown) {
         console.log(`coleta: o XP de ${track} não foi dado a ${player.nickname}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -387,9 +410,9 @@ const NO_TOOL: Readonly<Record<GatherKind, string>> = {
     tree: "Você precisa de um machado na bolsa para cortar lenha.",
     rock: "Você precisa de uma picareta na bolsa para minerar.",
 };
-const WORN_TOOL: Readonly<Record<GatherKind, string>> = {
-    tree: "O seu machado está gasto demais: conserte com um kit de reparo ou faça outro no ferreiro.",
-    rock: "A sua picareta está gasta demais: conserte com um kit de reparo ou faça outra no ferreiro.",
+const BROKEN_TOOL: Readonly<Record<GatherKind, string>> = {
+    tree: "O seu machado quebrou de tanto uso e sumiu do inventário. Faça outro no ferreiro.",
+    rock: "A sua picareta quebrou de tanto uso e sumiu do inventário. Faça outra no ferreiro.",
 };
 const SPENT: Readonly<Record<GatherKind, string>> = { tree: "Esta árvore já deu a lenha que tinha. Procure outra.", rock: "Esta pedra está esgotada por ora. Procure outra." };
 
@@ -459,7 +482,7 @@ export function startGather(player: Player, report: GatherReport, now = Date.now
         return { started: false, why: "longe demais" };
     }
     if (!mayCraft(player, kind === "tree" ? "lenha" : "mineracao")) {
-        tell(player, "Cortar lenha e quebrar pedra é ofício dos Coletores (guilda Collectores). Escolha a guilda no painel (F2), em Guildas.", "guild", now);
+        tell(player, "Cortar lenha e quebrar pedra é ofício dos Coletores (guilda Collectores). Aprenda o ofício com o comerciante da guilda da sua cidade.", "guild", now);
         return { started: false, why: "não é da guilda" };
     }
     if (isWorking(player)) {
@@ -471,9 +494,10 @@ export function startGather(player: Player, report: GatherReport, now = Date.now
         tell(player, NO_TOOL[kind]);
         return { started: false, why: "sem ferramenta" };
     }
-    if (conditionOf(tool) <= gatherSettings.worn) {
-        tell(player, WORN_TOOL[kind]);
-        return { started: false, why: "ferramenta gasta" };
+    // One already worn to nothing (from before 2026-11-04, when tools stopped at 2%) breaks now.
+    if (conditionOf(tool) <= gatherSettings.broken) {
+        breakTool(player, tool, kind);
+        return { started: false, why: "ferramenta quebrou" };
     }
     const target = targetFor(kind, report.m, report.x, report.y, now);
     target.lastAt = now;
@@ -524,8 +548,13 @@ export function finishOne(player: Player, job: Job, now = Date.now(), random: ()
         return "";
     }
     const tool = toolFor(player, kind);
-    if (tool === null || conditionOf(tool) <= gatherSettings.worn) {
-        stopGather(player, tool === null ? NO_TOOL[kind] : WORN_TOOL[kind]);
+    if (tool === null) {
+        stopGather(player, NO_TOOL[kind]);
+        return "";
+    }
+    if (conditionOf(tool) <= gatherSettings.broken) {
+        breakTool(player, tool, kind);
+        stopGather(player);
         return "";
     }
     const rule = kind === "tree" ? gatherSettings.tree : gatherSettings.rock;
@@ -534,8 +563,8 @@ export function finishOne(player: Player, job: Job, now = Date.now(), random: ()
     if (target.left <= 0) {
         target.restUntil = now + rule.restMs;
     }
-    addXp(player, rule.track, rule.xp);
-    wearTool(player, tool);
+    addXp(player, rule.track, rule.xp, kind === "tree" ? "lenha" : "mina");
+    wearTool(player, tool, kind);
     job.done += 1;
     let gave = "";
     if (kind === "tree") {

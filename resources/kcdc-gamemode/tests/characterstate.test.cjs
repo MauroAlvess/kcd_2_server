@@ -67,9 +67,8 @@ function load({ files = {} } = {}) {
     const online = new Map();
     const chat = [];
     const logs = [];
-    const calls = { set: [], add: [], restoreProgression: [], setKnowledge: [], vitals: [], combos: [] };
-    const COMBOS = ["C01 (longsword)", "C02 (longsword)"];
-    const clock = { now: 1_000_000 };
+    const calls = { set: [], add: [], restoreProgression: [], setKnowledge: [], vitals: [] };
+        const clock = { now: 1_000_000 };
     const state = { setRefuses: () => false, addOk: true, inventoryReady: true };
     const inventories = new Map();
 
@@ -81,8 +80,6 @@ function load({ files = {} } = {}) {
         exports: {},
         require: (id) => {
             if (id === "./perk-guard.js") return perkGuardSandbox.exports;
-            // The combos are the Esgrima's (esgrima.ts): taken out of what is restored, written down there. This stub takes out the ones of this test's list.
-            if (id === "./esgrima.js") return { takeOutCombos: (steamId, snapshot) => { calls.combos.push([steamId, snapshot.perks.filter((perk) => COMBOS.includes(perk))]); return { ...snapshot, perks: snapshot.perks.filter((perk) => !COMBOS.includes(perk)) }; }, leaveOutCombos: (snapshot) => ({ ...snapshot, perks: snapshot.perks.filter((perk) => !COMBOS.includes(perk)) }) };
             assert.equal(id, "./store.js");
             return storeSandbox.exports;
         },
@@ -626,6 +623,52 @@ test("at most three times in a session, and a track that lags later is put back 
     assert.equal(sut.stored().progression.tracks.weapon_sword.level, 10, "and the file still has it");
 });
 
+test("a new character's progression is told from a track that reads a little low: every track saved above the start reads at the start (2026-11-03)", () => {
+    const sut = load();
+    const saved = CLIMBER().progression;
+    assert.equal(sut.api.looksFresh(FRESH(), saved), true);
+    assert.equal(sut.api.looksFresh({ ...FRESH(), tracks: { ...FRESH().tracks, weapon_sword: { level: 10, xp: 5 } } }, saved), false, "the sword kept its level: the rest is a lag, not a new character");
+    assert.equal(sut.api.looksFresh(FRESH(), null), false);
+    assert.equal(sut.api.looksFresh(FRESH(), FRESH()), false, "a saved character that never climbed has nothing to lose");
+    const fresh = sut.api.keepProgression(FRESH(), saved);
+    assert.deepEqual(JSON.parse(JSON.stringify([fresh.fresh, fresh.snapshot.perks, fresh.snapshot.perkPoints, fresh.snapshot.tracks.alchemy.level])), [true, ["p1", "p2"], { alchemy: 2, main: 1 }, 20]);
+    const lag = sut.api.keepProgression({ tracks: { alchemy: { level: 20, xp: 0 }, weapon_sword: { level: 5, xp: 0 }, fencing: { level: 9, xp: 0 }, survival: { level: 5, xp: 0 } }, perks: ["p1", "p2", "bought"], perkPoints: { main: 0 } }, saved);
+    assert.deepEqual(JSON.parse(JSON.stringify([lag.fresh, lag.snapshot.perks, lag.snapshot.perkPoints, lag.snapshot.tracks.weapon_sword.level])), [false, ["p1", "p2", "bought"], { main: 0 }, 10], "a lagging track: the perk bought now stays");
+});
+
+test("a new character's progression in the middle of a session is never written over the saved perks and points: the periodic look gives them all back (2026-11-03: Lev, Arthur, Agnes and Ludmilla lost every passive)", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const player = sut.join();
+    player.progression = JSON.parse(JSON.stringify(CLIMBER().progression));
+    bring(sut, player);
+    sut.flushTimeouts();
+    assert.equal(sut.calls.restoreProgression.length, 1, "it held: nothing to repeat");
+    // The game hands the body a new character's progression.
+    sut.clock.now += 60_000;
+    player.progression = FRESH();
+    sut.tick();
+    const repair = sut.calls.restoreProgression.at(-1);
+    assert.equal(sut.calls.restoreProgression.length, 2);
+    assert.deepEqual(JSON.parse(JSON.stringify([repair.perks, repair.perkPoints, repair.tracks.alchemy.level])), [["p1", "p2"], { alchemy: 2, main: 1 }, 20], "the perks and points of the file go back with the levels");
+    assert.ok(sut.logs.some((line) => /Mauro: 2 trilha\(s\) abaixo do salvo .*o jogo deu um personagem novo: restaurei de novo, com as passivas e os pontos \(olhada periódica, vez 1\)/.test(line)), sut.logs.join(" | "));
+    sut.flushTimeouts();
+    // The game did not take it: what is written is still the file's.
+    sut.leave(player);
+    const stored = sut.stored().progression;
+    assert.deepEqual(JSON.parse(JSON.stringify([stored.perks, stored.perkPoints, stored.tracks.alchemy.level, stored.tracks.weapon_sword.level])), [["p1", "p2"], { alchemy: 2, main: 1 }, 20, 10]);
+});
+
+test("a restore that did not hold at the entry: the file keeps the perks and the points too, not the new character's (2026-11-03)", () => {
+    const sut = load({ files: { [STEAM]: CLIMBER() } });
+    const player = sut.join();
+    player.progression = FRESH();
+    bring(sut, player);
+    sut.tick();
+    sut.leave(player);
+    const stored = sut.stored().progression;
+    assert.deepEqual(JSON.parse(JSON.stringify([stored.perks, stored.perkPoints])), [["p1", "p2"], { alchemy: 2, main: 1 }]);
+});
+
 test("a character who starts again is not given its levels back by the guard", () => {
     const sut = load({ files: { [STEAM]: CLIMBER() } });
     const player = sut.join();
@@ -670,28 +713,6 @@ test("a level raised in the file is what the character gets back at the next ent
     sut.tick();
     sut.leave(player);
     assert.equal(sut.stored().progression.tracks.survival.level, 12);
-});
-
-test("the combos of a saved character are left out of what the game is asked to restore, and handed to the Esgrima (2026-10-26)", () => {
-    const base = record();
-    const sut = load({ files: { [STEAM]: { ...base, progression: { tracks: {}, perks: ["Ascetic", "C01 (longsword)", "C02 (longsword)"], perkPoints: { main: 2 } } } } });
-    const player = sut.join();
-    bring(sut, player);
-    assert.deepEqual(sut.calls.restoreProgression[0].perks, ["Ascetic"], "the game restores the other perks");
-    assert.deepEqual(JSON.parse(JSON.stringify(sut.calls.combos)), [[STEAM, ["C01 (longsword)", "C02 (longsword)"]]], "the Esgrima is told which combos it held");
-    assert.deepEqual(sut.calls.restoreProgression[0].perkPoints, { main: 2 }, "the points are as they were");
-});
-
-test("what is saved of a progression carries no combo: what the game holds of them is the Esgrima's or an administrator's loan, never the character file's (2026-10-26)", () => {
-    const sut = load({ files: { [STEAM]: record() } });
-    const player = sut.join();
-    bring(sut, player);
-    player.progression = { tracks: { alchemy: { level: 5, xp: 1 } }, perks: ["p1", "C01 (longsword)", "C02 (longsword)"], perkPoints: { main: 0 } };
-    sut.clock.now += 20_000;
-    sut.leave(player);
-    const saved = sut.stored();
-    assert.deepEqual(saved.progression.perks, ["p1"], "the other perks are saved as ever");
-    assert.equal(saved.progression.tracks.alchemy.level, 5, "and the levels");
 });
 
 test("early saves of one player are at least eight seconds apart, and the leaving still saves at once (2026-10-26)", () => {
@@ -776,4 +797,41 @@ test("a character who left before its look came is not looked at, and nothing th
     sut.tick();
     sut.leave(players[3]);
     assert.doesNotThrow(() => sut.flushTimeouts());
+});
+
+// ---------------------------------------------------------------------------------------------
+// The passives too strong for the server (2026-11-01, perk-guard.ts).
+
+test("a saved character that holds passives too strong for the server gets them taken out, a point back for each in its tree, and is told in one line", () => {
+    const base = record();
+    const sut = load({ files: { [STEAM]: { ...base, progression: { tracks: {}, perks: ["Ascetic", "Hard to kill", "Runaway boy", "Master thief"], perkPoints: { vitality: 1 } } } } });
+    const player = sut.join();
+    bring(sut, player);
+    assert.deepEqual(sut.calls.restoreProgression[0].perks, ["Ascetic"]);
+    assert.deepEqual(sut.calls.restoreProgression[0].perkPoints, { vitality: 3, thievery: 1 });
+    assert.ok(sut.chat.includes("As passivas Duro de Matar, Velocidade de Hermes, Mestre-ladrão foram desativadas no servidor, por serem fortes demais para o RP: os 3 pontos voltaram para você, para gastar em outras."), sut.chat.join("|"));
+    assert.ok(!sut.chat.some((line) => /mesas de alquimia/.test(line)), "not the alchemy's line");
+    assert.ok(sut.logs.some((line) => /Hard to kill, Runaway boy, Master thief tirada\(s\) \(forte demais\), 3 ponto\(s\) devolvido\(s\)/.test(line)), sut.logs.join("|"));
+
+    const one = load({ files: { [STEAM]: { ...base, progression: { tracks: {}, perks: ["Clean cut"], perkPoints: {} } } } });
+    const lone = one.join();
+    bring(one, lone);
+    assert.ok(one.chat.includes("A passiva Fatiador de Tendões foi desativada no servidor, por ser forte demais para o RP: o ponto voltou para você, para gastar em outra."), one.chat.join("|"));
+});
+
+test("Marbon keeps them: nothing is told, no point comes back, and a while after the entry the game is asked for the nine", () => {
+    const MARBON = "76561198906140019";
+    const base = record({ steamId: MARBON });
+    const sut = load({ files: { [MARBON]: { ...base, progression: { tracks: {}, perks: ["Ascetic", "Hard to kill"], perkPoints: { vitality: 0 } } } } });
+    const added = [];
+    const player = sut.join({ steamId: MARBON, nickname: "Player", perks: ["Ascetic"], addPerk(name) { added.push(name); return true; } });
+    bring(sut, player);
+    assert.deepEqual(sut.calls.restoreProgression[0].perks, ["Ascetic"], "the game would leave a blocked perk out anyway");
+    assert.deepEqual(sut.calls.restoreProgression[0].perkPoints, { vitality: 0 });
+    assert.ok(!sut.chat.some((line) => /desativada/.test(line)));
+    const grant = sut.timeouts.find((entry) => entry.ms === 20_000);
+    assert.ok(grant, "handed over 20 s after");
+    grant.fn();
+    assert.equal(added.length, 9);
+    assert.ok(added.includes("Hard to kill") && added.includes("Zaklady bohoslovectvi meta"));
 });

@@ -97,7 +97,8 @@ test("the fire has a category of soups for the tavern keepers, each batch made f
     for (const recipe of soups) {
         assert.ok(recipe.ingredients.length >= 4 && recipe.ingredients.length <= 7, `${recipe.id}: a handful of ingredients`);
         for (const [item, amount] of recipe.ingredients) {
-            assert.ok(amount >= 1 && amount <= 2, `${recipe.id}: one or two of each`);
+            // A pair of something grows to three from the thirteenth level (2026-11-01: 2% more of each for every level of the recipe).
+            assert.ok(amount >= 1 && amount <= (recipe.level >= 13 ? 3 : 2), `${recipe.id}: one or two of each`);
             assert.ok(item in data.CRAFT_ITEMS, `${recipe.id}: the page knows ${item}`);
         }
         assert.ok(recipe.xp > 0 && recipe.seconds >= 7, recipe.id);
@@ -166,6 +167,24 @@ test("a stomach that is full takes no soup, and nothing is spent; neither does a
     const unknown = sut.player({ hunger: 50, maxHunger: 0 });
     assert.equal(sut.api.eat(unknown, sut.row("kcdc-craft:sopa-alho"), 1).ok, true);
     assert.deepEqual(unknown.sets, [74]);
+});
+
+test("the garden's fruit and leaves of our own are eaten raw from the bag, a little each; the dry beans and the grain are not (2026-11-02)", () => {
+    const sut = load();
+    sut.api.installSoups();
+    assert.ok(sut.state.logs.some((line) => /soups: 12 sopas nas receitas do fogo e 12 frutos e folhas da horta/.test(line)));
+    const use = sut.state.handlers.get("playerCustomItemUse");
+    const hans = sut.player({ hunger: 20 });
+    use(hans, sut.row("kcdc-craft:morango"), 4);
+    assert.equal(hans.hunger, 25);
+    assert.equal(sut.state.chat.at(-1).text, "Você come morangos: sacia 5% da fome e um pouco da sede.");
+    use(hans, sut.row("kcdc-craft:avela"), 5);
+    assert.equal(hans.hunger, 32);
+    assert.equal(sut.state.chat.at(-1).text, "Você come avelãs: sacia 7% da fome.");
+    const before = sut.state.removed.length;
+    use(hans, sut.row("kcdc-craft:fava"), 6);
+    use(hans, sut.row("kcdc-craft:centeio"), 6);
+    assert.equal(sut.state.removed.length, before, "the beans and the rye are cooked or ground, not eaten raw");
 });
 
 test("the action in the bag reaches the server by the custom-item event: a soup is eaten and told, anything else is left to the others", () => {

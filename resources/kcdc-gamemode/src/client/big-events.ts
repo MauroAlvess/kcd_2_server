@@ -6,7 +6,7 @@
  * Either way the handler gets the payload PARSED, as the framework hands over a whole event ("payloads cross the wire as JSON
  * and arrive parsed"). Until 2026-10-18 evening the pieces were handed over as the text put back together, and the panel, which
  * passes the payload to its page as it comes, gave the page a string: Radovan's panel (his 51 properties and Suchdol's, the
- * only payload big enough to go in pieces besides an administrator's) showed no guild, faction or property at all.
+ * only payload big enough to go in pieces besides an administrator's) showed no guild or property at all.
  */
 
 const RESOURCE = "kcdc-gamemode";

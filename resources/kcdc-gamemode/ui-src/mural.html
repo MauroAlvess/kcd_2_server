@@ -37,7 +37,8 @@
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html { font-size: calc(clamp(12px, 1.48vh, 17px) * var(--ui, 1)); }
+    /* Larger since 2026-11-04 ("aumente a hud do quadro de avisos"): 1.7 % of the height (was 1.48), up to 24 px (was 17: a card lost on a big screen). */
+    html { font-size: calc(clamp(12px, 1.7vh, 24px) * var(--ui, 1)); }
     html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
     body { font: 1rem/1.5 var(--body); color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
     img { display: block; -webkit-user-drag: none; }
@@ -48,7 +49,7 @@
     .stage { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 45%, rgba(10, 6, 2, .38), rgba(10, 6, 2, .7)); animation: veil .3s ease both; }
     @keyframes veil { from { opacity: 0; } to { opacity: 1; } }
 
-    .card { position: relative; display: flex; flex-direction: column; width: min(70rem, 95vw); height: min(46rem, 94vh); padding: 1rem 1.7rem 1rem; border: 1px solid var(--rule); box-shadow: 0 0 0 .45rem rgba(210, 179, 140, .22), 0 1.6rem 4rem rgba(10, 6, 2, .65); animation: rise .4s cubic-bezier(.2, .8, .2, 1) both; }
+    .card { position: relative; display: flex; flex-direction: column; width: min(80rem, 96vw); height: min(50rem, 95vh); padding: 1rem 1.7rem 1rem; border: 1px solid var(--rule); box-shadow: 0 0 0 .45rem rgba(210, 179, 140, .22), 0 1.6rem 4rem rgba(10, 6, 2, .65); animation: rise .4s cubic-bezier(.2, .8, .2, 1) both; }
     @keyframes rise { from { opacity: 0; transform: translateY(1rem) scale(.99); } to { opacity: 1; transform: none; } }
     .paper { position: absolute; inset: 0; pointer-events: none; }
     .paper > .layer { position: absolute; inset: 0; }
@@ -70,6 +71,12 @@
     .head-title { height: 3.7rem; width: auto; margin: 0 auto; }
     .head h1 { font: 700 1.9rem/1.1 var(--display); letter-spacing: .18em; text-transform: uppercase; }
     .boardname { margin-top: .1rem; font: 600 .78rem/1.3 var(--display); letter-spacing: .24em; text-transform: uppercase; color: var(--ink-2); }
+
+    /* The two sections of the board: the posters, and the town's citizenship (2026-11-09; the information of the region of 2026-11-04 is gone). */
+    .tabs { flex: none; display: flex; justify-content: center; gap: 1.6rem; margin-top: .3rem; }
+    .tab { padding: .25rem .2rem .3rem; font: 700 .7rem/1.2 var(--display); letter-spacing: .22em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid transparent; transition: color .12s, border-color .12s; }
+    .tab:hover { color: var(--ink); }
+    .tab.on { color: var(--btn); border-bottom-color: var(--btn); }
 
     /* The gilded scroll bar of the panel. */
     *::-webkit-scrollbar { width: .7rem; }
@@ -179,6 +186,21 @@
     .foot { flex: none; display: flex; justify-content: space-between; gap: 1rem; margin-top: .55rem; padding-top: .45rem; border-top: 1px solid var(--rule); font: 600 .62rem/1.3 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
     .foot b { color: var(--ink); }
 
+    /* The Cidadania tab (2026-11-09): the town's crest on the left, what is known of it on the right, and the button that makes the player its citizen. */
+    .grid.crest-pane { display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; margin-top: .9rem; padding: 0 1rem; text-align: center; }
+    .crestwrap { display: grid; place-items: center; width: 15rem; height: 15rem; }
+    .crestwrap img { max-width: 100%; max-height: 100%; width: auto; height: auto; filter: drop-shadow(0 .35rem .5rem rgba(40, 24, 8, .5)); }
+    .crestwrap svg.shield { width: 62%; height: 62%; fill: none; stroke: var(--ink); stroke-width: .7; stroke-linejoin: round; opacity: .28; }
+    .crest-pane h3 { margin-top: 1rem; font: 700 1.5rem/1.15 var(--display); letter-spacing: .08em; text-transform: uppercase; overflow-wrap: anywhere; }
+    .crest-pane .short { display: block; width: 3rem; height: 3px; margin: .8rem 0 .2rem; background: var(--btn); }
+    .facts { margin-top: .9rem; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .6rem 1.4rem; align-items: baseline; }
+    .facts dt { font: 700 .62rem/1.3 var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--ink-2); }
+    .facts dd { font: 600 1.06rem/1.35 var(--body); overflow-wrap: anywhere; }
+    .facts dd.warn { color: var(--btn); }
+    .facts dd.none { font-style: italic; font-weight: 400; color: var(--ink-2); }
+    .note { margin-top: 1rem; font: italic 1rem/1.5 var(--body); color: var(--ink-2); }
+    .note.ask { font-style: normal; font-weight: 600; color: var(--ink); }
+
     .toast { position: absolute !important; left: 50%; bottom: 3.2rem; z-index: 5; max-width: 80%; padding: .55rem 1.2rem; transform: translateX(-50%); font: 600 .9rem/1.3 var(--body); color: var(--bg); background: rgba(40, 30, 20, .94); border: 1px solid rgba(0, 0, 0, .5); box-shadow: 0 .5rem 1.4rem rgba(10, 6, 2, .5); animation: pop .22s ease both; pointer-events: none; }
     .toast.ok { background: rgba(38, 78, 28, .96); }
     .toast.bad { background: rgba(124, 3, 5, .96); }
@@ -200,10 +222,12 @@
             <p class="boardname" id="boardName"></p>
         </header>
 
+        <nav class="tabs" id="tabs"></nav>
+
         <div class="main">
             <aside class="list">
                 <button class="pub" id="newBtn"></button>
-                <div class="filters">
+                <div class="filters" id="filters">
                     <div class="dd-wrap" id="ddKind"></div>
                     <div class="dd-wrap" id="ddDate"></div>
                     <div class="dd-wrap" id="ddOrder"></div>
@@ -250,6 +274,29 @@ const TEXT = {
     pt: {
         title: "Muralis",
         board: (name) => "Quadro de avisos de " + name,
+        tabPosters: "Cartazes", tabTown: "Cidadania",
+        townKind: "Cidadania",
+        tLord: "Senhor das terras", tLordNone: "ninguém ainda",
+        tLady: (label, courtesy) => (courtesy ? label + " das terras" : "Consorte do senhor"),
+        tFamily: "Família", tFamilyOf: (name) => "Casa " + name,
+        tCategory: "Categoria", tSeat: "Sede da casa", tLandOf: (name) => "Terra de " + name, tLands: "Terras",
+        tCitizens: "População", tCitizensN: (n) => n + (n === 1 ? " cidadão" : " cidadãos"),
+        tGate: "Cidadania", tOpen: "Aberta", tShut: "Fechada pelo senhor",
+        tWar: "Guerra", tWarWith: (names) => "Em guerra com " + names, tPeace: "Em paz",
+        tNpcs: "NPCs que vivem aqui",
+        tMine: "Sua cidadania", tMineNone: "nenhuma",
+        btnFirst: "Tornar-me cidadão", btnFree: "Mudar para cá (grátis)", btnPaid: (n) => "Mudar para cá (" + n + " moedas)", btnAdmin: "Mudar para cá (admin)", btnHere: "Sua cidadania", btnShut: "Cidadania fechada",
+        btnSure: "Confirmar",
+        askFirst: (name) => "Tornar-se cidadão de " + name + "?",
+        askChange: (from, name) => "Deixar " + from + " e tornar-se cidadão de " + name + "?",
+        noteFirst: (n) => "A primeira mudança depois desta é grátis; cada mudança seguinte custa " + n + " moedas.",
+        noteFree: (n) => "Esta é a sua troca gratuita; as próximas custam " + n + " moedas.",
+        notePaid: (n) => "A sua troca gratuita já foi usada: cada mudança custa " + n + " moedas.",
+        noteAdmin: "Administradores não pagam a troca.",
+        noteHere: "Você é cidadão deste lugar: quando morrer, é aqui que você acorda.",
+        noteShut: "O senhor das terras fechou a cidadania: ninguém novo pode se tornar cidadão por enquanto.",
+        noteAll: "Quem morre acorda na cidade de que é cidadão; quem não tem cidadania acorda nas igrejas.",
+        townFoot: "A cidadania decide onde você acorda quando morre",
         newBtn: "Afixar um cartaz",
         newSub: (fee) => fee + " moedas",
         tipKind: "Tipo de cartaz", tipDate: "Quando foi afixado", tipOrder: "Ordem",
@@ -298,6 +345,29 @@ const TEXT = {
     en: {
         title: "Muralis",
         board: (name) => "Notice board of " + name,
+        tabPosters: "Posters", tabTown: "Citizenship",
+        townKind: "Citizenship",
+        tLord: "Lord of the lands", tLordNone: "nobody yet",
+        tLady: (label, courtesy) => (courtesy ? label + " of the lands" : "The lord's consort"),
+        tFamily: "Family", tFamilyOf: (name) => "House " + name,
+        tCategory: "Category", tSeat: "Seat of a house", tLandOf: (name) => "Land of " + name, tLands: "Lands",
+        tCitizens: "Population", tCitizensN: (n) => n + (n === 1 ? " citizen" : " citizens"),
+        tGate: "Citizenship", tOpen: "Open", tShut: "Closed by the lord",
+        tWar: "War", tWarWith: (names) => "At war with " + names, tPeace: "At peace",
+        tNpcs: "NPCs who live here",
+        tMine: "Your citizenship", tMineNone: "none",
+        btnFirst: "Become a citizen", btnFree: "Move here (free)", btnPaid: (n) => "Move here (" + n + " coins)", btnAdmin: "Move here (admin)", btnHere: "Your citizenship", btnShut: "Citizenship closed",
+        btnSure: "Confirm",
+        askFirst: (name) => "Become a citizen of " + name + "?",
+        askChange: (from, name) => "Leave " + from + " and become a citizen of " + name + "?",
+        noteFirst: (n) => "The first change after this one is free; every change after that costs " + n + " coins.",
+        noteFree: (n) => "This is your free change; the next ones cost " + n + " coins.",
+        notePaid: (n) => "Your free change is used: every change costs " + n + " coins.",
+        noteAdmin: "Administrators do not pay for the change.",
+        noteHere: "You are a citizen of this place: when you die, you wake here.",
+        noteShut: "The lord of the lands has closed the citizenship: nobody new can become a citizen for now.",
+        noteAll: "Whoever dies wakes in the town they are a citizen of; whoever has no citizenship wakes in the churches.",
+        townFoot: "Your citizenship decides where you wake when you die",
         newBtn: "Pin up a poster",
         newSub: (fee) => fee + " coins",
         tipKind: "Kind of poster", tipDate: "When it was pinned up", tipOrder: "Order",
@@ -360,6 +430,12 @@ let sentTimer = 0;
 let removeArmed = "";
 const filter = { kind: "all", date: "any", order: "new", mine: false };
 const draft = { kind: "avisos", title: "", body: "", anonymous: false, font: "normal", bold: false, spacing: "normal", align: "left" };
+let tab = "posters";
+const townTab = () => tab === "town";
+/* The draft of the letter being written. */
+const cur = () => draft;
+/* The button of the Cidadania tab was pressed once and asks to be pressed again. */
+let citizenArmed = false;
 
 const nowMs = () => Date.now() + skew;
 
@@ -501,9 +577,45 @@ function pictureOf(kind) {
     return make("div", "noart", t.kindOne[kind] || kind);
 }
 
+
+/* A faded shield: the crest of a town that has none (and of one whose picture did not come). */
+function shieldMark() {
+    const holder = document.createElement("div");
+    holder.innerHTML = '<svg class="shield" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8 L19.6 5.6 V11.4 C19.6 16.2 16.4 19.8 12 21.4 C7.6 19.8 4.4 16.2 4.4 11.4 V5.6 Z"/></svg>';
+    return holder.firstChild;
+}
+
+/* The crest of a town: the link the lord's family gave (https only, drawn in an image and nothing else; a link that is no image leaves the faded shield), or the faded shield when there is none. */
+function crestBox(town) {
+    const box = make("div", "crestwrap");
+    const shield = () => { box.textContent = ""; box.appendChild(shieldMark()); };
+    const link = typeof town.crestUrl === "string" && /^https:[/][/][^ <>"']+$/i.test(town.crestUrl) && town.crestUrl.length <= 400 ? town.crestUrl : "";
+    if (!link) {
+        shield();
+        return box;
+    }
+    const img = document.createElement("img");
+    img.alt = town.name;
+    img.decoding = "async";
+    img.referrerPolicy = "no-referrer";
+    img.addEventListener("error", shield, { once: true });
+    img.src = link;
+    box.appendChild(img);
+    return box;
+}
+
 function drawList() {
     const grid = $("grid");
     grid.textContent = "";
+    grid.className = townTab() ? "grid crest-pane" : "grid";
+    if (townTab()) {
+        if (data && data.town) {
+            grid.appendChild(crestBox(data.town));
+            grid.appendChild(make("h3", null, data.town.name));
+            grid.appendChild(make("i", "short"));
+        }
+        return;
+    }
     const list = visible();
     if (list.length === 0) {
         const total = data ? data.posters.length : 0;
@@ -548,9 +660,80 @@ function letterOf(text, style) {
     return el;
 }
 
+/* The Cidadania tab: what is known of the board's town, and the button that makes the player its citizen (asked twice, as a poster's removal is). */
+function drawTown(host) {
+    const town = data ? data.town : null;
+    if (!town) {
+        return;
+    }
+    const scroll = make("div", "detail-scroll");
+    scroll.appendChild(make("div", "kind", t.townKind));
+    scroll.appendChild(make("h2", null, town.name));
+    const facts = make("dl", "facts");
+    const add = (label, value, mode) => {
+        facts.appendChild(make("dt", null, label));
+        facts.appendChild(make("dd", mode || "", value));
+    };
+    add(t.tCategory, town.seatName ? t.tLandOf(town.seatName) : t.tSeat);
+    if (!town.seatName && town.lands && town.lands.length) {
+        add(t.tLands, town.lands.join(", "));
+    }
+    add(t.tLord, town.lord || t.tLordNone, town.lord ? "" : "none");
+    if (town.consort) {
+        add(t.tLady(town.consort.label, town.consort.courtesy), town.consort.name);
+    }
+    add(t.tFamily, town.family ? t.tFamilyOf(town.family) : "—", town.family ? "" : "none");
+    add(t.tCitizens, t.tCitizensN(town.citizens));
+    add(t.tGate, town.closed ? t.tShut : t.tOpen, town.closed ? "warn" : "");
+    add(t.tWar, town.wars && town.wars.length ? t.tWarWith(town.wars.join(", ")) : t.tPeace, town.wars && town.wars.length ? "warn" : "");
+    add(t.tNpcs, String(town.npcs || 0));
+    add(t.tMine, town.mine || t.tMineNone, town.mine ? "" : "none");
+    scroll.appendChild(facts);
+    const kind = town.kind;
+    const change = kind === "free" || kind === "paid" || kind === "admin";
+    if (citizenArmed && (kind === "first" || change)) {
+        scroll.appendChild(make("p", "note ask", change ? t.askChange(town.mine || "", town.name) : t.askFirst(town.name)));
+    }
+    const note = kind === "here" ? t.noteHere : kind === "closed" ? t.noteShut : kind === "first" ? t.noteFirst(town.price) : kind === "free" ? t.noteFree(town.price) : kind === "paid" ? t.notePaid(town.price) : kind === "admin" ? t.noteAdmin : "";
+    scroll.appendChild(make("p", "note", note));
+    scroll.appendChild(make("p", "note", t.noteAll));
+    host.appendChild(scroll);
+    const actions = make("div", "actions");
+    const label = kind === "here" ? t.btnHere : kind === "closed" ? t.btnShut : kind === "first" ? t.btnFirst : kind === "free" ? t.btnFree : kind === "paid" ? t.btnPaid(town.price) : t.btnAdmin;
+    const button = make("button", "btn", citizenArmed && kind !== "here" && kind !== "closed" ? t.btnSure : label);
+    button.disabled = kind === "here" || kind === "closed";
+    button.addEventListener("click", () => {
+        if (button.disabled) {
+            return;
+        }
+        if (!citizenArmed) {
+            citizenArmed = true;
+            drawDetail();
+            return;
+        }
+        citizenArmed = false;
+        button.disabled = true;
+        send("mural:citizen", { board: data.board.id });
+    });
+    if (citizenArmed) {
+        const back = make("button", "btn ghost", t.back);
+        back.addEventListener("click", () => {
+            citizenArmed = false;
+            drawDetail();
+        });
+        actions.appendChild(back);
+    }
+    actions.appendChild(button);
+    host.appendChild(actions);
+}
+
 function drawDetail() {
     const host = $("detail");
     host.textContent = "";
+    if (townTab()) {
+        drawTown(host);
+        return;
+    }
     if (composing) {
         drawForm(host);
         return;
@@ -588,6 +771,7 @@ function drawDetail() {
 }
 
 function styleOf() {
+    const draft = cur();
     return { font: draft.font, bold: draft.bold, spacing: draft.spacing, align: draft.align };
 }
 
@@ -597,16 +781,18 @@ function drawPreview() {
         return;
     }
     box.textContent = "";
-    box.appendChild(letterOf(draft.body === "" ? " " : draft.body, styleOf()));
+    box.appendChild(letterOf(cur().body === "" ? " " : cur().body, styleOf()));
 }
 
 function drawForm(host) {
+    const draft = cur();
     const fee = data ? data.fee : 10;
     const days = data ? data.days : 7;
     const limits = data ? data.limits : { title: 48, body: 900, lines: 22 };
     const scroll = make("div", "detail-scroll form");
     scroll.appendChild(make("h2", null, t.formTitle));
 
+    /* A poster has a kind and may be anonymous. */
     const kindField = make("div", "field");
     kindField.appendChild(make("label", null, t.kindLabel));
     const kinds = make("div", "kinds");
@@ -758,10 +944,34 @@ function drawStatic() {
     const days = data ? data.days : 7;
     $("title").textContent = t.title;
     $("boardName").textContent = data ? t.board(data.board.name) : "";
+    /* The two sections: the posters, and the town's citizenship (a board in a place that is no town has no second one). */
+    const tabs = $("tabs");
+    tabs.textContent = "";
+    tabs.hidden = !(data && data.town);
+    [["posters", t.tabPosters], ["town", t.tabTown]].forEach((one) => {
+        const choice = make("button", "tab" + (tab === one[0] ? " on" : ""), one[1]);
+        choice.addEventListener("click", () => {
+            if (tab === one[0]) {
+                return;
+            }
+            tab = one[0];
+            selected = "";
+            composing = false;
+            removeArmed = "";
+            citizenArmed = false;
+            closeMenu();
+            drawStatic();
+            drawList();
+            drawDetail();
+        });
+        tabs.appendChild(choice);
+    });
     const button = $("newBtn");
     button.textContent = "";
+    button.hidden = townTab();
     button.appendChild(document.createTextNode(t.newBtn));
     button.appendChild(make("small", null, t.newSub(fee)));
+    $("filters").hidden = townTab();
     dropdown($("ddKind"), {
         icon: "kind",
         title: t.tipKind,
@@ -788,8 +998,9 @@ function drawStatic() {
     mine.appendChild(icon("mine"));
     mine.title = t.mine;
     mine.classList.toggle("on", filter.mine);
-    $("footNote").textContent = t.footNote(days);
+    $("footNote").textContent = townTab() ? t.townFoot : t.footNote(days);
     const coins = $("coins");
+    coins.hidden = townTab();
     coins.textContent = "";
     coins.appendChild(document.createTextNode(t.coins + ": "));
     coins.appendChild(make("b", null, data ? String(Math.round(data.coins * 10) / 10).replace(".", ",") : "0"));
@@ -803,6 +1014,10 @@ function showView(detail) {
     skew = typeof d.now === "number" ? d.now - Date.now() : 0;
     if (!Array.isArray(data.posters)) {
         data.posters = [];
+    }
+    if (!data.town || typeof data.town !== "object") {
+        data.town = null;
+        tab = "posters";
     }
     if (selected && !data.posters.some((poster) => poster.id === selected)) {
         selected = "";
@@ -854,6 +1069,7 @@ window.addEventListener("mural:open", () => {
     closeMenu();
     composing = false;
     removeArmed = "";
+    citizenArmed = false;
     selected = "";
     if (data) {
         drawList();
@@ -869,12 +1085,15 @@ window.addEventListener("mural:result", (event) => {
     if (go) {
         go.disabled = false;
     }
+    if (d.what === "citizen") {
+        citizenArmed = false;
+    }
     if (typeof d.message === "string" && d.message !== "") {
         toast(d.message, d.ok === true);
     }
     if (d.ok === true && d.what === "publish") {
-        draft.title = "";
-        draft.body = "";
+        cur().title = "";
+        cur().body = "";
         composing = false;
         if (typeof d.id === "string") {
             selected = d.id;

@@ -119,11 +119,16 @@ const landed = new Set<number>();
  */
 export function forgetPlace(player: Player): boolean {
     landed.delete(player.id);
+    return forgetPlaceOf(player.steamId);
+}
+
+/** The place saved for a Steam id, forgotten: for an account that is not here (`character-reset.ts`, 2026-11-01). */
+export function forgetPlaceOf(steamId: string): boolean {
     const store = load();
-    if (!player.steamId || !store[player.steamId]) {
+    if (!steamId || !store[steamId]) {
         return false;
     }
-    delete store[player.steamId];
+    delete store[steamId];
     persist(store);
     return true;
 }

@@ -83,9 +83,10 @@ export class NpcKeeper {
 
     /**
      * One look at a body: why it must be brought back, or null. `walks` is how far from its place it walks about; `homeward`, a body on its way to its door
-     * at night, which is only looked at for falling and leaving the ground (its walk takes it far from its place, and may take it through its door).
+     * at night, which is only looked at for falling and leaving the ground (its walk takes it far from its place, and may take it through its door); `settled`, a body
+     * set on what the players' games have under it (`npc-ground.ts`), which is off the mesh by design and only looked at for falling and straying.
      */
-    look(id: string, at: Point, place: Point, walks: number, now: number, homeward = false): StrayReason | null {
+    look(id: string, at: Point, place: Point, walks: number, now: number, homeward = false, settled = false): StrayReason | null {
         let watch = this.watched.get(id);
         if (watch === undefined) {
             // Spread out, so fifty bodies are not all looked at in the same round.
@@ -103,7 +104,7 @@ export class NpcKeeper {
         if (!homeward && away > walks + this.settings.strayM) {
             return "longe";
         }
-        if (!this.ground.ready) {
+        if (!this.ground.ready || settled) {
             return null;
         }
         watch.off = this.ground.onGround(at) ? 0 : watch.off + 1;

@@ -18,7 +18,7 @@
  *   areas say where they claim the door; elsewhere what the game said at that door before (`keySide` of each press there,
  *   `playerdata/door-sides.json`), else the game's own "Abrir" up on the client's screen.
  * - A lock this server set that the game reports open was **picked**: it stays open, the picker and the owner are told.
- * - What a player takes out of somebody else's chest counts as a **theft** (`thieves.ts`), as before.
+ * - A lock of somebody else's picked is a **theft** (`thieves.ts`, the mark at once); since 2026-11-01 what is taken out of a chest that stood open marks nobody.
  *
  * Nothing the client says is trusted: who may, how near, what is locked are read again at every step.
  */
@@ -30,7 +30,7 @@ import { displayName, doorName, doorStandsOpen, holdsKeyOf, insideOf, isOwner, l
 import type { PropertyInfo } from "./properties.js";
 import { holdsRoomPart } from "./rooms.js";
 import { ensureDir, read, write } from "./store.js";
-import { noteTheft } from "./thieves.js";
+import { noteBreakIn } from "./thieves.js";
 import { allowedTo, EDGE_M } from "./reach.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -288,6 +288,12 @@ export class PropertyLocks {
         const picker = recent === undefined ? null : Player.getById(recent.playerId);
         if (picker !== null) {
             tell(picker, `Você arrombou ${name}.`);
+            // A lock of somebody else's picked: counted, and the thief's mark comes with the third (2026-11-02: "esse título só deve ser dado depois do
+            // jogador arrombar 3 coisas"; at once since 2026-11-01, and taking from a chest that stood open marks nobody).
+            if (this.othersChest(picker, property)) {
+                const owner = ownerOf(property);
+                noteBreakIn(picker.steamId, picker.nickname, guid, `${name}${owner ? ` (de ${owner.name})` : ""}`, this.now());
+            }
         }
         this.warnOwner(property, `Alguém arrombou ${name}!`);
         console.log(`property-menu: ${recent?.name ?? "alguém"} arrombou ${name}`);
@@ -395,8 +401,8 @@ export class PropertyLocks {
     // -----------------------------------------------------------------------------------------
 
     /**
-     * What a player took out of a chest, written to the log (2026-10-18). From somebody else's chest it counts as a theft
-     * (`noteTheft`: the mark comes with more than three chests within the hour), whichever way they got in.
+     * What a player took out of a chest, written to the log (2026-10-18). Until 2026-11-01 taking from somebody else's chest counted as a theft (more than three
+     * chests within the hour marked); now only a picked lock does (`picked`).
      */
     taken(stash: Stash, player: Player | null, change: InventoryChange): void {
         if (player === null) {
@@ -427,10 +433,7 @@ export class PropertyLocks {
         const name = partName(property, guid);
         const owner = ownerOf(property);
         console.log(`baús: ${player.nickname} em ${name}${owner ? ` (de ${owner.name})` : ""}: ${lines.join("; ")}`);
-        const took = change.items.some((row) => (row.before?.amount ?? 0) > (row.after?.amount ?? 0));
-        if (took && this.othersChest(player, property)) {
-            noteTheft(player.steamId, player.nickname, guid, `tirou itens de ${name}${owner ? ` (de ${owner.name})` : ""}`, this.now());
-        }
+        // What is taken out marks nobody since 2026-11-01 (user: "vamos remover as tags de ladrão e ela só se aplica se o jogador arrombar um baú ou portão"): the lock that was picked does (`picked`).
     }
 
     private warnOwner(property: PropertyInfo, text: string): void {

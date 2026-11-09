@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdom RP BRASIL - Morte</title>
+<style>
+    /* The death screen (src/client/death-screen.ts, 2026-10-31: "ao morrer vamos add a câmera rodando em volta do corpo devagar, um texto, alguma reza da bíblia, e embaixo um contador de 10 s
+       até voltar à vida, exemplo 00:10, tipo uma tela customizada de morte"): the game is left to be seen through (the camera turns slowly round the body), in shade at the top and the
+       foot and at the edges, with a verse of Scripture and where it is written above the middle, and the counter at the foot. It takes no key and no pointer: the server raises the body when the
+       counter reaches 00:00. The text comes already in the player's language. */
+    @font-face {
+        font-family: "Cinzel";
+        src: url("fonts/cinzel.woff2") format("woff2");
+        font-weight: 400 900;
+        font-display: block;
+    }
+
+    :root {
+        --gold: #d9b36a;
+        --gold-hi: #f1d99e;
+        --ink: #f4ead2;
+        --display: "Cinzel", "Palatino Linotype", Georgia, serif;
+        --body: "Constantia", "Sitka Text", Georgia, "Palatino Linotype", serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: calc(clamp(12px, 1.48vh, 17px) * var(--ui, 1)); }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+    body { color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
+    [hidden] { display: none !important; }
+
+    .stage {
+        position: fixed;
+        inset: 0;
+        opacity: 0;
+        animation: veil 1.4s ease .1s both;
+        background:
+            radial-gradient(ellipse 72% 64% at 50% 48%, transparent 0%, transparent 42%, rgba(4, 2, 1, .6) 100%),
+            linear-gradient(180deg, rgba(4, 2, 1, .84) 0, rgba(4, 2, 1, .52) 17%, rgba(4, 2, 1, 0) 37%, rgba(4, 2, 1, 0) 56%, rgba(4, 2, 1, .88) 100%);
+    }
+    .stage.leaving { animation: unveil .6s ease both; }
+    @keyframes veil { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes unveil { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(.9rem); } to { opacity: 1; transform: none; } }
+    @keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+
+    /* The bars of a film, so that it reads as a scene and not as a menu. */
+    .bar { position: absolute; left: 0; right: 0; height: 7vh; background: #000; }
+    .bar.top { top: 0; }
+    .bar.bottom { bottom: 0; }
+
+    .verse { position: absolute; left: 50%; top: 15vh; width: min(54rem, 84vw); transform: translateX(-50%); text-align: center; }
+    .verse .text { font: italic 400 2.1rem/1.5 var(--body); text-shadow: 0 .15rem 1.2rem rgba(0, 0, 0, .95), 0 0 .25rem rgba(0, 0, 0, .95); opacity: 0; animation: rise 1.6s ease 1s both; }
+    .verse .ref { margin-top: 1.3rem; font: 600 1rem/1 var(--display); letter-spacing: .34em; text-transform: uppercase; color: var(--gold); text-shadow: 0 0 .7rem rgba(0, 0, 0, .95); opacity: 0; animation: rise 1.4s ease 2.3s both; }
+
+    .count { position: absolute; left: 0; right: 0; bottom: 14vh; text-align: center; opacity: 0; animation: rise 1.4s ease 1.7s both; }
+    .label { font: 600 .92rem/1 var(--display); letter-spacing: .32em; text-transform: uppercase; color: var(--gold); text-shadow: 0 0 .7rem rgba(0, 0, 0, .95); }
+    .rule { width: 13rem; height: 1px; margin: .95rem auto; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+    .clock { font: 700 4.6rem/1 var(--display); letter-spacing: .12em; color: var(--gold-hi); text-shadow: 0 0 1.5rem rgba(217, 179, 106, .5), 0 .2rem 1rem rgba(0, 0, 0, .95); }
+    .clock.last { animation: beat 1s ease infinite; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+    <div class="bar top"></div>
+    <div class="bar bottom"></div>
+    <section class="verse">
+        <p class="text" id="text"></p>
+        <p class="ref" id="ref"></p>
+    </section>
+    <section class="count">
+        <p class="label" id="label"></p>
+        <div class="rule"></div>
+        <p class="clock" id="clock">00:10</p>
+    </section>
+</div>
+
+<script>
+"use strict";
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+const $ = (id) => document.getElementById(id);
+
+/* The player's own size for the server's pages (Opções, Resolução da interface), told by the client as ui:scale: the root size times it. */
+window.addEventListener("ui:scale", (event) => {
+    const scale = Number(event.detail && event.detail.scale);
+    if (scale >= 0.5 && scale <= 2) document.documentElement.style.setProperty("--ui", String(scale));
+});
+
+/* The counter counts down on the page's own clock from what the client says is left, whole seconds rounded up: it reads 00:00 only when the wait is over. */
+let endsAt = 0;
+
+function clockText(ms) {
+    const seconds = Math.max(0, Math.ceil(ms / 1000));
+    const two = (value) => String(value).padStart(2, "0");
+    return two(Math.floor(seconds / 60)) + ":" + two(seconds % 60);
+}
+
+function draw() {
+    const left = Math.max(0, endsAt - performance.now());
+    const text = clockText(left);
+    const clock = $("clock");
+    if (clock.textContent !== text) clock.textContent = text;
+    clock.classList.toggle("last", left > 0 && left <= 3000);
+}
+
+window.addEventListener("death:state", (event) => {
+    const d = event.detail && typeof event.detail === "object" ? event.detail : {};
+    $("text").textContent = typeof d.text === "string" ? d.text : "";
+    $("ref").textContent = typeof d.ref === "string" ? d.ref : "";
+    $("label").textContent = typeof d.label === "string" ? d.label : "";
+    endsAt = performance.now() + (Number.isFinite(d.left) ? Math.max(0, d.left) : 0);
+    draw();
+});
+
+window.addEventListener("death:leave", () => $("stage").classList.add("leaving"));
+
+setInterval(draw, 100);
+draw();
+send("death:ready");
+</script>
+</body>
+</html>

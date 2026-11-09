@@ -9,6 +9,7 @@ import { installBuildHandlers } from "./build.js";
 import { animalPopulation, installAnimalPopulation } from "./animals.js";
 import { animalsCommand } from "./commands/animals.js";
 import { installCombat } from "./combat.js";
+import { installDuels } from "./duel.js";
 import { CommandRegistry } from "./command.js";
 import { animCommand, installAnimHandlers } from "./commands/anim.js";
 import { gestoCommand } from "./commands/gesto.js";
@@ -80,28 +81,31 @@ import { chaveCommand } from "./commands/chave.js";
 import { placeCommand } from "./commands/posicao.js";
 import { propertyCommand } from "./commands/properties.js";
 import { socialStatusCommand } from "./commands/socialstatus.js";
-import { getFactionId, getGuildId, installStatus } from "./status.js";
+import { getGuildId, installStatus } from "./status.js";
 import { installBooks, registerBooks } from "./books.js";
 import { installCharacterState, saveAllCharacters } from "./character-state.js";
+import { onKuttenberg } from "./level.js";
 import { installProperties, propertyOfStash } from "./properties.js";
 import { installPropertyMenu } from "./property-menu.js";
 import { installOptions } from "./options.js";
 import { installVoiceSettings } from "./voice-settings.js";
-import { installWelcome } from "./welcome.js";
 import { installMural } from "./mural.js";
+import { installBoardSigns } from "./board-signs.js";
 import { installMuralPlaces } from "./mural-places.js";
 import { muralCommand } from "./commands/mural.js";
-import { aceitarCommand, boasVindasCommand } from "./commands/aceitar.js";
 import { installPets } from "./pets.js";
 import { installChestState } from "./chest-state.js";
 import { installVendors } from "./vendors.js";
 import { vendedorCommand } from "./commands/vendedor.js";
+import { mercadorCommand } from "./commands/mercador.js";
+import { barbeiroCommand } from "./commands/barbeiro.js";
 import { banditCamps, installBandits } from "./bandits.js";
 import { installBarbers } from "./barbers.js";
 import { installTravel } from "./travel.js";
 import { installNests } from "./nests.js";
 import { installTeachers } from "./teachers.js";
 import { installHorses } from "./horses.js";
+import { installHorseCorpses } from "./horse-corpses.js";
 import { installGroundItemExpiry } from "./ground-items.js";
 import { installWorldCycle } from "./world-cycle.js";
 import { cavaloCommand } from "./commands/cavalo.js";
@@ -109,6 +113,7 @@ import { bandidosCommand } from "./commands/bandidos.js";
 import { climaCommand } from "./commands/clima.js";
 import { fomeCommand } from "./commands/fome.js";
 import { sedeCommand } from "./commands/sede.js";
+import { desgasteCommand } from "./commands/desgaste.js";
 import { doCommand, meCommand, tryCommand } from "./commands/roleplay.js";
 import { guildaCommand } from "./commands/guilda.js";
 import { presoCommand } from "./commands/preso.js";
@@ -118,16 +123,18 @@ import { pazCommand } from "./commands/paz.js";
 import { idiomaCommand } from "./commands/idioma.js";
 import { installLanguage } from "./language.js";
 import { installLocalChat } from "./local-chat.js";
-import { installCitizenship } from "./citizenship.js";
+import { installCitizenship, isCitizenOfAny, townNameOf, townOf } from "./citizenship.js";
+import { installWars } from "./wars.js";
+import { installGuildVendors } from "./guild-vendors.js";
+import { linkTitlesToTowns, setRegionNamer, titlesOf } from "./titles.js";
+import { isMasterWith } from "./nobility.js";
+import { setCraftGates } from "./craft.js";
 import { cidadaniaCommand } from "./commands/cidadania.js";
-import { faccaoCommand } from "./commands/faccao.js";
 import { installGuildCrafts } from "./guild-crafts.js";
 import { installPerkGuard } from "./perk-guard.js";
-import { installEsgrima } from "./esgrima.js";
 import { installLanguagePanel } from "./language-panel.js";
-import { alforjeCommand } from "./commands/alforje.js";
-import { installHorseBags } from "./horse-bags.js";
-import { installHorseFollow } from "./horse-follow.js";
+import { installPotFires } from "./pot-fires.js";
+import { fogueirasCommand } from "./commands/fogueiras.js";
 import { installHorseMenu } from "./horse-menu.js";
 import { installDogMenu } from "./dog-menu.js";
 import { installWildHorses } from "./wild-horses.js";
@@ -152,11 +159,13 @@ import { installLevelEdits } from "./level-edits.js";
 import { installWallSites } from "./wall-sites.js";
 import { installUiImages } from "./ui-images.js";
 import { tesourosCommand } from "./commands/tesouros.js";
-import { installCharacterReset } from "./character-reset.js";
+import { installCharacterReset, runPendingErasures } from "./character-reset.js";
 import { installLookRemake } from "./look-remake.js";
 import { installStuck } from "./stuck.js";
 import { installFaint } from "./faint.js";
 import { installSharpenLog } from "./sharpen-log.js";
+import { installWearEase } from "./wear-ease.js";
+import { installWearBreak } from "./wear-break.js";
 import { installHunger } from "./hunger.js";
 import { installThirst } from "./thirst.js";
 import { installSoups } from "./soups.js";
@@ -181,10 +190,12 @@ import { cansacoCommand } from "./commands/cansaco.js";
 import { installDirt } from "./dirt.js";
 import { sujeiraCommand } from "./commands/sujeira.js";
 import { installEncounters } from "./encounters.js";
-import { installNominations } from "./nominations.js";
+import { installAcquaintances } from "./acquaintances.js";
+import { installHeadLabels } from "./head-labels.js";
+import { installNominations, isNoble } from "./nominations.js";
 import { installGuildMembers } from "./guild-members.js";
 import { installTrades } from "./trade.js";
-import { ensureStarter, grantFactionColours, grantGuildKit, guildKitHint } from "./kits.js";
+import { ensureStarter, grantGuildKit, guildKitHint } from "./kits.js";
 import { cachorroCommand } from "./commands/cachorro.js";
 import { installSupporters } from "./supporters.js";
 import { installFlora } from "./flora.js";
@@ -196,10 +207,20 @@ import { installWorkSound } from "./work-sound.js";
 import { installMountSound } from "./mount-sound.js";
 import { coletaCommand } from "./commands/coleta.js";
 import { installFarm } from "./farm.js";
+import { installWildSeeds } from "./wild-seeds.js";
+import { installCarcassLard } from "./carcass-lard.js";
+import { installHorseMood } from "./horse-mood.js";
+import { installExecution } from "./execution.js";
 import { installCows } from "./cows.js";
+import { installSheep } from "./sheep.js";
 import { installPerfWatch } from "./perf-watch.js";
 import { installArrest, installRestraintGate } from "./arrest.js";
-import { installScribe } from "./scribe.js";
+import { installEntry, installEntryGate } from "./entry.js";
+import { entradaCommand } from "./commands/entrada.js";
+import { installLetters } from "./letters.js";
+import { installTorchDown } from "./torch-down.js";
+import { installCharacterSheet } from "./character-sheet.js";
+import { cartasCommand } from "./commands/cartas.js";
 import { installListings } from "./listings.js";
 import { hortaCommand } from "./commands/horta.js";
 
@@ -212,6 +233,7 @@ registerBooks();
 
 // Before any module registers a handler for its client's messages: what an arrested player's client sends is dropped (arrest.ts, 2026-10-29).
 installRestraintGate();
+installEntryGate();
 // Before any module registers a timer or a handler: how long each of ours takes is added up, and the heaviest are written to the log every minute.
 installPerfWatch();
 // And the engine's lists of players, horses and carts, which cost it a walk through all its entities on every call, are kept (listings.ts).
@@ -234,7 +256,7 @@ commands.add(gestoCommand);
 commands.add(socialStatusCommand);
 // The notice boards of the villages, towns and castles (mural.ts).
 commands.add(muralCommand);
-commands.add(propertyCommand, chaveCommand, placeCommand, adminCommand, vendedorCommand, cavaloCommand, bandidosCommand, climaCommand, fomeCommand, sedeCommand, cansacoCommand, sujeiraCommand, cachorroCommand, emboscadaCommand, leituraCommand, cozinharCommand, mestresCommand, meCommand, doCommand, tryCommand, guildaCommand, presoCommand, acordarCommand, pazCommand, alforjeCommand, tesourosCommand, carrocaCommand, { ...carrocaCommand, name: "carroça" }, oficiosCommand, { ...oficiosCommand, name: "ofícios" }, xpOficiosCommand, oficinasCommand, mobiliaCommand, levantarCommand, viagemCommand, objetoCommand, conjuntoCommand, aceitarCommand, boasVindasCommand, ladraoCommand, { ...ladraoCommand, name: "ladrão" }, curarCommand, nivelCommand, mortesCommand, presosCommand, idiomaCommand, { ...idiomaCommand, name: "language" }, cidadaniaCommand, faccaoCommand);
+commands.add(propertyCommand, chaveCommand, placeCommand, adminCommand, vendedorCommand, cavaloCommand, bandidosCommand, climaCommand, fomeCommand, sedeCommand, cansacoCommand, sujeiraCommand, cachorroCommand, emboscadaCommand, leituraCommand, cozinharCommand, mestresCommand, meCommand, doCommand, tryCommand, guildaCommand, presoCommand, acordarCommand, pazCommand, tesourosCommand, carrocaCommand, { ...carrocaCommand, name: "carroça" }, oficiosCommand, { ...oficiosCommand, name: "ofícios" }, xpOficiosCommand, oficinasCommand, mobiliaCommand, levantarCommand, viagemCommand, objetoCommand, conjuntoCommand, ladraoCommand, { ...ladraoCommand, name: "ladrão" }, curarCommand, nivelCommand, mortesCommand, presosCommand, entradaCommand, idiomaCommand, { ...idiomaCommand, name: "language" }, cidadaniaCommand, desgasteCommand, mercadorCommand);
 
 // Item types come first: the keys of every property must exist before a saved inventory can be restored with them in it (the
 // craft items and the recipe books were registered above). The properties also get their locks put back, and Suchdol mapped once.
@@ -245,12 +267,17 @@ installPropertyMenu();
 installOptions();
 // How each player's microphone opens, and how far a whisper, a word and a shout carry, for the voice indicator (voice-settings.ts).
 installVoiceSettings();
-// The welcome form: whoever has made a character is asked to agree to the rules and the lore, at once and at every entry until they do (welcome.ts).
-installWelcome();
+installEntry();
 // The "Animais" section of the panel: the player's horses and dog, named and called from there.
 installPets();
 installChestState();
-installVendors();
+// What is put into the world at Kuttenberg's coordinates -- the village vendors and the bath-keepers, the barbers and skill teachers, the coachmen, the guild vendors, the gardens and the
+// wild horses' meadows -- is only put there on Kuttenberg's level (`level.ts`, 2026-11-09: the server runs the Trosky level from a clean start; on it those places are some other place, or none).
+// The others (animals, bandit camps, nests, treasure) are made from the level itself and stay.
+const kuttenberg = onKuttenberg();
+if (kuttenberg) {
+    installVendors();
+}
 
 // The world around them: bandit camps, horses that wait for their owners, ground items that do not pile up for
 // ever, and 40 minutes of day and 40 of night under a sky that changes by itself.
@@ -259,13 +286,22 @@ installBandits();
 installNests();
 
 // The barbers and the skill teachers, standing where they are put and talking through the game's choice list.
-installBarbers();
-installTeachers();
+if (kuttenberg) {
+    installBarbers();
+}
+commands.add(barbeiroCommand);
+if (kuttenberg) {
+    installTeachers();
+}
 // The coachmen at the stops of the villages, who take a traveller to another for a price, by day.
-installTravel();
+if (kuttenberg) {
+    installTravel();
+}
 // And on the roads between villages, a gang now and then wants a traveller's purse.
 installAmbushes();
 installHorses();
+// The body of a horse that died is taken out of the world after a while (horse-corpses.ts, 2026-10-31).
+installHorseCorpses();
 installGroundItemExpiry();
 installWorldCycle();
 installFlora();
@@ -291,6 +327,7 @@ installCraftPlaces();
 // The notice boards placed with the World Builder (`mural-places.ts`), and the letters pinned to them (`mural.ts`).
 installMuralPlaces();
 installMural();
+installBoardSigns();
 installFurniture();
 installGateGuard();
 // The guilds' trades: the page and its menus (our own ingredients were registered before anything else, above).
@@ -303,10 +340,14 @@ installWallSites();
 installUiImages();
 // The thief's mark (7 days over the head) and what an administrator has owed back to a player (items robbed from them).
 installThieves();
+// A torch lowered for one of our animations goes back to its place when the animation is over (torch-down.ts, 2026-11-02).
+installTorchDown();
 installRestitution();
 installHeal();
 installTrades();
 installEncounters();
+installAcquaintances();
+installHeadLabels();
 // Arrest and the pillory: an officer's E on somebody below them, and the pillories of the villages (arrest.ts).
 installArrest();
 // Who supports the server: the benefits an administrator hands over, and the dog that comes back at every entry.
@@ -333,11 +374,6 @@ Events.on("playerInventoryReady", (player) => {
             Chat.sendToPlayer(player, hint);
         }
     }
-    const factionId = getFactionId(player.steamId);
-    const colours = factionId === null ? [] : grantFactionColours(player, factionId);
-    if (colours.length > 0) {
-        Chat.sendToPlayer(player, `As cores da sua casa estão no seu inventário: ${colours.join(" e ")}. Vista pelo inventário.`);
-    }
 });
 
 // The status panel (F2, and F3 for administrators): guild catalog, social status and guild selection.
@@ -348,13 +384,14 @@ installGuildMembers();
 installStuck();
 installFaint();
 installSharpenLog();
+// The game's wear of weapons and armour, eased (2026-10-31): the share of it the items keep, and `/desgaste`.
+installWearEase();
+installWearBreak();
 installCharacterReset();
 installLookRemake();
 installLanguage();
 installLanguagePanel();
 installPerkGuard();
-// The weapon combos: blocked in the game, taught from one player to another in the panel's Esgrima section (esgrima.ts).
-installEsgrima();
 installGuildCrafts();
 // The Coletores' blows: the axe at the trees, the pick at the rocks (gather.ts).
 installGather();
@@ -364,18 +401,50 @@ installWorkSound();
 // Who rides, or has just got on or off a horse, for every client to keep those sounds to the players near (mount-sound.ts, 2026-10-26).
 installMountSound();
 // The Agricultores' gardens: the beds of the villages sown with a shovel and a seed, harvested when they ripen (farm.ts).
-installFarm();
+if (kuttenberg) {
+    installFarm();
+}
+installWildSeeds();
 commands.add(hortaCommand);
 // The cows' milk: the Agricultores milk the living cow with E, and the hunters find milk in the carcass (cows.ts, 2026-10-27).
 installCows();
+// The pigs' lard: the hunters find it in the carcass they butcher (carcass-lard.ts, 2026-11-04).
+installCarcassLard();
+// The horses' mood: one that is beaten by its owner sulks, and then leaves (horse-mood.ts, 2026-11-04).
+installHorseMood();
+// The administrators' execution: the death screen, then the character deleted (execution.ts, 2026-11-04).
+installExecution();
+// The sheep's flax: the Agricultores shear them with E as they milk the cows (sheep.ts, 2026-10-31).
+installSheep();
 installCitizenship();
-// The Escrivão section: the guilds are handed out by the clerks, the masters and the lords, not chosen (scribe.ts).
-installScribe();
-installHorseBags();
+// The wars between lands, marked from the Cidadania section (2026-10-31).
+installWars();
+// The guild vendors: one for each guild in each town, standing where the game puts the trade (2026-10-31).
+if (kuttenberg) {
+    installGuildVendors();
+}
+// Who may make which piece (2026-10-31): the nobles' pieces and the pieces of a town's own sets (`craft.ts`).
+// A master of a guild or of a trade makes the nobles' pieces of their own trade too (2026-11-01).
+setCraftGates({ isNoble: (player) => isNoble(player.steamId), isMaster: (player) => player.steamId !== "" && isMasterWith(titlesOf(player.steamId)), citizenOf: (player, towns) => isCitizenOfAny(player.steamId, towns), townName: townNameOf });
+// A title is of a town (2026-10-31): written after the title ("Cavaleiro de Suchdol"), and the titles given before towns are linked to the town of their holders' citizenship.
+setRegionNamer(townNameOf);
+const linkedTitles = linkTitlesToTowns((steamId) => townOf(steamId)?.id ?? null);
+if (linkedTitles > 0) {
+    console.log(`titles: ${linkedTitles} título(s) sem região foram ligados à cidade dos seus titulares`);
+}
+// The letters of the panel's Cartas section: written to anybody, carried by a courier who takes longer the farther the reader is (letters.ts).
+installLetters();
+commands.add(cartasCommand);
+// The age, the height and the level in the panel's Personagem section (character-sheet.ts, 2026-11-02).
+installCharacterSheet();
+// E at a wild horse (the Domador's taming menu, horse-menu.ts), and the wild horses of the open fields a Domador tames (wild-horses.ts).
 installHorseMenu();
-// "Seguir" and "Ficar" at a horse (horse-follow.ts), and the wild horses of the open fields an Agricultor tames (wild-horses.ts).
-installHorseFollow();
-installWildHorses();
+if (kuttenberg) {
+    installWildHorses();
+}
+// The stew pots' fires burn for everybody (pot-fires.ts); /fogueiras is the administrator's choice of way.
+installPotFires();
+commands.add(fogueirasCommand);
 commands.add(selvagensCommand);
 installCarts();
 installTreasure((guid) => propertyOfStash(guid) !== null || banditCamps.camps.some((camp) => camp.chests.includes(guid)));
@@ -391,6 +460,8 @@ installDebugPanel(commands);
 // What a building client sends back, and the teardown when one stops.
 installBuildHandlers();
 installCombat();
+// Duels agreed from the [E] menu on a player: they end at 20% of the health, with every effect off the body (user, 2026-11-01).
+installDuels();
 // The lock-on prefers enemy NPCs (bandits, the roads' gangs, wolves) to players while any is about (user, 2026-10-25).
 installLockOnPriority([() => banditCamps.liveIds(), () => ambushes.gangIds(), () => animalPopulation.predatorIds()]);
 
@@ -478,7 +549,7 @@ installSpawns();
 Events.on("playerSpawned", (player) => {
     // Whoever came in is their character, never the name typed in the menu (user, 2026-10-25): a newcomer has no name yet.
     const greeting = getCharacter(player.steamId) === null ? "Bem-vindo ao Kingdom RP BRASIL." : `Bem-vindo, ${nameOf(player)}.`;
-    Chat.sendToPlayer(player, `${greeting} Aperte F2 para abrir o seu painel (personagem, guildas, facções, família, animais e opções) ou digite /help para ver os comandos.`);
+    Chat.sendToPlayer(player, `${greeting} Aperte F2 para abrir o seu painel (personagem, guildas, família, animais e opções) ou digite /help para ver os comandos.`);
     console.log(`${player.nickname} is in the world`);
 });
 
@@ -492,6 +563,9 @@ installDeathDrops();
 // The framework has no respawn of its own: the dead wake up in the nearest church (respawn.ts), after their things
 // have fallen where they died.
 installRespawn();
+
+// Accounts and houses an administrator left to be cleaned while the server was stopped (`playerdata/erase-pending.json`, 2026-11-01): once every module has its data.
+runPendingErasures();
 
 // The last thing a stop does: characters saved once more, after every other module above handed back what it held.
 Events.on("resourceStop", (name) => {

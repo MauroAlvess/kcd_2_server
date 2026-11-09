@@ -13,8 +13,10 @@
  * well as whenever the published look differs.
  */
 
+import { lacksDetails } from "./character-details.js";
 import { getCharacter } from "./characters.js";
 import { openCreatorFor } from "./creator.js";
+import { whenAdmitted } from "./entry.js";
 
 const CHECK_MS = 2000;
 
@@ -106,22 +108,41 @@ function watchLook(id: number): void {
     }, CHECK_MS);
 }
 
+/** The creator for a player who has no character, or whose character an administrator asked to be made again: what the door (`entry.ts`) lets through. */
+function startCreator(player: Player): void {
+    const saved = getCharacter(player.steamId);
+    if (saved?.redo === true) {
+        // Made again by an administrator's decision: the creator, which cannot be left until the new look is accepted.
+        Chat.sendToPlayer(player, "A administração pediu que você refaça o seu personagem: escolha o visual de novo (o nome pode ficar ou mudar).");
+        console.log(`first-join: ${player.nickname} vai refazer o personagem`);
+        openCreatorFor(player, "both");
+        return;
+    }
+    if (saved && lacksDetails(saved)) {
+        // A character made before the age and the height were asked (2026-11-02): the creator, with its look and its name as they are, until it says them.
+        Chat.sendToPlayer(player, "O seu personagem agora tem idade e altura: escolha as duas no criador para continuar (e, se quiser, ajuste o visual com as opções novas).");
+        console.log(`first-join: ${player.nickname} vai completar o personagem (idade e altura)`);
+        openCreatorFor(player, "both");
+        return;
+    }
+    if (saved) {
+        watchLook(player.id);
+        return;
+    }
+
+    Chat.sendToPlayer(player, "Vamos criar o seu personagem. Digite /creator a qualquer momento para mudar depois.");
+    openCreatorFor(player, "both");
+}
+
 export function installFirstJoin(): void {
     Events.on("playerSpawned", (player) => {
         const saved = getCharacter(player.steamId);
-        if (saved?.redo === true) {
-            // Made again by an administrator's decision: the creator, which cannot be left until the new look is accepted.
-            Chat.sendToPlayer(player, "A administração pediu que você refaça o seu personagem: escolha o visual de novo (o nome pode ficar ou mudar).");
-            console.log(`first-join: ${player.nickname} vai refazer o personagem`);
-            openCreatorFor(player, "both");
-            return;
-        }
-        if (saved) {
+        if (saved && saved.redo !== true && !lacksDetails(saved)) {
+            // A character that exists: its look goes on the body now, behind the page of the door (the trailer and the questions, `entry.ts`).
             watchLook(player.id);
             return;
         }
-
-        Chat.sendToPlayer(player, "Vamos criar o seu personagem. Digite /creator a qualquer momento para mudar depois.");
-        openCreatorFor(player, "both");
+        // A newcomer: the creator comes once the questions are passed (at once for somebody who passed them on an earlier visit).
+        whenAdmitted(player, () => startCreator(player));
     });
 }

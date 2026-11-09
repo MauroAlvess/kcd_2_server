@@ -102,9 +102,13 @@ export function installCraftPage(): void {
             const fields = parse(payload);
             const id2 = fields?.["id"];
             const many = fields?.["n"];
+            const dye = fields?.["v"];
             if (id === view && typeof id2 === "string") {
-                // How many at once, from one to ten (2026-10-27): the server holds it to that again.
-                Events.emitServer(`${RESOURCE}:craft.make`, JSON.stringify(typeof many === "number" && Number.isFinite(many) ? { id: id2, n: many } : { id: id2 }));
+                // How many at once, from one to ten (2026-10-27): the server holds it to that again. And the dye of a garment the page picked (2026-10-31), a number the server reads again too.
+                Events.emitServer(
+                    `${RESOURCE}:craft.make`,
+                    JSON.stringify({ id: id2, ...(typeof many === "number" && Number.isFinite(many) ? { n: many } : {}), ...(typeof dye === "number" && Number.isInteger(dye) && dye > 0 ? { v: dye } : {}) }),
+                );
             }
         });
         Web.on(view, "craft:cancel", () => {

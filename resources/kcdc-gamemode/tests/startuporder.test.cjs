@@ -12,13 +12,18 @@ const test = require("node:test");
 
 const source = fs.readFileSync(path.join(__dirname, "../src/server/index.ts"), "utf8");
 
-/** Where a top-level call stands in the entry file; fails when it is not called, or is called twice. */
+/**
+ * Where a call stands in the entry file; fails when it is not called, or is called twice. A call is at the top level or one level in, under the `if (kuttenberg) {` that keeps what is put into the world at
+ * Kuttenberg's coordinates off the other levels (`level.ts`, 2026-11-09).
+ */
 function at(call) {
-    const pattern = `\n${call}();`;
-    const first = source.indexOf(pattern);
-    assert.ok(first >= 0, `${call}() is called at the top level of the entry file`);
-    assert.equal(source.indexOf(pattern, first + 1), -1, `${call}() is called once`);
-    return first;
+    const found = [];
+    for (const pattern of [`\n${call}();`, `\n    ${call}();`]) {
+        for (let from = source.indexOf(pattern); from >= 0; from = source.indexOf(pattern, from + 1)) found.push(from);
+    }
+    assert.ok(found.length >= 1, `${call}() is called in the entry file`);
+    assert.equal(found.length, 1, `${call}() is called once`);
+    return found[0];
 }
 
 test("the craft items and the recipe books are registered before the properties, the chests and the vendors", () => {

@@ -26,6 +26,8 @@ export interface Consort {
     readonly courtesy: boolean;
     /** How it is written beside the holder: "Lady Elisabeth", or "Kath (esposa)" for a spouse with no style. */
     readonly text: string;
+    /** The spouse's Steam id when they are a player (the tree draws one who holds a title as that holder, once), null for a name only. Never sent to a page. */
+    readonly steamId: string | null;
 }
 
 const PLAIN = new Set(["Esposa", "Esposo", "Consorte"]);
@@ -48,6 +50,6 @@ export function consortsOf(steamId: string): Consort[] {
         const name = spouse.steamId === null ? spouse.name : nameOfMember(spouse.steamId);
         const label = consortStyle(rank, holderFemale, female);
         const courtesy = !PLAIN.has(label);
-        return { label, name, courtesy, text: courtesy ? `${label} ${name}` : `${name} (${label.toLowerCase()})` };
+        return { label, name, courtesy, text: courtesy ? `${label} ${name}` : `${name} (${label.toLowerCase()})`, steamId: spouse.steamId };
     });
 }

@@ -13,6 +13,7 @@
  * in one place show the same letters. A board outside every place is a board of its own, named by where it stands.
  */
 
+import { onKuttenberg } from "./level.js";
 import { allowedTo, EDGE_M, reachTo } from "./reach.js";
 
 /** The marker piece of a board: a scroll the game has little use for elsewhere, put under the ground (the World Builder's `scroll_c`). */
@@ -27,7 +28,18 @@ export interface Board {
     readonly y: number;
     /** The ground in front of the planks (the marker's own height and the depth it was buried at). */
     readonly z: number;
+    /** The way the face of the board looks, as an angle about the vertical in radians (0 is +X, a quarter turn +Y): the marker's own turn, which the builder gave it as the board's (`tools/world-builder/board.mjs`). 0 for a marker with none. */
+    readonly yaw?: number;
+    /** The height of the top of the board, where its highest plank ends, as the export has it; absent for a marker with no planks near it. */
+    readonly top?: number;
 }
+
+/** The marker stands this far in front of the face of the board, and the middle of the board's pieces this far behind it (measured on the user's boards of Trosky: 0.66 m; the builder puts it at 0.7). */
+export const MARKER_FRONT_M = 0.66;
+/** The planks the boards are made of (the face and the roof), whose highest one ends where the board does. */
+const PLANK_MODEL = /(?:^|\/)plank_rough_a\.cgf$/i;
+/** How far from the marker, across, a plank may be and still be this board's (a board is two metres wide). */
+const BOARD_RADIUS_M = 3;
 
 interface Box {
     readonly minX: number;
@@ -37,10 +49,10 @@ interface Box {
 }
 
 /**
- * The villages and towns that can have boards: the ground of each (the boxes of `properties.ts`, where the level's doors are). The ground of Suchdol,
+ * The villages and towns of Kuttenberg that can have boards: the ground of each (the boxes of `properties.ts`, where the level's doors are). The ground of Suchdol,
  * Raborsch and Malešov takes in the castle on its rise: a board is the village's wherever in it it stands.
  */
-export const PLACES: ReadonlyArray<{ readonly id: string; readonly name: string; readonly box: Box }> = [
+const KUTTENBERG_PLACES: ReadonlyArray<{ readonly id: string; readonly name: string; readonly box: Box }> = [
     { id: "suchdol", name: "Suchdol", box: { minX: 430, maxX: 900, minY: 3140, maxY: 3480 } },
     { id: "raborsch", name: "Raborsch", box: { minX: 1340, maxX: 1720, minY: 3720, maxY: 3980 } },
     { id: "malesov", name: "Malešov", box: { minX: 430, maxX: 660, minY: 225, maxY: 410 } },
@@ -60,6 +72,28 @@ export const PLACES: ReadonlyArray<{ readonly id: string; readonly name: string;
     { id: "rabstein", name: "Rabstein", box: { minX: 945, maxX: 1015, minY: 1020, maxY: 1100 } },
     { id: "opatowitz", name: "Opatowitz", box: { minX: 1780, maxX: 1915, minY: 2960, maxY: 3050 } },
 ];
+
+/**
+ * The places of Trosky that can have boards (user, 2026-11-09: "vamos colocar os quadros de aviso em cada local"): the ground of each region of its property catalog (`TROSKY_REGIONS` of `properties.ts`, with its mills, inn and farms:
+ * the box of a place is the one round its region and its compounds, the user's board of Schdiar standing at the valley's west farm;
+ * the id of a place is the region's, which is the id of its town in `TROSKY_TOWNS`, so a board's decrees are its town's). Where a board stands in them is the World Builder export's word, never this file's.
+ */
+const TROSKY_PLACES: ReadonlyArray<{ readonly id: string; readonly name: string; readonly box: Box }> = [
+    { id: "semine", name: "Semine", box: { minX: 1059, maxX: 1676, minY: 1314, maxY: 1635 } },
+    { id: "nebakov", name: "Nebakov", box: { minX: 1752, maxX: 2150, minY: 1077, maxY: 1400 } },
+    { id: "trosky", name: "Trosky", box: { minX: 2308, maxX: 2584, minY: 2467, maxY: 2708 } },
+    { id: "acampamento-nomade", name: "Acampamento nômade", box: { minX: 992, maxX: 1152, minY: 1840, maxY: 1989 } },
+    { id: "zhelejov", name: "Zhelejov", box: { minX: 1595, maxX: 1852, minY: 1893, maxY: 2245 } },
+    { id: "troskowitz", name: "Troskowitz", box: { minX: 2185, maxX: 2498, minY: 1903, maxY: 2122 } },
+    { id: "tachov", name: "Tachov", box: { minX: 1925, maxX: 2083, minY: 2435, maxY: 2623 } },
+    { id: "apolonia", name: "Apolônia", box: { minX: 2644, maxX: 3009, minY: 2082, maxY: 2739 } },
+    { id: "slatego", name: "Slatego", box: { minX: 2462, maxX: 2657, minY: 1427, maxY: 1657 } },
+    { id: "schdiar", name: "Schdiar", box: { minX: 1933, maxX: 2556, minY: 1329, maxY: 1807 } },
+    { id: "vidlak", name: "Vidlak", box: { minX: 1195, maxX: 1465, minY: 2540, maxY: 2760 } },
+];
+
+/** The places of the level the server runs (`level.ts`). */
+export const PLACES: ReadonlyArray<{ readonly id: string; readonly name: string; readonly box: Box }> = onKuttenberg() ? KUTTENBERG_PLACES : TROSKY_PLACES;
 
 /** How far past a village's ground a board may stand and still be its. */
 export const PLACE_MARGIN_M = 30;
@@ -100,8 +134,24 @@ interface Point {
     readonly z: number;
 }
 
-/** The boards the props of the exports make: one for each marker, named after the place it stands in. */
-export function boardsOf(props: ReadonlyArray<{ readonly model: string; readonly position: Point }>): Board[] {
+/** A turn as a prop gives it: a quaternion (with `w`), or Euler angles in degrees (`x`, `y`, `z`; Z is up). */
+interface Turn {
+    readonly w?: number;
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+}
+
+/** The angle about the vertical a rotation turns the +X axis to, in radians. */
+export function yawOf(rotation: Turn): number {
+    if (typeof rotation.w !== "number") {
+        return (rotation.z * Math.PI) / 180;
+    }
+    return Math.atan2(2 * (rotation.w * rotation.z + rotation.x * rotation.y), 1 - 2 * (rotation.y * rotation.y + rotation.z * rotation.z));
+}
+
+/** The boards the props of the exports make: one for each marker, named after the place it stands in, with the way it faces and where its top is. */
+export function boardsOf(props: ReadonlyArray<{ readonly model: string; readonly position: Point; readonly rotation?: Turn }>): Board[] {
     const found: Board[] = [];
     for (const prop of props) {
         if (!MURAL_MODEL.test(prop.model)) {
@@ -109,7 +159,23 @@ export function boardsOf(props: ReadonlyArray<{ readonly model: string; readonly
         }
         const { x, y, z } = prop.position;
         const place = placeOf(x, y);
-        found.push({ id: place?.id ?? `quadro-${Math.round(x)}-${Math.round(y)}`, name: place?.name ?? "Quadro de avisos", x, y, z: z + MARKER_DEPTH_M });
+        const yaw = prop.rotation === undefined ? 0 : yawOf(prop.rotation);
+        // The board's planks stand round the marker: the highest one's middle is the roof beam's, and its thickness is a few centimetres.
+        let top: number | undefined;
+        for (const other of props) {
+            if (PLANK_MODEL.test(other.model) && Math.hypot(other.position.x - x, other.position.y - y) <= BOARD_RADIUS_M && Math.abs(other.position.z - z) <= 6) {
+                top = top === undefined ? other.position.z : Math.max(top, other.position.z);
+            }
+        }
+        found.push({
+            id: place?.id ?? `quadro-${Math.round(x)}-${Math.round(y)}`,
+            name: place?.name ?? "Quadro de avisos",
+            x,
+            y,
+            z: z + MARKER_DEPTH_M,
+            yaw: Number.isFinite(yaw) ? yaw : 0,
+            ...(top === undefined ? {} : { top: top + 0.05 }),
+        });
     }
     return found;
 }

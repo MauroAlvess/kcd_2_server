@@ -1,4 +1,4 @@
-import { AGGRESSION, aggressionLevel, banditCamps, setAggression } from "../bandits.js";
+import { AGGRESSION, aggressionLevel, banditCamps, banditSettings, setAggression } from "../bandits.js";
 import type { Aggression } from "../bandits.js";
 import type { Command, CommandContext } from "../command.js";
 
@@ -10,7 +10,8 @@ export const bandidosCommand: Command = {
         "/bandidos ir <n>  -- leva você até o acampamento n (cuidado: eles atacam)",
         "/bandidos repor  -- traz de volta os bandidos mortos e enche os baús agora",
         "/bandidos estado  -- o que cada bandido dos acampamentos a até 250 m de você está fazendo, e quem o roda (para achar os que ficam parados)",
-        "/bandidos agressividade [baixa|media|alta]  -- o quanto os bandidos veem de longe, batem forte e perseguem (sem argumento mostra a atual)",
+        "/bandidos agressividade [baixa|media|alta]  -- o quanto os bandidos veem de longe, batem forte, quantos lutam de perto por vez e perseguem (sem argumento mostra a atual)",
+        "/bandidos armadura [ligar|desligar]  -- todos os bandidos (não só os veteranos e os chefes) num conjunto de armadura que não é saque; vale para os que nascerem daqui em diante (os mortos que voltam, e todos no próximo início)",
     ],
 
     run({ player, args, reply, usage }: CommandContext): void {
@@ -45,8 +46,24 @@ export const bandidosCommand: Command = {
             const now = AGGRESSION[aggressionLevel()];
             reply.lines([
                 `Agressividade ${now.label}: ${now.about}.`,
-                `(veem a ${now.aggroRadius} m, golpe vezes ${now.damageMultiplier}, o acampamento persegue por ${now.alarmMs / 1000} s.) ${word === undefined ? "Troque com /bandidos agressividade baixa|media|alta." : "Vale já, e fica gravada para o próximo início."}`,
+                `(veem a ${now.aggroRadius} m, golpe vezes ${now.damageMultiplier}, ${now.front} lutam de perto por vez e os outros cercam, o alarme se ouve a ${now.earshotM} m, o acampamento persegue por ${now.alarmMs / 1000} s.) ${word === undefined ? "Troque com /bandidos agressividade baixa|media|alta." : "Vale já, e fica gravada para o próximo início."}`,
             ]);
+            return;
+        }
+
+        // Every bandit in a set of armour (2026-11-02, `armourAll`): for when the veterans' and the chiefs' sets are seen on the players' games.
+        if (sub === "armadura") {
+            if (arg === "ligar" || arg === "desligar") {
+                banditSettings.armourAll = arg === "ligar";
+            } else if (arg !== undefined) {
+                usage();
+                return;
+            }
+            reply.line(
+                banditSettings.armourAll
+                    ? "Todos os bandidos nascem de armadura (gambesão, coifa e capuz; os arqueiros, mais leves): os que voltarem daqui em diante, e todos no próximo início."
+                    : "Só os veteranos e os chefes nascem de armadura; os outros, de roupa: os que voltarem daqui em diante, e todos no próximo início.",
+            );
             return;
         }
 

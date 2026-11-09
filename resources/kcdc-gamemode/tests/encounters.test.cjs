@@ -7,8 +7,8 @@ require("./reachpatch.cjs");
 
 const RESOURCE = "kcdc-gamemode";
 
-/** `tables` lists the pairs of player ids standing at one dice table; `trading` the ids already in a trade; `playing` those in a dice match; `rows` the officer's rows arrest.ts would add. */
-function load({ tables = [], trading = [], playing = [], rows = [] } = {}) {
+/** `tables` lists the pairs of player ids standing at one dice table; `trading` the ids already in a trade; `playing` those in a dice match; `dueling` those in a duel; `rows` the officer's rows arrest.ts would add. */
+function load({ tables = [], trading = [], playing = [], dueling = [], rows = [] } = {}) {
     const handlers = new Map();
     const clients = new Map();
     const emit = (name, ...args) => {
@@ -24,7 +24,8 @@ function load({ tables = [], trading = [], playing = [], rows = [] } = {}) {
     const arrestChosen = [];
     const pairs = [];
     const started = [];
-    const state = { pairFails: null, startFails: false, apart: null };
+    const duelStarted = [];
+    const state = { pairFails: null, startFails: false, apart: null, duelRefusal: null, duelFails: null };
     const logs = [];
 
     const context = {
@@ -62,6 +63,20 @@ function load({ tables = [], trading = [], playing = [], rows = [] } = {}) {
                         pair: async (a, b) => {
                             if (state.pairFails) throw new Error(state.pairFails);
                             pairs.push([a.id, b.id]);
+                        },
+                    },
+                };
+            }
+            if (id === "./duel.js") {
+                return {
+                    INVITATION_NOTES: ["Vai até um dos dois chegar a 20% da vida.", "Poções e efeitos saem do corpo."],
+                    duels: {
+                        busy: (player) => dueling.includes(player.id),
+                        canChallenge: () => state.duelRefusal,
+                        start: (from, to) => {
+                            if (state.duelFails) return state.duelFails;
+                            duelStarted.push([from.id, to.id]);
+                            return null;
                         },
                     },
                 };
@@ -140,7 +155,7 @@ function load({ tables = [], trading = [], playing = [], rows = [] } = {}) {
     const choose = (player, option) => emit("dialogueChoice", sessionOf(player), player, option);
     const talk = (speaker, target) => clients.get(`${RESOURCE}:players.talk`)(speaker, JSON.stringify({ id: target.id }));
     const peek = (viewer, id) => clients.get(`${RESOURCE}:players.peek`)(viewer, { id });
-    return { api: context.exports, emit, handlers, clients, sessions, players, intervals, clock, known, arrested, arrestChosen, pairs, started, state, logs, makePlayer, sessionOf, page, texts, choose, talk, peek };
+    return { api: context.exports, emit, handlers, clients, sessions, players, intervals, clock, known, arrested, arrestChosen, pairs, started, duelStarted, dueling, state, logs, makePlayer, sessionOf, page, texts, choose, talk, peek };
 }
 
 test("nobody's name floats over their head, from the start and at every spawn; they come back when the resource stops", () => {
@@ -172,13 +187,13 @@ test("a player looked at is a stranger until introduced, in the gender of their 
     assert.equal(hans.labels.length, 2, "anything but a whole number is ignored");
 });
 
-test("the talk key on a close player opens the game's list: introduce, dice, trade, leave", () => {
+test("the talk key on a close player opens the game's list: introduce, dice, trade, duel, leave", () => {
     const sut = load();
     sut.api.installEncounters();
     const hans = sut.makePlayer(1, "Hans");
     const kat = sut.makePlayer(2, "Katerina");
     sut.talk(hans, kat);
-    assert.deepEqual(sut.texts(hans), ["Apresentar-se", "Jogar dados (só junto de uma mesa de dados)", "Negociar", "Sair"]);
+    assert.deepEqual(sut.texts(hans), ["Apresentar-se", "Jogar dados (só junto de uma mesa de dados)", "Negociar", "Desafiar para um duelo", "Sair"]);
     assert.equal(sut.page(hans).options[1].enabled, false, "dice needs a table");
     sut.choose(hans, "leave");
     assert.equal(sut.sessionOf(hans), 0);
@@ -221,7 +236,7 @@ test("introducing yourself tells the other your name, once, and the option goes 
     assert.deepEqual(kat.notices, ["Hans se apresentou a você."]);
     assert.deepEqual(kat.labels, [{ id: 1, label: "Hans" }], "her screen shows his name at once");
     assert.deepEqual(hans.notices, ["Você se apresentou."]);
-    assert.deepEqual(sut.texts(hans), ["Jogar dados (só junto de uma mesa de dados)", "Negociar", "Sair"], "the talk goes on without it");
+    assert.deepEqual(sut.texts(hans), ["Jogar dados (só junto de uma mesa de dados)", "Negociar", "Desafiar para um duelo", "Sair"], "the talk goes on without it");
 
     sut.choose(hans, "leave");
     sut.talk(hans, kat);
@@ -437,13 +452,13 @@ test("an invitation to a player whose dice match began after the list was opened
 
 const OFFICER_ROWS = [{ id: "arrest", text: "Prender", enabled: true }, { id: "release", text: "Soltar", enabled: true }];
 
-test("an officer's list has Prender on someone free, between Negociar and Sair; a player with no such power sees nothing more", () => {
+test("an officer's list has Prender on someone free, between the duel and Sair; a player with no such power sees nothing more", () => {
     const sut = load({ rows: OFFICER_ROWS });
     sut.api.installEncounters();
     const guard = sut.makePlayer(1, "Guarda");
     const kat = sut.makePlayer(2, "Katerina");
     sut.talk(guard, kat);
-    assert.deepEqual(sut.texts(guard), ["Apresentar-se", "Jogar dados (só junto de uma mesa de dados)", "Negociar", "Prender", "Sair"]);
+    assert.deepEqual(sut.texts(guard), ["Apresentar-se", "Jogar dados (só junto de uma mesa de dados)", "Negociar", "Desafiar para um duelo", "Prender", "Sair"]);
 
     const bare = load();
     bare.api.installEncounters();
@@ -504,4 +519,97 @@ test("a prisoner opens no list; and an invitation sent before the cuffs went on 
     sut.choose(hans, "trade");
     assert.equal(sut.sessionOf(kat), 0, "no invitation reaches somebody who was arrested meanwhile");
     assert.ok(hans.notices.some((line) => /não pode agora/.test(line)));
+});
+
+test("a duel is an invitation that carries its rules; accepted, the duel is started for the pair", () => {
+    const sut = load();
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.talk(hans, kat);
+    assert.deepEqual({ ...sut.page(hans).options[3] }, { id: "duel", text: "Desafiar para um duelo", enabled: true });
+    sut.choose(hans, "duel");
+    assert.equal(sut.sessionOf(hans), 0, "Hans's list closes");
+    assert.deepEqual(sut.texts(kat), ["Desconhecido quer duelar com você.", "Vai até um dos dois chegar a 20% da vida.", "Poções e efeitos saem do corpo.", "Aceitar", "Recusar"]);
+    assert.ok(sut.page(kat).options.slice(0, 3).every((option) => option.enabled === false), "the rules are rows to read");
+    assert.ok(hans.notices.some((line) => /para duelar\. Esperando a resposta\./.test(line)));
+    sut.choose(kat, "accept");
+    assert.deepEqual(sut.duelStarted, [[1, 2]]);
+    assert.equal(sut.sessionOf(kat), 0);
+});
+
+test("a duel that cannot begin is said to whoever asked, before the other is bothered; one that fails on acceptance is said to both", () => {
+    const sut = load();
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.state.duelRefusal = "Para duelar, a sua vida precisa estar acima de 80%.";
+    sut.talk(hans, kat);
+    sut.choose(hans, "duel");
+    assert.equal(sut.sessionOf(kat), 0, "no invitation was sent");
+    assert.ok(hans.notices.includes("Para duelar, a sua vida precisa estar acima de 80%."));
+
+    sut.state.duelRefusal = null;
+    sut.state.duelFails = "Desconhecido não está em condições de duelar agora.";
+    sut.clock.now += 20_000;
+    sut.talk(hans, kat);
+    sut.choose(hans, "duel");
+    sut.choose(kat, "accept");
+    assert.deepEqual(sut.duelStarted, []);
+    for (const player of [hans, kat]) {
+        assert.ok(player.notices.includes("O duelo não pôde começar: Desconhecido não está em condições de duelar agora."));
+    }
+});
+
+test("a declined duel is called a duel", () => {
+    const sut = load();
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.known.add("1>2");
+    sut.talk(hans, kat);
+    sut.choose(hans, "duel");
+    sut.choose(kat, "decline");
+    assert.ok(hans.notices.includes("Katerina recusou o duelo."));
+    assert.deepEqual(sut.duelStarted, []);
+});
+
+test("nobody in a duel is talked to, nor shows the talk hint, nor is invited to anything", () => {
+    const sut = load({ dueling: [2] });
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    const gus = sut.makePlayer(3, "Gustav");
+    sut.talk(hans, kat);
+    assert.equal(sut.sessionOf(hans), 0, "the one in a duel is not talked to");
+    assert.ok(hans.notices.some((line) => /está em um duelo\./.test(line)));
+    sut.talk(kat, gus);
+    assert.equal(sut.sessionOf(kat), 0, "the one in a duel talks to nobody");
+    sut.peek(hans, kat.id);
+    sut.peek(kat, gus.id);
+    assert.deepEqual(hans.labels, [{ id: 2, label: "" }]);
+    assert.deepEqual(kat.labels, [{ id: 3, label: "" }]);
+
+    // A duel that begins after the list was opened: no invitation of any kind reaches somebody in it.
+    sut.dueling.length = 0;
+    sut.talk(hans, gus);
+    sut.dueling.push(3);
+    sut.choose(hans, "trade");
+    assert.equal(sut.sessionOf(gus), 0, "no invitation reaches somebody in a duel");
+    assert.ok(hans.notices.some((line) => /não pode agora\./.test(line)));
+});
+
+test("the duel row is greyed while either of the two is in a duel", () => {
+    const sut = load();
+    sut.api.installEncounters();
+    const hans = sut.makePlayer(1, "Hans");
+    const kat = sut.makePlayer(2, "Katerina");
+    sut.talk(hans, kat);
+    assert.equal(sut.page(hans).options[3].enabled, true);
+    sut.choose(hans, "leave");
+    sut.dueling.push(1);
+    // Built with Hans in a duel, the menu is never opened (the press does nothing), so the row's text is read off the class directly.
+    const encounters = new sut.api.Encounters(() => sut.clock.now);
+    const menu = encounters.menu(hans, kat);
+    assert.deepEqual({ ...menu.options.find((option) => option.id === "duel") }, { id: "duel", text: "Desafiar para um duelo (já em duelo)", enabled: false });
 });

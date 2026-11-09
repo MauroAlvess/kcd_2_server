@@ -1,26 +1,29 @@
 /**
  * The thief's mark (user, 2026-10-18): first "qualquer jogador que roubar itens de outros jogadores deve receber a marca de ladrão,
  * que fica durante 7 dias", then, the same day, "roubou mais de 3 baús em curto período, fica com título de ladrão por 1 dia".
- * Whoever robs more than three chests that are somebody else's within an hour (the "Roubar" of a chest's menu, or things taken from
- * one: `property-menu.ts`, which leaves a relative's chest out) is marked for a day, and the mark is over their head ("Ladrão", or
- * "Ladra") until it runs out, in place of any title (`titles.ts` `applyNametag`). The marks are kept in `playerdata/thieves.json`,
- * so a restart does not wash them off; the count of chests is kept in memory only.
+ * Since 2026-11-01 it comes from picking locks only, and since 2026-11-02 not at the first ("esse título só deve ser dado depois do
+ * jogador arrombar 3 coisas, exemplo portão, baú, porta ou baú, baú, porta"): whoever picks the locks of `BREAKINS_FOR_MARK` doors,
+ * gates or chests of other players (`property-menu.ts`, which leaves a relative's out) within `BREAKIN_WINDOW_MS` is marked for a day,
+ * and the mark is over their head ("Ladrão", or "Ladra") until it runs out, in place of any title (`titles.ts` `applyNametag`). The
+ * marks are kept in `playerdata/thieves.json` and the break-ins counted in `playerdata/thief-breakins.json`, so a restart washes
+ * neither off.
  */
 
 import { ensureDir, read, write } from "./store.js";
 
 const DIR = "playerdata";
 const FILE = `${DIR}/thieves.json`;
+const BREAKINS_FILE = `${DIR}/thief-breakins.json`;
 
 /**
  * How long the mark lasts, from the last theft (2026-10-18, the user's second word on it: "roubou mais de 3 baús em curto período,
  * fica com título de ladrão por 1 dia"; it was 7 days for any one chest until then).
  */
 export const MARK_DAYS = 1;
-/** More than this many different chests robbed within `THEFT_WINDOW_MS` and the thief is marked. */
-export const THEFTS_ALLOWED = 3;
-export const THEFT_WINDOW_MS = 60 * 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The break-in that marks a thief: this many locks of other players' doors, gates or chests, each counted once, within `BREAKIN_WINDOW_MS`. */
+export const BREAKINS_FOR_MARK = 3;
+export const BREAKIN_WINDOW_MS = 3 * DAY_MS;
 
 export interface ThiefMark {
     readonly name: string;
@@ -69,45 +72,105 @@ export function markThief(steamId: string, name: string, reason: string, now: nu
     return mark;
 }
 
-/** The chests each player robbed lately, by Steam id: the chest's level GUID and when. Kept in memory: a restart forgets them. */
-const recent = new Map<string, Map<string, number>>();
+/** A lock picked: which part (its level GUID), what it was called for the reason of a mark, and when. */
+interface BreakIn {
+    readonly part: string;
+    readonly what: string;
+    readonly at: number;
+}
+
+/** The break-ins each player made lately, by Steam id. */
+let breakins: Record<string, BreakIn[]> | null = null;
+
+function loadBreakins(): Record<string, BreakIn[]> {
+    if (breakins !== null) {
+        return breakins;
+    }
+    const result = read<Record<string, unknown>>(BREAKINS_FILE);
+    breakins = {};
+    if (result.status === "ok" && typeof result.value === "object" && result.value !== null) {
+        for (const [steamId, list] of Object.entries(result.value)) {
+            if (Array.isArray(list)) {
+                breakins[steamId] = list.filter((one): one is BreakIn => typeof one === "object" && one !== null && typeof one.part === "string" && typeof one.what === "string" && typeof one.at === "number");
+            }
+        }
+    }
+    return breakins;
+}
+
+function persistBreakins(): void {
+    ensureDir(DIR);
+    write(BREAKINS_FILE, breakins ?? {});
+}
 
 /**
- * A chest robbed (`property-menu.ts`: Roubar, or things taken from a chest that is somebody else's). Counted once per chest; the
- * mark comes with the fourth different chest within the hour, and every theft after it while it is on renews it. `count` is how
- * many different chests are counted now; `mark` the mark given or renewed now, or null.
+ * A lock of another player's door, gate or chest picked (`property-menu.ts`). Each part counts once within `BREAKIN_WINDOW_MS`; the
+ * mark comes with the `BREAKINS_FOR_MARK`th, and every break-in after it within the window renews it. `count` is how many are counted
+ * now; `mark` the mark given or renewed now, or null.
  */
-export function noteTheft(steamId: string, name: string, chest: string, reason: string, now: number = Date.now()): { readonly count: number; readonly mark: ThiefMark | null } {
+export function noteBreakIn(steamId: string, name: string, part: string, what: string, now: number = Date.now()): { readonly count: number; readonly mark: ThiefMark | null } {
     if (steamId === "") {
         return { count: 0, mark: null };
     }
-    const chests = recent.get(steamId) ?? new Map<string, number>();
-    for (const [guid, at] of chests) {
-        if (now - at >= THEFT_WINDOW_MS) {
-            chests.delete(guid);
+    const all = loadBreakins();
+    const kept = (all[steamId] ?? []).filter((one) => now - one.at < BREAKIN_WINDOW_MS && one.part !== part);
+    kept.push({ part, what, at: now });
+    all[steamId] = kept;
+    // Nobody's old break-ins are kept past the window.
+    for (const [other, list] of Object.entries(all)) {
+        if (other !== steamId && list.every((one) => now - one.at >= BREAKIN_WINDOW_MS)) {
+            delete all[other];
         }
     }
-    const fresh = !chests.has(chest);
-    chests.set(chest, now);
-    recent.set(steamId, chests);
-    const count = chests.size;
-    if (count <= THEFTS_ALLOWED || (!fresh && thiefMark(steamId, now) !== null)) {
+    persistBreakins();
+    const count = kept.length;
+    if (count < BREAKINS_FOR_MARK) {
+        console.log(`thieves: ${name} arrombou ${what} (${count} de ${BREAKINS_FOR_MARK} para a marca de ladrão)`);
         return { count, mark: null };
     }
-    return { count, mark: markThief(steamId, name, `${reason} (${count} baús em menos de uma hora)`, now) };
+    const list = kept.slice(-BREAKINS_FOR_MARK).map((one) => one.what).join(", ");
+    return { count, mark: markThief(steamId, name, `arrombou ${count} fechaduras de outros jogadores: ${list}`, now) };
 }
 
-/** Takes a mark off (an administrator's pardon). */
+/** How many break-ins count against a player now, for `/ladrao`. */
+export function breakInsOf(steamId: string, now: number = Date.now()): number {
+    return (loadBreakins()[steamId] ?? []).filter((one) => now - one.at < BREAKIN_WINDOW_MS).length;
+}
+
+/**
+ * Takes a mark off (an administrator's pardon), and the break-ins counted against the player with it. True when there was anything to take off: a mark (running or not) or break-ins
+ * still counted (2026-11-06, the user: "remover título de ladrão do Shakran": his mark had run out but four break-ins were still counted, so the next one would have marked him again).
+ */
 export function clearThief(steamId: string): boolean {
     const all = load();
-    if (all[steamId] === undefined) {
-        return false;
+    const counted = loadBreakins();
+    let cleared = false;
+    if (counted[steamId] !== undefined) {
+        delete counted[steamId];
+        persistBreakins();
+        cleared = true;
     }
-    delete all[steamId];
-    recent.delete(steamId);
-    persist();
-    refresh(steamId);
-    return true;
+    if (all[steamId] !== undefined) {
+        delete all[steamId];
+        persist();
+        cleared = true;
+        // The head is drawn again, also for a mark that had run out: a label left on it is gone.
+        refresh(steamId);
+    }
+    return cleared;
+}
+
+/**
+ * Every account with something recorded against it, a mark (running or run out) or break-ins counted within the window, for a pardon to find: the name the mark was given under (the account's
+ * nickname) when it has one, and how many break-ins count.
+ */
+export function recorded(now: number = Date.now()): Array<{ readonly steamId: string; readonly name: string | null; readonly breakIns: number }> {
+    const marks = load();
+    const counted = loadBreakins();
+    const ids = new Set([...Object.keys(marks), ...Object.keys(counted)]);
+    return [...ids]
+        .map((steamId) => ({ steamId, name: marks[steamId]?.name ?? null, breakIns: (counted[steamId] ?? []).filter((one) => now - one.at < BREAKIN_WINDOW_MS).length }))
+        .filter((row) => marks[row.steamId] !== undefined || row.breakIns > 0);
 }
 
 /** Every mark still running, for `/ladrao`. */

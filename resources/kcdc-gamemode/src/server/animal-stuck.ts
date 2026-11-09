@@ -157,8 +157,12 @@ export function unstickAnimal(player: Player, kind: unknown, key: unknown, now: 
         return done(brought.message);
     }
 
-    if (supporters.get(player.steamId) === null) {
+    const record = supporters.get(player.steamId);
+    if (record === null) {
         return { ok: false, message: "Você não tem um cão." };
+    }
+    if (record.dogAway === true) {
+        return { ok: false, message: "Seu cão foi embora: chame-o para ele voltar." };
     }
     const dog = player.dog;
     if (dog !== null) {

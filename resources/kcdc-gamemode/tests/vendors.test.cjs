@@ -4,6 +4,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+// What an NPC says (src/server/npc-speech.ts, 2026-11-02), stood in for: said over the body as before, and recorded with its author.
+const SPEECH = {
+    speak: (npc, author, text, options = {}) => {
+        if (typeof npc.say === "function") npc.say(text);
+        (globalThis.__spoken ??= []).push({ npc: npc.id, author, text, to: (options.to ?? []).map((player) => player.id), radiusM: options.radiusM });
+        return 1;
+    },
+    splitSpeaker: (line, fallback) => {
+        const at = line.indexOf(": ");
+        return at > 0 && at <= 60 && !/[.!?]/.test(line.slice(0, at)) ? { author: line.slice(0, at), text: line.slice(at + 2) } : { author: fallback, text: line };
+    },
+    turnBackAfterTalk: (npc, player, yaw) => { (globalThis.__turnBacks ??= []).push([npc.id, player.id, yaw]); },
+    faceAhead: () => true,
+};
+
+
 function fakeDisk(seed = {}) {
     const files = new Map(Object.entries(seed));
     return {
@@ -46,7 +62,7 @@ class FakeVector3 {
 }
 
 /** unknownItems are names the fake game does not know; the rest are worth 100 each. */
-function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed = {}, houses = [], hour = 12, buys = BUYS, gestures = [], now = 1_760_000_000_000, doorsByGuid = {}, doors = [] } = {}) {
+function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed = {}, houses = [], hour = 12, buys = BUYS, gestures = [], now = 1_760_000_000_000, doorsByGuid = {}, doors = [], on = true } = {}) {
     const disk = fakeDisk(seed);
     const store = loadModule("store", { exports: {}, require: () => disk.fs });
     const books = loadModule("books", { exports: {}, console: { log() {} }, Items: { register: (id) => `guid:${id}` }, Events: { on() {} } });
@@ -82,6 +98,7 @@ function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed =
             if (id === "./store.js") return store;
             if (id === "./townsfolk.js") return townsfolk;
             if (id === "./npc-keeper.js") return keeper;
+            if (id === "./npc-speech.js") return SPEECH;
             if (id === "./idle-gestures.js") return { maybeGesture: () => false };
             if (id === "./skillbook-data.js") return { SKILLBOOKS };
             if (id === "./properties.js") {
@@ -181,6 +198,8 @@ function load({ unknownItems = ["unknownBlade"], navigationReady = false, seed =
     keeper = real("npc-keeper");
     townsfolk = real("townsfolk");
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/vendors.js"), "utf8"), context);
+    // The vendors are off in the game since 2026-10-29; the tests of what they do switch them on, `on: false` is the game as it is.
+    context.exports.vendorSettings.enabled = on;
     context.exports.installVendors();
 
     const emit = (name, ...args) => (handlers.get(name) ?? []).forEach((fn) => fn(...args));
@@ -311,7 +330,8 @@ test("each sells its trade's goods at the game's price plus a margin, and the sk
             "parsnip", "turnip", "leek", "roastedPeas", "herb_urticaria", "bread", "bacon", "cream", "beer",
             // The seeds of the garden vegetables (2026-10-22), and the saplings, seeds and pepper of the fruit and the spice (2026-10-24), in the order of the
             // crops (by level), our own items by the GUID the game gave them.
-            ...["cebola", "repolho", "nabo", "cenoura", "beterraba", "alho", "maca", "pastinaca", "pera", "alho-poro", "ameixa", "raiz-forte", "ervilha", "pessego", "uva", "melancia", "pimenta"].map((crop) => `guid:kcdc-craft:semente-${crop}`)],
+            // Sixteen more of the plants of 2026-11-02, in among the others by their level.
+            ...["cebola", "repolho", "rabanete", "nabo", "alface", "cenoura", "morango", "espinafre", "beterraba", "fava", "alho", "amora", "aipo", "maca", "lentilha", "pastinaca", "cereja", "pera", "framboesa", "alho-poro", "mirtilo", "ameixa", "groselha", "raiz-forte", "ervilha", "marmelo", "pessego", "avela", "uva", "melancia", "noz", "mostarda", "pimenta"].map((crop) => `guid:kcdc-craft:semente-${crop}`)],
         "meat, what the kitchen's recipes take (our own flour, malt and hops by the GUID the game gave them), wine, cuts, cheese, fish, offal, roots and mushrooms, what the soups take, and the garden vegetables', fruits' and pepper's seeds",
     );
     assert.deepEqual(Array.from(tavern.filter((item) => SKILL_GUIDS.has(item))), skillGuids("drinking", "speech"), "and the books of drinking and speech");
@@ -319,7 +339,7 @@ test("each sells its trade's goods at the game's price plus a margin, and the sk
     assert.ok(["wine", "special_sulfur", "special_saltpeter", "special_charcoalImproved", "herb_dried_poppy", "special_mushroomAmanita", "maliruvLek_mandrakeRoot", "maliruvLek_freshwaterPearl"].every((item) => apothecary.includes(item)));
     assert.deepEqual(
         apothecary.filter((item) => item.startsWith("guid:kcdc-craft:semente-")),
-        ["urtiga", "dente-de-leao", "cardo", "confrei", "sabugueiro", "absinto", "valeriana", "hortela", "hiperico", "salvia", "eufrasia", "camomila", "tanaceto", "calendula", "beladona", "papoula", "meimendro", "paris", "gengibre"].map((crop) => `guid:kcdc-craft:semente-${crop}`),
+        ["urtiga", "dente-de-leao", "cardo", "endro", "confrei", "sabugueiro", "absinto", "valeriana", "hortela", "hiperico", "salvia", "eufrasia", "camomila", "tanaceto", "calendula", "beladona", "papoula", "meimendro", "paris", "gengibre"].map((crop) => `guid:kcdc-craft:semente-${crop}`),
         "and the seeds of the garden herbs, the apothecary being who buys what they give (2026-10-22; twelve more of the wild ones, 2026-10-27)",
     );
     assert.ok(smith.stock.some((row) => row.item === "player_shovel"), "the smith sells the shovel the Agricultores dig with");
@@ -425,7 +445,7 @@ test("the shelves are filled again on a timer", () => {
     sut.spawn();
     sut.shop("Taberneiro (Suchdol)").stock = [];
     sut.intervals.find((interval) => interval.ms === 15 * 60_000).fn();
-    assert.equal(sut.shop("Taberneiro (Suchdol)").stock.length, 66 + skillGuids("drinking", "speech").length, "six more since 2026-10-24: the fruits' and the pepper's seeds, and the grapes' (2026-10-27)");
+    assert.equal(sut.shop("Taberneiro (Suchdol)").stock.length, 82 + skillGuids("drinking", "speech").length, "six more since 2026-10-24: the fruits' and the pepper's seeds, and the grapes' (2026-10-27); sixteen of the plants of 2026-11-02");
 });
 
 test("an administrator moves a vendor's place, and it is remembered", () => {
@@ -793,4 +813,17 @@ test("a vendor found in the river by day is made again at their place, and the l
     assert.deepEqual([again.position.x, again.position.y], [smith.options.position.x, smith.options.position.y], "made again at the shop");
     assert.ok(sut.logs.some((line) => /^npc-keeper: vendors: Mestre Ferreiro \(Suchdol\) caiu .*: feito de novo no lugar$/.test(line)), sut.logs.filter((line) => /npc-keeper/.test(line)).join("\n"));
     assert.match(sut.line("ferreiro"), /andando pela vila/);
+});
+
+test("with the vendors switched off (2026-10-29: \"vamos remover todos npcs da cidade vendedores\") nobody is made, no shop opens, the houses kept for them are freed, and the camps' fires are still lit", () => {
+    const sut = load({ on: false, houses: [{ id: "casa-01", name: "Casa do Ferreiro", kind: "house", region: "Suchdol", parentId: "", ownerSteamId: "", x: 650, y: 3260, z: 145 }] });
+    assert.ok(sut.logs.some((line) => /vendors: desligados: ninguém vende/.test(line)), "the start says so");
+    assert.deepEqual(sut.released.at(0), [], "every house kept for a vendor is given back: none is kept");
+    sut.timers.forEach((timer) => timer.fn());
+    sut.intervals.forEach((timer) => timer.fn());
+    assert.equal([...sut.npcs.values()].length, 0, "no shopkeeper, no pedlar, no bath maid");
+    assert.equal([...sut.vendors.values()].length, 0, "no trade window exists");
+    assert.ok(sut.fires.length > 0, "the camps' fires are lit all the same: the cooking stations stand at them");
+    assert.ok(Array.from(sut.api.describeVendors())[0].includes("desligados"));
+    assert.equal(sut.handlers.get("npcInteract"), undefined, "nobody answers a use key on a vendor");
 });

@@ -4,6 +4,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+// What an NPC says (src/server/npc-speech.ts, 2026-11-02), stood in for: said over the body as before, and recorded with its author.
+const SPEECH = {
+    speak: (npc, author, text, options = {}) => {
+        if (typeof npc.say === "function") npc.say(text);
+        (globalThis.__spoken ??= []).push({ npc: npc.id, author, text, to: (options.to ?? []).map((player) => player.id), radiusM: options.radiusM });
+        return 1;
+    },
+    splitSpeaker: (line, fallback) => {
+        const at = line.indexOf(": ");
+        return at > 0 && at <= 60 && !/[.!?]/.test(line.slice(0, at)) ? { author: line.slice(0, at), text: line.slice(at + 2) } : { author: fallback, text: line };
+    },
+    turnBackAfterTalk: (npc, player, yaw) => { (globalThis.__turnBacks ??= []).push([npc.id, player.id, yaw]); },
+    faceAhead: () => true,
+};
+
+
 // The posts of the townsfolk who only stand and talk (src/server/townsfolk.ts): the barbers and the teachers.
 
 class FakeVector3 {
@@ -15,7 +31,7 @@ function load({ navigationReady = true } = {}) {
     const context = {
         exports: {},
         // The keeper is the real one, over the same fakes (src/server/npc-keeper.ts).
-        require: (id) => (id === "./idle-gestures.js" ? { maybeGesture: () => false } : id === "./npc-keeper.js" ? keeper() : assert.fail(`unexpected require ${id}`)),
+        require: (id) => (id === "./idle-gestures.js" ? { maybeGesture: () => false } : id === "./npc-keeper.js" ? keeper() : id === "./npc-speech.js" ? SPEECH : assert.fail(`unexpected require ${id}`)),
         console: { log: (line) => state.logs.push(line), error: (line) => state.logs.push(line) },
         Vector3: FakeVector3,
         setTimeout: (fn, ms) => { state.timers.push({ fn, ms, done: false }); return state.timers.length; },
@@ -449,4 +465,15 @@ test("at dusk and at dawn the posts are given their walks and their bodies a few
     sut.state.clock += 1_000;
     tick();
     assert.equal([...sut.state.npcs.values()].length, 6, "and the town is up");
+});
+
+test("a body given a label wears it as its nametag; one without a label has no nametag; the label does not change the clothes (2026-10-31)", () => {
+    const sut = load();
+    const plainBody = sut.api.townsperson("townsman", "Mestre Ferreiro", new FakeVector3(1, 2, 3), 0);
+    assert.equal(plainBody.options.nametag, false);
+    assert.equal(plainBody.options.name, "Mestre Ferreiro");
+    const labelled = sut.api.townsperson("townsman", "Mestre Ferreiro", new FakeVector3(1, 2, 3), 0, "", "Ferreiro");
+    assert.equal(labelled.options.nametag, true, "the trade stands over its head");
+    assert.equal(labelled.options.name, "Ferreiro");
+    assert.equal(labelled.options.outfit, plainBody.options.outfit, "the clothes are still picked by its own name");
 });

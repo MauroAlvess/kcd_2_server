@@ -172,41 +172,6 @@ export const GUILD_KITS: Readonly<Record<string, readonly KitItem[]>> = {
 };
 
 /** One piece of a house's colours: `piece` names it in the ledger, the same for both bodies. */
-interface ColourPiece extends KitItem {
-    readonly piece: "manto" | "gola";
-}
-
-/**
- * The colours of each house, handed the first time a character swears to it (user, 2026-10-14: a mantle in the house's
- * colours, red for the Golden Lion and blue for the Raven, and the collar). The game has no cloak a character can wear,
- * so the mantle is its embroidered coat (Casaco bordado), the same cut in both colours with gold bands, and the collar
- * its padded collar (Gola acolchoada). Those are cut for men; a woman gets the women's surcoat (Sobretudo) and hooded
- * collar (Capuz feminino), red and blue with gold embroidery. The colours were read from the game's own item icons.
- * Keyed by the faction id in `status.ts`.
- */
-export const FACTION_COLOURS: Readonly<Record<string, Readonly<Record<"male" | "female", readonly ColourPiece[]>>>> = {
-    "leao-dourado": {
-        male: [
-            { piece: "manto", item: "Coat11_m03_C", amount: 1, label: "o manto vermelho (casaco bordado)" },
-            { piece: "gola", item: "CollarPadded01_m06_C1", amount: 1, label: "a gola acolchoada vermelha" },
-        ],
-        female: [
-            { piece: "manto", item: "F_Surcote01_m09_C", amount: 1, label: "o manto vermelho (sobretudo)" },
-            { piece: "gola", item: "F_Hood01_m01_C", amount: 1, label: "a gola vermelha (capuz bordado)" },
-        ],
-    },
-    corvo: {
-        male: [
-            { piece: "manto", item: "Coat11_m04_C", amount: 1, label: "o manto azul (casaco bordado)" },
-            { piece: "gola", item: "CollarPadded01_m04_C1", amount: 1, label: "a gola acolchoada azul" },
-        ],
-        female: [
-            { piece: "manto", item: "F_Surcote01_m15_C", amount: 1, label: "o manto azul (sobretudo)" },
-            { piece: "gola", item: "F_Hood01_m05_C", amount: 1, label: "a gola azul (capuz bordado)" },
-        ],
-    },
-};
-
 function say(player: Player, text: string): void {
     Chat.sendToPlayer(player, text);
 }
@@ -406,38 +371,5 @@ export function grantGuildKit(player: Player, guildId: string): string[] {
         const name = book?.title ?? entry.label;
         handed.push(entry.amount > 1 ? `${entry.amount} ${name}` : name);
     });
-    return handed;
-}
-
-/**
- * The colours of a house the player has just sworn to, cut for their body, into the inventory (putting them on is the
- * player's choice). Once per house and piece: swearing again, or back and forth between the houses, brings nothing new,
- * and the ledger is kept by piece rather than item, so a body changed later does not earn the other cut as well.
- * Returns what was handed over now, for the message.
- */
-export function grantFactionColours(player: Player, factionId: string): string[] {
-    const colours = FACTION_COLOURS[factionId];
-    if (colours === undefined) {
-        return [];
-    }
-    if (!canKeep(player)) {
-        say(player, "Seu personagem não está sendo salvo, então as cores da facção não puderam ser entregues.");
-        return [];
-    }
-
-    const handed: string[] = [];
-    for (const entry of colours[genderOf(player)]) {
-        const ledger = `faction:${factionId}:${entry.piece}`;
-        if (hasKit(player, ledger)) {
-            continue;
-        }
-        const result = Inventory.add(player, { item: entry.item, amount: entry.amount });
-        if (!result.ok) {
-            console.log(`kits: ${player.nickname}: ${entry.item} não foi entregue (${result.code})`);
-            continue;
-        }
-        markKit(player, ledger);
-        handed.push(entry.label);
-    }
     return handed;
 }

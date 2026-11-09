@@ -26,6 +26,7 @@
  */
 
 import { nameOf } from "./acquaintances.js";
+import { onKuttenberg } from "./level.js";
 import { ensureDir, read, write } from "./store.js";
 import { allowedTo, EDGE_M } from "./reach.js";
 
@@ -52,6 +53,17 @@ export const ACCESS_LIMIT = 12;
 
 /** What stands between a house's name and its chest's own ("Casa 03 · Baú 1"). */
 const CHEST_SEPARATOR = " · ";
+
+/**
+ * What the census files besides the level's chests (2026-11-09, user: "mapear todas propriedades, baús e armários"): the furniture that holds things, a shelf, a cabinet, a wardrobe. Barrels, sacks,
+ * baskets, hives, fish traps and the piles of goods along a wall are not properties.
+ */
+const FURNITURE_STASH = /cabinet|shelf|wardrobe|cupboard|closet/i;
+const isFiledStash = (name: string): boolean => /chest/i.test(name) || FURNITURE_STASH.test(name);
+/** What a filed container is called: a chest ("Baú 07"), or a piece of furniture ("Armário 07"). */
+const nounOfStash = (name: string): "Baú" | "Armário" => (FURNITURE_STASH.test(name) && !/chest/i.test(name) ? "Armário" : "Baú");
+/** The noun of a name the census gave, with or without its house ("Casa 01 · Armário 2"): Baú for any other. */
+const nounOfName = (name: string): "Baú" | "Armário" => (/(?:^|· )Armário \d/.test(name) ? "Armário" : "Baú");
 
 /** How far from a chest a player may stand to use its key (`reach.ts`). */
 const CHEST_REACH = allowedTo(EDGE_M.chest);
@@ -185,7 +197,7 @@ export interface Compound {
  * fortress around 1430, 3845 and its village square, where the town crier calls, around 1588, 3820), and give way to
  * the map's own outline of the place when the level has one.
  */
-export const REGIONS: readonly Region[] = [
+export const KUTTENBERG_REGIONS: readonly Region[] = [
     { id: "suchdol", name: "Suchdol", minX: 430, maxX: 900, minY: 3140, maxY: 3480, fortress: { minX: 725, maxX: 825, minY: 3325, maxY: 3395 } },
     { id: "wysoka", name: "Wysoka", minX: 250, maxX: 540, minY: 2320, maxY: 2600, locations: ["Wysoka", "Vysoka", "Vysoká"] },
     { id: "raborsch", name: "Raborsch", minX: 1340, maxX: 1720, minY: 3720, maxY: 3980, fortress: { minX: 1400, maxX: 1460, minY: 3805, maxY: 3870 }, locations: ["Raborsch", "Ratbor", "Ratboř"], looseDoors: true },
@@ -261,6 +273,76 @@ export const REGIONS: readonly Region[] = [
     { id: "rabstein", name: "Rabstein", minX: 945, maxX: 1015, minY: 1020, maxY: 1100, locations: ["Rabstein", "Rabstejn"] },
     { id: "opatowitz", name: "Opatowitz", minX: 1780, maxX: 1915, minY: 2960, maxY: 3050, locations: ["Opatowitz", "Opatovice"] },
 ];
+
+/**
+ * The places of the Trosky level (`trosecko`, the server's map since 2026-11-09), by the names its own map gives them (`Area.location`, read by a probe on a throwaway copy of the server:
+ * seventeen of them) and the outline of each, widened as `regionFor` widens it; the boxes here stand only where the level has no outline. The user's list was Semine, Nebakov's fortress, the
+ * nomads' camp, Zhelejov, Troskowitz, Tachov, Trosky's castle and Apollonia; Slatego, Schdiar and Vidlak are the villages the map names or the doors make besides, filed too (they are no
+ * town of the Cidadania). A castle (`fortress`) is ONE property, with every door inside its walls and every chest under it; the mills, the inn and the farms are each ONE property of their village
+ * (`compounds`), as Pschitoky's inn is. What stands apart and has no name on the map (a hut at Kopanina, a house east of Troskowitz, a shed by Semine) is left for the user to name.
+ */
+export const TROSKY_REGIONS: readonly Region[] = [
+    // The citadel on the east side of the village, with the house beside it; the mill 270 m to the west, down the stream.
+    {
+        id: "semine",
+        name: "Semine",
+        minX: 1384,
+        maxX: 1676,
+        minY: 1447,
+        maxY: 1635,
+        fortress: { minX: 1628, maxX: 1646, minY: 1554, maxY: 1568 },
+        locations: ["Semine"],
+        compounds: [{ id: "moinho-baixo-semine", name: "Moinho do Baixo Semine", box: { minX: 1059, maxX: 1191, minY: 1314, maxY: 1460 }, locations: ["Lower Semine Mill"] }],
+    },
+    // The castle's own rooms (the kitchen and the hall) are the fortress; the watchtower, the smithy and the house are buildings of the village. The mill east of it has a house of its own beside it.
+    {
+        id: "nebakov",
+        name: "Nebakov",
+        minX: 1752,
+        maxX: 2001,
+        minY: 1077,
+        maxY: 1311,
+        fortress: { minX: 1888, maxX: 1912, minY: 1198, maxY: 1216 },
+        locations: ["Nebakov Fortress"],
+        compounds: [{ id: "moinho-de-nebakov", name: "Moinho de Nebakov", box: { minX: 2040, maxX: 2150, minY: 1255, maxY: 1400 } }],
+    },
+    // Trosky's castle on its rock, the houses inside its walls and the village at its foot.
+    { id: "trosky", name: "Trosky", minX: 2308, maxX: 2584, minY: 2467, maxY: 2708, fortress: { minX: 2355, maxX: 2535, minY: 2552, maxY: 2645 }, locations: ["Trosky Castle"] },
+    { id: "acampamento-nomade", name: "Acampamento nômade", minX: 992, maxX: 1152, minY: 1840, maxY: 1989, locations: ["Nomads' Camp"] },
+    {
+        id: "zhelejov",
+        name: "Zhelejov",
+        minX: 1668,
+        maxX: 1852,
+        minY: 1893,
+        maxY: 2041,
+        locations: ["Zhelejov"],
+        compounds: [{ id: "estalagem-zhelejov", name: "Estalagem de Zhelejov", box: { minX: 1595, maxX: 1721, minY: 2111, maxY: 2245 }, locations: ["Zhelejov Wagoners' Inn"] }],
+    },
+    { id: "troskowitz", name: "Troskowitz", minX: 2185, maxX: 2498, minY: 1903, maxY: 2122, locations: ["Troskowitz"] },
+    { id: "tachov", name: "Tachov", minX: 1925, maxX: 2083, minY: 2435, maxY: 2623, locations: ["Tachov"] },
+    { id: "apolonia", name: "Apolônia", minX: 2644, maxX: 3009, minY: 2082, maxY: 2739, locations: ["Apollonia"] },
+    { id: "slatego", name: "Slatego", minX: 2462, maxX: 2657, minY: 1427, maxY: 1657, locations: ["Slatego"] },
+    // The valley and its two farms, each of the farms one property of it.
+    {
+        id: "schdiar",
+        name: "Schdiar",
+        minX: 2064,
+        maxX: 2335,
+        minY: 1329,
+        maxY: 1798,
+        locations: ["Schdiar Valley"],
+        compounds: [
+            { id: "fazenda-leste-schdiar", name: "Fazenda leste de Schdiar", box: { minX: 2381, maxX: 2556, minY: 1660, maxY: 1807 }, locations: ["Schdiar - East Farm"] },
+            { id: "fazenda-oeste-schdiar", name: "Fazenda oeste de Schdiar", box: { minX: 1933, maxX: 2111, minY: 1465, maxY: 1609 }, locations: ["Schdiar - West Farm"] },
+        ],
+    },
+    // The hamlet round Vidlak's pond (the map names only the pond): the huntsman's house, the fisher's, a workshop and a row of houses; a box of its own.
+    { id: "vidlak", name: "Vidlak", minX: 1195, maxX: 1465, minY: 2540, maxY: 2760 },
+];
+
+/** The regions of the level the server runs: Kuttenberg's, or Trosky's (`level.ts`). */
+export const REGIONS: readonly Region[] = onKuttenberg() ? KUTTENBERG_REGIONS : TROSKY_REGIONS;
 
 /** How far around the map's own outline of a place the census still looks. */
 const LOCATION_MARGIN_M = 25;
@@ -1143,6 +1225,69 @@ export function setLocked(id: string, locked: boolean): KeyActionResult {
     return { ok: true, message: `${property.name}: ${locked ? "trancada" : "destrancada"} (${reached} ${reached === 1 ? "peça" : "peças"}).` };
 }
 
+/**
+ * Doors the census left out of a house, joined to it at every start (2026-11-04, user: "na casa do caçador em Suchdol ficou faltando mapear duas portas"). The census files only the
+ * entrance of a building (and its storage doors) and counts the rest of the doors the level links to the building as "owned", never filing them: the hunter's house
+ * (`troskovice_10_house1`, area `0b269954d21a988f`) has the entrance and three more doors the level links to it, 9, 14 and 15 m south of the entrance (the last two side by side:
+ * the two leaves of a double door), and none of the three was in any property, so none could be locked with the house's key. By house id.
+ */
+export const MISSED_DOORS: Readonly<Record<string, readonly string[]>> = {
+    "suchdol-casa-03": ["4c8bec9ae70b75e0", "4d19407bf0d84fa8", "48942897dc0d5aae"],
+};
+
+export interface AttachReport {
+    readonly ok: boolean;
+    readonly message: string;
+    /** The doors that joined. */
+    readonly added: readonly string[];
+}
+
+/**
+ * Joins doors of the level to a house: they are its doors from now on, locked or not as the house is (a house locked on purpose locks them too). A door that is another property's, one
+ * the level does not have, or one the house has already is left out and said. Nothing joins to a chest.
+ */
+export function attachDoors(id: string, guids: readonly string[]): AttachReport {
+    const store = load();
+    const property = store[id];
+    if (property === undefined) {
+        return { ok: false, message: `Nenhuma propriedade '${id}'.`, added: [] };
+    }
+    if (property.kind === "chest") {
+        return { ok: false, message: `${property.name} é um baú: porta não entra nele.`, added: [] };
+    }
+    const added: string[] = [];
+    const left: string[] = [];
+    for (const guid of guids) {
+        const holder = findByDoor(guid);
+        if (property.doors.includes(guid)) {
+            continue;
+        }
+        if (holder !== null && holder.id !== property.id) {
+            left.push(`${guid} já é de ${holder.name}`);
+            continue;
+        }
+        let known = false;
+        try {
+            known = Door.find(guid) !== null;
+        } catch {
+            known = false;
+        }
+        if (!known) {
+            left.push(`${guid}: o nível não tem essa porta`);
+            continue;
+        }
+        added.push(guid);
+    }
+    if (added.length > 0) {
+        const joined: PropertyInfo = { ...property, doors: [...property.doors, ...added] };
+        store[id] = joined;
+        persist();
+        applyLocks(joined);
+    }
+    const said = added.length === 0 ? "nenhuma porta nova" : `${added.length} porta(s) nova(s)`;
+    return { ok: left.length === 0 || added.length > 0, message: `${property.name}: ${said}${left.length > 0 ? `; deixei de fora: ${left.join("; ")}` : ""}.`, added };
+}
+
 // ---------------------------------------------------------------------------------------------
 // One door at a time: the doors of a house are listed under it like its chests, each with its own lock.
 
@@ -1150,6 +1295,11 @@ export function setLocked(id: string, locked: boolean): KeyActionResult {
 export function doorName(property: PropertyInfo, index: number): string {
     const guid = property.doors[index];
     return guid !== undefined && guid === property.doorGuid ? "Entrada" : `Porta ${index + 1}`;
+}
+
+/** The property that holds a door of the level, or null: the door is nobody's. */
+export function propertyOfDoor(guid: string): PropertyInfo | null {
+    return findByDoor(guid);
 }
 
 /** Which door of the property this is, or -1. */
@@ -1559,20 +1709,32 @@ export function assignOwner(_giver: Player, propertyId: string, target: Player):
 
 /**
  * Everything of the catalog a deleted character held (2026-10-25, user: "ao apagar o personagem deve perder os cavalos, carroças e tudo, até apoiador"): the houses and chests it owned go
- * back to nobody, and the regions ceded to it go back to the Crown. What it kept in those chests goes too: their level GUIDs are
+ * back to nobody, and the regions ceded to it go back to the Crown. What it kept in its own chests goes too: their level GUIDs are
  * returned, for `chest-state.ts` to empty. The keys handed to others stay with whoever holds them, as when an owner is taken off.
+ *
+ * Not every chest is the deleted character's alone (2026-10-31, user: "jogadores de Suchdol ao trocar o lorde da região relataram que todos itens dos baús sumiram"): two lords deleted
+ * their characters in one night and 270 chests were emptied with them, among them the castle's and the houses of the villagers, who kept their things there. A chest keeps what it holds
+ * (`kept` counts them) when its house is in a region the character was the lord of, or when somebody else was given access to the house: those are shared, and what is in them is
+ * not all the character's. Only the chests of a house nobody else used are emptied.
  */
-export function releaseAllOf(steamId: string): { readonly properties: number; readonly regions: number; readonly chests: string[] } {
+export function releaseAllOf(steamId: string): { readonly properties: number; readonly regions: number; readonly chests: string[]; readonly kept: number } {
     if (steamId === "") {
-        return { properties: 0, regions: 0, chests: [] };
+        return { properties: 0, regions: 0, chests: [], kept: 0 };
     }
     const store = load();
+    const lorded = new Set(Object.entries(loadLords()).filter(([, lord]) => lord.steamId === steamId).map(([region]) => region));
     const owned = Object.values(store).filter((property) => property.parentId === "" && property.ownerSteamId === steamId);
     const chests: string[] = [];
+    let kept = 0;
     for (const property of owned) {
+        const shared = lorded.has(property.region) || (property.access ?? []).some((grant) => grant.steamId !== steamId);
         for (const chest of Object.values(store)) {
             if (chest.kind === "chest" && chest.stashGuid !== "" && (chest.id === property.id || chest.parentId === property.id)) {
-                chests.push(chest.stashGuid);
+                if (shared) {
+                    kept += 1;
+                } else {
+                    chests.push(chest.stashGuid);
+                }
             }
         }
         property.ownerSteamId = "";
@@ -1606,7 +1768,7 @@ export function releaseAllOf(steamId: string): { readonly properties: number; re
     if (regions > 0) {
         persistLords();
     }
-    return { properties: owned.length, regions, chests };
+    return { properties: owned.length, regions, chests, kept };
 }
 
 /** Takes the owner off a property. The keys already handed out stay with whoever holds them. */
@@ -1627,6 +1789,55 @@ export function clearOwner(propertyId: string): KeyActionResult {
     delete property.access;
     persist();
     return { ok: true, message: `${property.name} deixou de ser de ${was}. O acesso que foi dado acabou; as chaves já entregues continuam com quem as tem.` };
+}
+
+/** How many days without entering make an owner's house, in a region ceded to a lord, the lord's to take back (2026-11-02). */
+export const LORD_RECLAIM_DAYS = 7;
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Whole days since a player was last in the game (`seen`, from `lastSeenAt`); one with no character at all is long gone. */
+export function daysAway(seen: number | null, now = Date.now()): number {
+    return seen === null ? 999 : Math.max(0, Math.floor((now - seen) / DAY_MS));
+}
+
+/**
+ * A house of a region ceded to a lord, taken back from an owner who stopped coming (2026-11-02, the user: "Malak disse que não consegue remover casas de antigos jogadores da região de
+ * Suchdol"; taking an owner off was the administrator's alone, `clearOwner`, and a lord could only look at the houses of others in their lands). A house that stands on its own, not a
+ * vendor's, of somebody else who has not entered for `LORD_RECLAIM_DAYS`: it becomes the lord's, with its chests and what is in them, and the access its owner gave ends (as with a house
+ * given on). An owner who still comes is an administrator's to take off. `seenAt` says when a player was last here (`character-state.ts`, `lastSeenAt`).
+ */
+export function reclaimHouse(lord: Player, propertyId: string, seenAt: (steamId: string) => number | null, now = Date.now()): KeyActionResult {
+    const property = getProperty(propertyId);
+    if (!property) {
+        return { ok: false, message: "Propriedade não encontrada." };
+    }
+    if (property.parentId !== "") {
+        return { ok: false, message: "Um baú vai com a casa: retome a casa." };
+    }
+    if (lord.steamId === "" || !regionsLordedBy(lord.steamId).includes(property.region)) {
+        return { ok: false, message: `${property.name} não está numa região sua.` };
+    }
+    if (property.npc !== undefined) {
+        return { ok: false, message: `${property.name} é a casa de ${property.npc} (NPC).` };
+    }
+    const owner = ownerOf(property);
+    if (owner === null) {
+        return { ok: false, message: `${property.name} não tem dono.` };
+    }
+    if (owner.steamId === lord.steamId) {
+        return { ok: false, message: `${property.name} já é sua.` };
+    }
+    const away = daysAway(seenAt(owner.steamId), now);
+    if (away < LORD_RECLAIM_DAYS) {
+        return { ok: false, message: `${owner.name} entrou há ${away === 1 ? "1 dia" : `${away} dias`}: você só retoma ${property.name} depois de ${LORD_RECLAIM_DAYS} dias sem ${owner.name} entrar. Antes disso, só um administrador.` };
+    }
+    property.ownerSteamId = lord.steamId;
+    property.ownerName = nameOf(lord);
+    delete property.access;
+    persist();
+    const since = away >= 999 ? "não tem mais personagem" : `não entrava havia ${away} dias`;
+    console.log(`properties: ${nameOf(lord)}, senhor de ${property.region}, retomou ${property.name} de ${owner.name} (${since})`);
+    return { ok: true, message: `${property.name} voltou para as suas mãos: ${owner.name} ${since}. A casa e os baús, com o que houver neles, são seus agora; para dá-la a outro, use Ceder.` };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1993,7 +2204,7 @@ export interface CastleReport {
 }
 
 /** A chest name the census gave ("Baú 41 (Torre)"), as against one somebody chose. */
-const CENSUS_CHEST_NAME = /^Baú \d+(?: \([^)]*\))?$/;
+const CENSUS_CHEST_NAME = /^(?:Baú|Armário) \d+(?: \([^)]*\))?$/;
 
 /** How far outside the walls of a castle a gate still belongs to it: a drawbridge lies beyond the wall. */
 export const GATE_MARGIN_M = 60;
@@ -2249,7 +2460,7 @@ export function tidyLoose(): TidyReport {
     const eligible = (loose: PropertyInfo): boolean => loose.parentId === "" && loose.keys === 0 && loose.npc === undefined && (loose.kind === "chest" || loose.kind === "door") && (loose.kind !== "chest" || commonTo(loose.region, loose.ownerSteamId)) && (loose.kind !== "door" || loose.doorGuid !== "");
     /** A chest goes under a building. */
     const fileChest = (loose: PropertyInfo, home: PropertyInfo, how: string): void => {
-        const prefix = `${home.name}${CHEST_SEPARATOR}Baú`;
+        const prefix = `${home.name}${CHEST_SEPARATOR}${nounOfName(loose.name)}`;
         const name = `${prefix} ${highestNumber(home.region, prefix) + 1}`;
         store[loose.id] = { ...loose, parentId: home.id, name };
         moved.push(`${loose.name} -> ${name} (${how})`);
@@ -2440,7 +2651,7 @@ export function mapCompounds(regionId: string): CastleReport[] | null {
 }
 
 /** A chest name the census gave, with or without the house it was named after ("Casa 01 · Baú 6"), as against one somebody chose. */
-const CENSUS_CHEST_NAME_ANY = /^(?:.+ · )?Baú \d+(?: \([^)]*\))?$/;
+const CENSUS_CHEST_NAME_ANY = /^(?:.+ · )?(?:Baú|Armário) \d+(?: \([^)]*\))?$/;
 
 /**
  * One property for everything inside a box: its doors, and its chests under it. A castle's first filing and every compound also take in what was
@@ -2539,8 +2750,14 @@ function fileWhole(region: Region, box: Box, name: string, stem: string, joined:
 
     // The chests inside the place, west to east. A chest somebody has named keeps its name and still moves under it;
     // one that has an owner or keys handed out stays as it is (under the castle it would take the castle's owner).
-    const prefix = `${name}${CHEST_SEPARATOR}Baú`;
-    let number = highestNumber(region.name, prefix);
+    const numbers = new Map<string, number>();
+    /** The next name of a chest ("Castelo de Trosky · Baú 7") or of a piece of furniture ("... · Armário 2"), each counted on its own. */
+    const nextLabel = (noun: string): string => {
+        const stem = `${name}${CHEST_SEPARATOR}${noun}`;
+        const next = (numbers.get(stem) ?? highestNumber(region.name, stem)) + 1;
+        numbers.set(stem, next);
+        return `${stem} ${next}`;
+    };
     let chests = 0;
     const taken = new Set<string>();
     const movable = (filed: PropertyInfo): boolean => {
@@ -2561,15 +2778,14 @@ function fileWhole(region: Region, box: Box, name: string, stem: string, joined:
         return parent.id !== castle.id && parent.auto && parent.npc === undefined && mine(parent.ownerSteamId) && !withinBox(box, parent);
     };
     const take = (filed: PropertyInfo): void => {
-        number += 1;
-        const label = `${prefix} ${number}`;
+        const label = nextLabel(nounOfName(filed.name));
         const renamed = (extended ? CENSUS_CHEST_NAME_ANY : CENSUS_CHEST_NAME).test(filed.name) ? label : filed.name;
         store[filed.id] = extended ? { ...filed, region: region.name, parentId: castle.id, ownerSteamId: "", ownerName: "", name: renamed } : { ...filed, parentId: castle.id, name: renamed };
         taken.add(filed.id);
         chests += 1;
     };
     const inside = Stash.all()
-        .filter((stash) => stash.levelGuid !== "" && /chest/i.test(stash.name) && withinBox(box, stash.position))
+        .filter((stash) => stash.levelGuid !== "" && isFiledStash(stash.name) && withinBox(box, stash.position))
         .sort((a, b) => a.position.x - b.position.x || a.position.y - b.position.y);
     const byStash = lookup().byStash;
     for (const stash of inside) {
@@ -2580,8 +2796,7 @@ function fileWhole(region: Region, box: Box, name: string, stem: string, joined:
             }
             continue;
         }
-        number += 1;
-        const label = `${prefix} ${number}`;
+        const label = nextLabel(nounOfStash(stash.name));
         const id = slugify(`${stem} ${label}`, store);
         store[id] = {
             id,
@@ -2637,6 +2852,19 @@ const BUILDING_TYPES: ReadonlyArray<readonly [RegExp, string]> = [
     [/tower/i, "Torre"],
     [/fortress|defensive|castle/i, "Fortaleza"],
     [/ammo|depot|military/i, "Depósito"],
+    // The unique buildings and the private grounds of the Trosky level (2026-11-09): a hermit's home, a hidden camp, a nomad's tent, a bandit camp, a trespass ground and a court (the names of the level's own areas,
+    // which the tidying takes a place's name from when a chest stands in one with no door); the baths of Zhelejov's inn, a castle's kitchen, the huntsman's, the fisher's and the herbalist's houses.
+    [/hermit/i, "Casa do Eremita"],
+    [/hiddencamp|hideout/i, "Esconderijo"],
+    [/[_\/]tent/i, "Tenda"],
+    [/banditcamp/i, "Acampamento de Bandidos"],
+    [/tresspass|trespass/i, "Terreno"],
+    [/court/i, "Pátio"],
+    [/[\/_]spa\d*(?:[\/_]|$)|bath/i, "Banhos"],
+    [/kitchen/i, "Cozinha"],
+    [/huntsman|hunter/i, "Casa do Caçador"],
+    [/fisher/i, "Casa do Pescador"],
+    [/herbalist/i, "Casa do Herbanário"],
     [/house|home|hut|cottage/i, "Casa"],
 ];
 
@@ -2878,7 +3106,7 @@ export function mapRegion(regionId: string, options: { looseDoors?: boolean } = 
     // Chests: the containers the level places and names as chests. Barrels, sacks and baskets are not properties.
     let chestsSeen = 0;
     const chests = Stash.all()
-        .filter((stash) => stash.levelGuid !== "" && /chest/i.test(stash.name) && inside(stash.position))
+        .filter((stash) => stash.levelGuid !== "" && isFiledStash(stash.name) && inside(stash.position))
         .sort((a, b) => a.position.x - b.position.x || a.position.y - b.position.y);
     for (const stash of chests) {
         chestsSeen += 1;
@@ -2886,16 +3114,17 @@ export function mapRegion(regionId: string, options: { looseDoors?: boolean } = 
             alreadyKnown += 1;
             continue;
         }
-        const candidate: Candidate = { label: "Baú", kind: "chest", doors: [], stashGuid: stash.levelGuid, x: stash.position.x, y: stash.position.y, z: stash.position.z, raw: stash.name };
+        const noun = nounOfStash(stash.name);
+        const candidate: Candidate = { label: noun, kind: "chest", doors: [], stashGuid: stash.levelGuid, x: stash.position.x, y: stash.position.y, z: stash.position.z, raw: stash.name };
         const owner = owners.find((entry) => entry.area?.contains(stash.position));
         if (owner !== undefined) {
-            const prefix = `${owner.name}${CHEST_SEPARATOR}Baú`;
+            const prefix = `${owner.name}${CHEST_SEPARATOR}${noun}`;
             add(candidate, `${prefix} ${nextNumber(prefix)}`, owner.id);
             continue;
         }
         const around = buildingType(...Area.getAt(stash.position).map((area) => area.name));
         const hint = around !== "Edifício" && around !== "Casa" ? ` (${around})` : "";
-        add(candidate, `Baú ${pad(nextNumber("Baú"))}${hint}`);
+        add(candidate, `${noun} ${pad(nextNumber(noun))}${hint}`);
     }
     if (housesAdded + chestsAdded + looseDoorsAdded > 0) {
         persist();
@@ -2951,6 +3180,17 @@ export function installProperties(): void {
         }
     }
 
+    // The doors the census left out of a house (`MISSED_DOORS`) join it, once: a door the level has not reported yet is tried again by the next start.
+    for (const [houseId, guids] of Object.entries(MISSED_DOORS)) {
+        if (store[houseId] === undefined) {
+            continue;
+        }
+        const report = attachDoors(houseId, guids);
+        if (report.added.length > 0) {
+            console.log(`properties: ${report.message}`);
+        }
+    }
+
     // The locks put on on purpose stand in the world (see Locks). The level reports a door only once somebody has been near
     // it, so what is not there yet is tried again for a while, and the sweep below keeps at it.
     const waiting = new Set<string>();
@@ -2985,6 +3225,7 @@ export function installProperties(): void {
 
     // Each region in REGIONS is mapped on its own the first time the server starts with it. Later starts leave the
     // catalog alone: an administrator runs `/propriedade mapear` to add what is new.
+    // `REGIONS` is the level's own list (Kuttenberg's or Trosky's), so the census runs on whichever level the server has (2026-11-09).
     const unmapped = REGIONS.filter((region) => !Object.values(store).some((property) => property.auto && property.region === region.name));
     if (unmapped.length > 0) {
         setTimeout(() => {

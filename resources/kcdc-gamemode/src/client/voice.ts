@@ -1,20 +1,18 @@
 /**
- * Voice, the client's half (`src/server/voice-settings.ts`, 2026-10-23).
+ * Voice, the client's half (`src/server/voice-settings.ts`, 2026-10-23; remade 2026-11-09).
  *
- * **The microphone is open** (user: "ao segurar o H abre o voip ... o mod permite tirar do push para open o tempo inteiro"): it sends
- * whenever the player speaks (`voiceActivity`), with the noise of the room filtered out and an activation level of the player's choosing
- * (Opções, Microfone: alta, média, baixa). Whoever prefers it may go back to holding the voice key, H, which the game keeps (this module no
- * longer asks for another key: it asked for V, which was never the one the players used). The choice is the player's, kept by the server with
- * the other options, asked for once the player is in the world and said again when it changes. Until the server has answered, the
+ * **The microphone is held to talk, on H** (user, 2026-11-09: "vamos deixar pré-ativo o de segurar para falar"; the V he asked for that morning was given back that evening: "devolva o voip
+ * para o H e ativar o carinho no cavalo, pelo visto no próprio menu do mod tem como mudar"): the player holds the mod's own key (H, which the mod's own menu has, so this module never sets it) to
+ * speak and the microphone sends only while it is held. The V of the game, the carinho with a horse or a dog, is the game's again. Whoever prefers it may go to the open microphone
+ * (Opções, Microfone): it sends whenever the player speaks (`voiceActivity`), with the noise of the room filtered out and an activation level of the player's choosing (alta, média, baixa).
+ * The choice is the player's, kept by the server with the other options, asked for once the player is in the world and said again when it changes. Until the server has answered, the
  * microphone sends only while the key is held, so that nothing is sent by a profile that starts "very sensitive".
  *
- * **The indicator is ours** (user: "ao invés de ficar o ícone na esquerda vamos criar um retângulo no nosso padrão de cor, ícone do voip com a
- * cor do alcance, sussurro, fala e grito, e aquele efeito de ruído mostrando se falando alto ou baixo, acima da barra de vida, na parte
- * inferior no centro da tela; e ao apertar Y, que muda o alcance, o mesmo padrão de layout"). The mod's own (a microphone low on the left
- * while the player sends, and a talking icon on the nametag of whoever they hear) is hidden once our page (`ui/voice.html`) is up; should
- * the page not come up, the mod's stays. The page is a small view at the bottom centre, hidden while nobody speaks (a view that is shown
- * paints every frame): it comes up while the player speaks, with the colour of the range they are on and the bars of the microphone's
- * level, and for a moment after the range was changed, which is read from `Voice.getTier()` (the key, Y, is the mod's own).
+ * **The indicator is ours** (user, 2026-10-23, remade 2026-11-09: "um ícone de voip com os sinais de som na esquerda e direita, minimalista, na mesma posição no centro da tela e com cor
+ * pelo alcance do voip"). The mod's own (a microphone low on the left while the player sends, and a talking icon on the nametag of whoever they hear) is hidden once our page
+ * (`ui/voice.html`) is up; should the page not come up, the mod's stays. The page is a small view at the bottom centre, hidden while nobody speaks (a view that is shown paints every
+ * frame): a microphone with three waves on each side, in the colour of the range the player is on, which comes up while the player speaks, the waves lit by the microphone's level, and
+ * for a moment after the range was changed, which is read from `Voice.getTier()` (the key, Y, is the mod's own).
  */
 
 import { chatShown } from "./chat-state.js";
@@ -64,11 +62,13 @@ export function levelScale(raw: number): number {
     return Math.max(0, Math.min(1, (decibels - LEVEL_FLOOR_DB) / (LEVEL_CEIL_DB - LEVEL_FLOOR_DB)));
 }
 
-/** Where the indicator goes for a screen of this size: the middle, a hand above the bottom (the health bar stands there). */
+/**
+ * Where the indicator goes for a screen of this size: the middle, a hand above the bottom (the health bar stands there), where the plate of before stood (its foot is where it was). A small
+ * icon (2026-11-09: "minimalista"; smaller that evening: "diminua o icone do voip, ta muito grande"): 3.4% of the height between 30 and 44 px, a little wider than tall for the waves at its sides.
+ */
 export function hudGeometry(screen: { width: number; height: number }): { x: number; y: number; width: number; height: number } {
-    // A small plate (2026-10-24: "vamos deixar menor, tá muito grande"): 15% of the width between 230 and 310 px, 4% of the height between 38 and 50.
-    const width = Math.round(Math.max(230, Math.min(310, screen.width * 0.15)));
-    const height = Math.round(Math.max(38, Math.min(50, screen.height * 0.04)));
+    const height = Math.round(Math.max(30, Math.min(44, screen.height * 0.034)));
+    const width = Math.round(height * 1.4);
     return { x: Math.round((screen.width - width) / 2), y: Math.round(screen.height - height - screen.height * 0.118), width, height };
 }
 
@@ -89,7 +89,7 @@ function reasonOf(thrown: unknown): string {
 }
 
 export function installVoice(): void {
-    let mic: Mic = "aberto";
+    let mic: Mic = "apertar";
     let sensitivity: Sensitivity = "media";
     let ranges: number[] = [...DEFAULT_RANGES];
     /** What was last put on the microphone, so that it is not put again at every answer. */
@@ -287,7 +287,7 @@ export function installVoice(): void {
             askedAt = now;
             Events.emitServer(ASK);
         }
-        // The server said nothing (an old one): the open microphone, as the defaults have it.
+        // The server said nothing (an old one): the defaults stand, the microphone held on the mod's key.
         if (!settled && askedAt > 0 && now - askedAt > SETTLE_WAIT_MS) {
             settled = true;
             apply();

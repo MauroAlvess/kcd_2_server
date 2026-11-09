@@ -15,7 +15,9 @@ export const emboscadaCommand: Command = {
         const [sub, who] = args;
         if (sub === undefined) {
             const status = ambushes.status();
-            const why = Player.all().filter((one) => one.ready).map((one) => `${one.nickname}: ${ambushes.lastReason.get(one.id) ?? "ainda não olhado"}`);
+            // The first twenty only (2026-11-02: a server of hundreds wrote one line of all of them).
+            const ready = Player.all().filter((one) => one.ready);
+            const why = ready.slice(0, 20).map((one) => `${one.nickname}: ${ambushes.lastReason.get(one.id) ?? "ainda não olhado"}`).concat(ready.length > 20 ? [`e mais ${ready.length - 20}`] : []);
             const seen = status.surfaces.slice(0, 6).map(([surface, times]) => `${surface} ${times}`).join(", ");
             reply.lines([
                 `Salteadores ${status.enabled ? "ligados" : "desligados"}: ${status.active} gangue(s) nas estradas agora, ${status.started} desde o início.`,

@@ -32,17 +32,18 @@
 import { isAdmin } from "./auth.js";
 import { consortsOf } from "./consort.js";
 import type { Consort } from "./consort.js";
-import { getSurname } from "./family.js";
+import { crestOf, getSurname } from "./family.js";
 import { BARBERS } from "./barbers.js";
 import { nameOfMember } from "./guild-members.js";
 import { cedeRegionTo, regionCeded, regionLordOf } from "./properties.js";
 import type { RegionLord } from "./properties.js";
 import { CHURCHES, setHomeResolver, wakePoint } from "./respawn.js";
-import { addPayload, notice, sendSocial } from "./status.js";
+import { addLazyPayload, notice, sendSocial } from "./status.js";
+import { onKuttenberg } from "./level.js";
 import { ensureDir, read, write } from "./store.js";
 import { chargeForChange } from "./change-fee.js";
 import { CHANGE_PRICE_COINS } from "./free-changes.js";
-import { VENDORS } from "./vendors.js";
+import { VENDORS, vendorSettings } from "./vendors.js";
 
 const RESOURCE = "kcdc-gamemode";
 const DIR = "playerdata";
@@ -53,7 +54,7 @@ export interface Town {
     /** The property catalog's region the town's lord is lord of. */
     readonly region: string;
     readonly name: string;
-    /** The crest, in `ui/img`; `@name` is a picture the server sends instead (`ui-images.ts`, `data/ui-images.json`). */
+    /** The crest, in `ui/img`; `@name` is a picture the server sends instead (`ui-images.ts`, `data/ui-images.json`); empty for none (the Trosky towns). */
     readonly crest: string;
     /** The church a citizen wakes in, when the town has one. */
     readonly church: string | null;
@@ -65,7 +66,7 @@ export interface Town {
     readonly follows?: true;
 }
 
-export const TOWNS: readonly Town[] = [
+export const KUTTENBERG_TOWNS: readonly Town[] = [
     // Each seat is followed by the lands of its house (user, 2026-10-26), so a list of them reads in groups. A land is drawn with its seat's crest.
     { id: "suchdol", region: "Suchdol", name: "Suchdol", crest: "town-suchdol.webp", church: "suchdol", square: null, seat: null },
     { id: "wysoka", region: "Wysoka", name: "Wysoka", crest: "town-suchdol.webp", church: "wysoka", square: null, seat: "suchdol" },
@@ -93,6 +94,25 @@ export const TOWNS: readonly Town[] = [
     { id: "minas", region: "Minas", name: "Minas", crest: "@town-pschitoky", church: "grunta", square: null, seat: "pschitoky", follows: true },
 ];
 
+/**
+ * The towns of the Trosky level (2026-11-09, user: "vamos apagar a cidadanias terra a propriedades; o mapa de Trosky conta com Semine, a fortaleza de Nebakov, o acampamento nômade, Zhelejov, Troskowitz,
+ * Tachov, o castelo de Trosky, Apolônia"): eight places, each a town of its own (no lands: nothing follows a seat), with no crest of its own (the panel draws the crest of the family of the town's
+ * lord, if the family put one). A citizen who dies wakes at the square: the door nearest the middle of the place (the chest, for the camp and for Apolônia, which have no door), snapped to the walkable floor.
+ */
+export const TROSKY_TOWNS: readonly Town[] = [
+    { id: "semine", region: "Semine", name: "Semine", crest: "", church: null, square: { x: 1497, y: 1581, z: 72 }, seat: null },
+    { id: "nebakov", region: "Nebakov", name: "Fortaleza de Nebakov", crest: "", church: null, square: { x: 1895, y: 1204, z: 52 }, seat: null },
+    { id: "acampamento-nomade", region: "Acampamento nômade", name: "Acampamento nômade", crest: "", church: null, square: { x: 1076, y: 1920, z: 29 }, seat: null },
+    { id: "zhelejov", region: "Zhelejov", name: "Zhelejov", crest: "", church: null, square: { x: 1746, y: 1974, z: 40 }, seat: null },
+    { id: "troskowitz", region: "Troskowitz", name: "Troskowitz", crest: "", church: null, square: { x: 2335, y: 2028, z: 107 }, seat: null },
+    { id: "tachov", region: "Tachov", name: "Tachov", crest: "", church: null, square: { x: 2000, y: 2531, z: 120 }, seat: null },
+    { id: "trosky", region: "Trosky", name: "Castelo de Trosky", crest: "", church: null, square: { x: 2444, y: 2620, z: 219 }, seat: null },
+    { id: "apolonia", region: "Apolônia", name: "Apolônia", crest: "", church: null, square: { x: 2790, y: 2429, z: 130 }, seat: null },
+];
+
+/** The towns of the level the server runs (`level.ts`). */
+export const TOWNS: readonly Town[] = onKuttenberg() ? KUTTENBERG_TOWNS : TROSKY_TOWNS;
+
 export const PAGE_SIZE = 8;
 
 interface Citizen {
@@ -116,6 +136,20 @@ export function townById(id: unknown): Town | null {
 export function townOf(steamId: string): Town | null {
     const record = steamId === "" ? undefined : citizens.get(steamId);
     return record === undefined ? null : townById(record.town);
+}
+
+/**
+ * Whether the player is a citizen of one of these towns, a land counting for its seat (2026-10-31, user: "só um cidadão de Suchdol pode fabricar armaduras de Suchdol"): the
+ * pieces of a town's own sets are made only by them (`craft.ts`).
+ */
+export function isCitizenOfAny(steamId: string, ids: readonly string[]): boolean {
+    const town = townOf(steamId);
+    return town !== null && (ids.includes(town.id) || (town.seat !== null && ids.includes(town.seat)));
+}
+
+/** A town's name by its id, or the id itself for one the catalog does not have. */
+export function townNameOf(id: string): string {
+    return townById(id)?.name ?? id;
 }
 
 /** The Steam ids of a town's citizens, the oldest first. */
@@ -313,15 +347,21 @@ export function homeOf(steamId: string): { town: Town; point: { x: number; y: nu
     if (town === null) {
         return null;
     }
+    const point = homePointOf(town);
+    return point === null ? null : { town, point };
+}
+
+/** The place a town's people wake at: its church, or its square. Null when it has neither. */
+export function homePointOf(town: Town): { x: number; y: number; z: number } | null {
     const church = town.church === null ? undefined : CHURCHES.find((candidate) => candidate.id === town.church);
     if (church !== undefined) {
-        return { town, point: wakePoint(church) };
+        return wakePoint(church);
     }
     if (town.square !== null) {
         // A land with no church wakes its citizens at the village itself when the census has found its vendors, at the stop's spot otherwise.
         const spot = (town.seat !== null ? villageSpot(town) : null) ?? town.square;
         const floor = Navigation.ready ? Navigation.closestPoint(spot, { searchRadius: 6, searchHeight: 4, doors: "any" }) : null;
-        return { town, point: floor !== null ? { x: floor.x, y: floor.y, z: floor.z } : { ...spot, z: spot.z + 0.3 } };
+        return floor !== null ? { x: floor.x, y: floor.y, z: floor.z } : { ...spot, z: spot.z + 0.3 };
     }
     return null;
 }
@@ -341,12 +381,14 @@ export interface TownView {
     readonly id: string;
     readonly name: string;
     readonly crest: string;
+    /** The link of the crest of the lord's family, for a town with none of its own; empty for none. */
+    readonly crestUrl: string;
     /** The lord of the lands: the name the character was given, or null while nobody holds them. */
     readonly lord: string | null;
     /** The lord's family name, or null. */
     readonly family: string | null;
     /** The lord's spouse, as the realm calls them beside him (his wife is a Lady), or null. */
-    readonly consort: Consort | null;
+    readonly consort: Omit<Consort, "steamId"> | null;
     /** The seat this town is the land of (its `id`), or null for a seat. */
     readonly seat: string | null;
     /** The seat's name, for a land. */
@@ -360,18 +402,25 @@ export interface TownView {
     readonly npcs: number;
 }
 
-/** The NPCs of a town: the vendors whose village it is (the pedlars' "village" is their camp), and its barber. */
+/** Counters of the people who live in a town besides the ones counted here: the guild vendors register theirs (`guild-vendors.ts`, 2026-10-31). */
+export const npcCounters: Array<(town: Town) => number> = [];
+
+/** The NPCs of a town: the vendors whose village it is (the pedlars' "village" is their camp; none while the vendors are switched off, 2026-10-29), its barber, and those other modules count. */
 export function npcsOf(town: Town): number {
-    return VENDORS.filter((vendor) => vendor.village === town.region && vendor.trade !== "mascate").length + BARBERS.filter((barber) => barber.id === `barbeiro-${town.id}`).length;
+    return (vendorSettings.enabled ? VENDORS : []).filter((vendor) => vendor.village === town.region && vendor.trade !== "mascate").length + BARBERS.filter((barber) => barber.id === `barbeiro-${town.id}`).length + npcCounters.reduce((sum, count) => sum + count(town), 0);
 }
 
 export function townView(town: Town): TownView {
     const lord = lordOfTown(town);
-    const consort = lord === null ? null : (consortsOf(lord.steamId)[0] ?? null);
+    // What a page is told of the spouse: never their Steam id (`Consort.steamId` is for the tree to know who holds a title).
+    const spouse = lord === null ? null : (consortsOf(lord.steamId)[0] ?? null);
+    const consort = spouse === null ? null : { label: spouse.label, name: spouse.name, courtesy: spouse.courtesy, text: spouse.text };
     return {
         id: town.id,
         name: town.name,
         crest: town.crest,
+        // A town with no crest of its own draws the crest of its lord's family, when the family has put one (2026-11-09).
+        crestUrl: town.crest === "" && lord !== null ? crestOf(lord.steamId) : "",
         lord: lord === null ? null : (lord.name !== "" ? lord.name : nameOfMember(lord.steamId)),
         family: lord === null ? null : getSurname(lord.steamId),
         consort,
@@ -512,11 +561,13 @@ export function installCitizenship(): void {
 
     // Who dies wakes in their town.
     setHomeResolver((steamId) => {
+        // `TOWNS` is the level's own list: its squares and churches are the level's.
         const home = homeOf(steamId);
         return home === null ? null : { place: home.town.name, point: home.point, text: `${home.town.name}, a sua cidade` };
     });
 
-    addPayload((player) => {
+    // Only for the sections that read the towns (the character, the citizenship, the hierarchy, the clerk): the other sections do not carry them (`status.ts`, `SECTION_NEEDS`).
+    addLazyPayload("citizenship", (player) => {
         const lorded = TOWNS.filter((town) => mayDepose(player, town) && lordOfTown(town) !== null).map((town) => town.id);
         return { citizenship: { towns: TOWNS.map(townView), mine: townOf(player.steamId)?.id ?? null, lordOf: isAdmin(player) ? TOWNS.map((town) => town.id) : lorded } };
     });

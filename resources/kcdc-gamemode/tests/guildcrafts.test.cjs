@@ -93,7 +93,7 @@ test("an administrator with a guild keeps to its trade like a player, until they
     assert.equal(api.craftReason(body(1, "smith"), "smithing"), "da guilda");
 });
 
-test("the refusal says whose place it is and where to choose the guild", () => {
+test("the refusal says whose place it is and where to learn the trade", () => {
     const { api } = load();
     assert.match(api.refusal("smithing"), /Só os ferreiros \(guilda Fabri Ferrarii\) usam a forja\./);
     assert.match(api.refusal("alchemy"), /alquimistas.*mesas de alquimia/);
@@ -101,7 +101,7 @@ test("the refusal says whose place it is and where to choose the guild", () => {
     assert.match(api.refusal("defumador"), /caçadores.*defumador/);
     assert.match(api.refusal("horta"), /agricultores \(guilda Agricolae\) usam as hortas/);
     assert.match(api.refusal("domar"), /domadores \(guilda Domitores\).*doma dos cavalos selvagens/, "the taming is the Domitores' since 2026-10-25, not the Agricultores'");
-    assert.match(api.refusal("smithing"), /F2/);
+    assert.match(api.refusal("smithing"), /Aprenda o ofício com o comerciante da guilda da sua cidade\./, "told where the trade is learnt: the guild's vendor of the town (2026-10-31)");
 });
 
 test("a smithery or an alchemy table is refused to whoever is not of the trade, with a word, said once every ten seconds", () => {

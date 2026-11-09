@@ -102,6 +102,8 @@
     .dd-opt .dd-ico { flex: none; overflow: visible; align-self: center; }
     .dd-opt:hover .dd-ico { color: var(--ink); }
     .dd-opt.on .dd-ico { color: var(--btn); }
+    .dd-head { padding: .55rem .75rem .2rem; font: 600 .66rem/1.2 var(--display); letter-spacing: .26em; text-transform: uppercase; color: var(--ink-2); border-top: 1px solid var(--rule-soft); }
+    .dd-head:first-of-type { border-top: 0; }
     .dd-opt { display: flex; align-items: baseline; gap: .6rem; width: 100%; padding: .5rem .7rem .5rem .75rem; font: .97rem/1.3 var(--body); text-align: left; border-left: 3px solid transparent; transition: background .12s; }
     .dd-opt span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dd-opt small { flex: none; font: italic .85rem var(--body); color: var(--ink-2); }
@@ -139,6 +141,7 @@
     .ic.ok { color: var(--good); }
     .ic.bad { color: var(--btn-hi); }
     .facts { margin-top: .55rem; font: italic .92rem/1.3 var(--body); color: var(--ink-2); }
+    .effect { margin: .3rem 0 .8rem; font: .98rem/1.38 var(--body); color: var(--ink); }
     .facts .lock { color: var(--btn-hi); font-style: normal; font-weight: 600; }
     .work { display: flex; align-items: center; gap: .7rem; margin-top: .7rem; }
     /* How many at once (2026-10-27): a small stepper before the button, from one up to what the bag allows (ten at most). */
@@ -168,6 +171,28 @@
     .s48 { width: 2.5rem; height: 2.5rem; }
     .s64 { width: 3.6rem; height: 3.6rem; }
     .s32 { width: 1.9rem; height: 1.9rem; }
+
+    /* The colour of a garment (2026-10-31): a row in the detail with the dye picked, and a little square, in place of the list while it is open, with every dye by its icon. */
+    .dye { display: flex; align-items: center; gap: .7rem; margin-top: .55rem; }
+    .dye .k { margin: 0; }
+    .dyebtn { display: flex; align-items: center; gap: .6rem; height: 2.4rem; padding: 0 .85rem 0 .25rem; font: .97rem var(--body); background: rgba(255, 247, 226, .3); border: 1px solid var(--rule); }
+    .dyebtn:hover { border-color: rgba(32, 27, 23, .55); background: rgba(255, 247, 226, .45); }
+    .dyebtn .dd-arrow { margin-top: -.25rem; }
+    .dyebtn small { font: italic .8rem var(--body); color: var(--btn-hi); }
+    .panel.picking .tools, .panel.picking .list, .panel.picking .pager, .panel.picking .detail { display: none; }
+    .vpop { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: .8rem; }
+    .vpop[hidden] { display: none; }
+    .vhead { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding-bottom: .55rem; border-bottom: 1px solid var(--rule); }
+    .vhead b { display: block; font: 700 1.15rem/1.15 var(--display); letter-spacing: .05em; }
+    .vhead span.sub { display: block; font: italic .92rem/1.2 var(--body); color: var(--ink-2); }
+    .vgrid { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(5.6rem, 1fr)); gap: .55rem .45rem; align-content: start; padding: .7rem .3rem .3rem 0; overscroll-behavior: contain; }
+    .vtile { display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .5rem .25rem .45rem; border: 1px solid var(--rule-soft); font-family: var(--body); }
+    .vtile:hover { background: rgba(213, 161, 86, .16); border-color: var(--rule); }
+    .vtile.on { border-color: rgba(124, 3, 5, .6); background: rgba(124, 3, 5, .1); }
+    .vtile .vl { max-width: 100%; font: .82rem/1.15 var(--body); text-align: center; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .vtile small { font: 600 .58rem/1 var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); }
+    .vtile.rich small { color: var(--btn-hi); }
+    .vtile.no .vl { opacity: .55; }
 
     /* The trade between two players (2026-10-18): both offers on the page, each item with the game's icon. */
     .panel.trading .tools, .panel.trading .list, .panel.trading .pager, .panel.trading .detail { display: none; }
@@ -219,6 +244,7 @@
         <div class="pager"><button id="prev">&lsaquo;</button><span id="pageno">1 / 1</span><button id="next">&rsaquo;</button></div>
 
         <section class="detail" id="detail"></section>
+        <section class="vpop" id="vpop" hidden></section>
         <section class="trade" id="trade" hidden></section>
     </aside>
 </div>
@@ -269,8 +295,12 @@ const MAX_BATCH = 10;
 const maxQty = (r) => {
     let most = MAX_BATCH;
     for (const [, need, have, tool] of r.ing) {
-        if (!tool && need > 0) most = Math.min(most, Math.floor(have / need));
+        if (!tool && need > 0 && r.qmax === undefined) most = Math.min(most, Math.floor(have / need));
     }
+    /* Work paid with the body's own water (2026-10-30): the server says how many pieces the body can pay now. */
+    if (r.th) most = Math.min(most, r.th[1]);
+    /* The extraction (2026-10-31): the units of the stack that may be taken apart at once, up to ten. */
+    if (r.qmax !== undefined) most = Math.min(most, r.qmax);
     return most;
 };
 /* The number shown and asked for: one on a row that is not made on the page or cannot be made now. */
@@ -342,17 +372,37 @@ window.addEventListener("ui:scale", (event) => {
 const nameOf = (id) => (view && view.items[id] ? view.items[id][0] : id);
 const iconOf = (id) => (view && view.items[id] ? view.items[id][1] : "");
 
-/* A slot for an item: the client draws the game's icon in it (see reportSlots). */
-const slot = (id, size) => {
+/* A slot for an icon of the game's: the client draws it in the square (see reportSlots). */
+const slotFor = (icon, size) => {
     const el = make("span", "slot " + size);
-    el.dataset.icon = iconOf(id);
+    el.dataset.icon = icon;
     el.innerHTML = SIGNS[SIGN_OF[view.station]] || "";
     return el;
 };
+/* A slot for an item: its own icon. */
+const slot = (id, size) => slotFor(iconOf(id), size);
+
+/* The dyes of a garment, and the colours of a piece of the forge since 2026-11-03 (2026-10-31): `r.vs` is [colour, icon, 0 anybody's / 1 a noble's / 2 a noble's this worker may not make] for each; the one picked is kept for the recipe. */
+let dyeOf = {};
+const dyeAt = (r) => (r.vs ? Math.min(dyeOf[r.id] | 0, r.vs.length - 1) : 0);
+const dyeOut = (r) => (r.vs ? r.vs[dyeAt(r)] : null);
+const dyeBarred = (r) => !!(r.vs && r.vs[dyeAt(r)][2] === 2);
+const capital = (word) => word.charAt(0).toUpperCase() + word.slice(1);
+/* The icon of a recipe: the dye picked, or the item's own. */
+const iconSlot = (r, size) => (r.vs ? slotFor(r.vs[dyeAt(r)][1], size) : slot(r.out, size));
 
 const filtered = () => {
     const q = query.trim().toLowerCase();
-    return view.recipes.filter((r) => (cat === "" || r.cat === cat) && (q === "" || nameOf(r.out).toLowerCase().includes(q)));
+    const rows = view.recipes.filter((r) => (cat === "" || r.cat === cat) && (q === "" || nameOf(r.out).toLowerCase().includes(q) || (r.vs && r.vs.some((v) => v[0].includes(q)))));
+    /* All the categories at once: in the order of the dropdown (the groups), not the alphabet; inside a category, as the server sent them (by level). */
+    if (cat === "" && CAT_GROUPS[view.station]) {
+        const counts = {};
+        for (const r of view.recipes) counts[r.cat] = 1;
+        const rank = {};
+        groupedCats(counts).forEach(([, c], i) => (rank[c] = i));
+        return rows.map((r, i) => [r, i]).sort((a, b) => rank[a[0].cat] - rank[b[0].cat] || a[1] - b[1]).map((pair) => pair[0]);
+    }
+    return rows;
 };
 
 /* How many rows fit in the list as it is drawn now. */
@@ -439,17 +489,27 @@ const CAT_KEY = {
     "Medicina": "cross", "Poções": "flask", "Venenos": "skull", "Óleos e pomadas": "drop",
     "Legumes": "carrot", "Especiarias": "sack",
     // The 2026-10-27 categories: the garden's flax and grain, what is made of the harvest, the seeds; the forge's smelting and sword parts.
-    "Fibras": "spool", "Grãos": "sack", "Beneficiar": "hammer", "Sementes": "leaf", "Fundição": "ingot", "Peças de espada": "sword",
+    "Fibras": "spool", "Fios": "spool", "Grãos": "sack", "Beneficiar": "hammer", "Sementes": "leaf", "Fundição": "ingot", "Peças de espada": "sword",
     // The alchemists' preparations of the world's rarities (the leached charcoal, the pearl and the root).
     "Preparos": "flask", "Raridades": "flask",
     // The tailor's Cuman clothes (2026-10-27).
     "Roupas cumanas": "hat",
+    // The 2026-10-31 organisation: the forge's weapons by class and its armour by kind, the needle's clothes by what they are, the crossbows and bolts, and the kitchen's drinks.
+    "Espadas": "sword", "Espadas de caça": "sword", "Sabres": "sword", "Maças": "mace", "Martelos de guerra": "hammer", "Lanças e armas de haste": "spear",
+    "Capacetes de chaleira": "helmet", "Bacinetes e elmos": "helmet", "Capacetes de calota": "helmet", "Cotas de malha": "mail", "Couraças e placas": "breastplate",
+    "Perneiras e joelheiras": "legs", "Metal e ferramentas": "hammer",
+    "Túnicas e camisas": "tunic", "Casacos e cafetãs": "tunic", "Vestidos": "tunic", "Calças e meias": "legs", "Chapéus e gorros": "hat", "Capuzes e chaperons": "hat",
+    "Toucas, véus e adornos": "hat", "Brigandinas": "jerkin", "Gibões e jaquetões": "jerkin", "Almofres e coifas": "helmet", "Mangas de brigandina": "gauntlet",
+    "Calças acolchoadas": "legs", "Perneiras de brigandina": "legs", "Bestas": "bow", "Virotes": "arrow",
+    "Cervejas e hidromel": "cup", "Vinhos e destilados": "cup",
 };
 
 /* The icon of a category: its own drawing, the tag for one that has none; the repair kits of the forge are a wrench and the tailor's a spool of thread, and a house's coats
    of arms ("Brasão: Leipa", one category for each house) are a tunic with a shield. */
 const catIcon = (value) => {
-    const key = value === "Kits de reparo" && view.station === "costura" ? "spool" : CAT_KEY[value] || (value.indexOf("Brasão: ") === 0 ? "crest" : "tag");
+    /* A town's own pieces (2026-10-31) stand under "<town> · <kind>": the drawing is the kind's. */
+    const tail = value.indexOf(" \u00b7 ") > 0 ? value.slice(value.indexOf(" \u00b7 ") + 3) : value;
+    const key = value === "Kits de reparo" && view.station === "costura" ? "spool" : CAT_KEY[value] || CAT_KEY[tail] || (value.indexOf("Brasão: ") === 0 ? "crest" : "tag");
     const holder = make("span", "dd-ico");
     holder.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + CAT_ICONS[key] + "</svg>";
     return holder;
@@ -457,12 +517,60 @@ const catIcon = (value) => {
 
 /* The categories, as one list: "Todas" and each of the trade's, with how many recipes each has. */
 let catList = null;
+/* The groups of the categories (2026-10-31, "acredito que estejam desorganizados"): the forge's and the needle's lists were one long row of thirty or forty; now each sits under a heading,
+   in the order of this table. A category the table does not know goes last, under "Outros", alphabetically. */
+const CAT_GROUPS = {
+    forja: [
+        ["Armas", ["Adagas", "Espadas", "Espadas de caça", "Sabres", "Montantes", "Machados", "Maças", "Martelos de guerra", "Lanças e armas de haste", "Arcos", "Flechas", "Escudos", "Armas de madeira"]],
+        ["Armaduras", ["Capacetes de chaleira", "Bacinetes e elmos", "Capacetes de calota", "Cotas de malha", "Couraças e placas", "Braços e manoplas", "Perneiras e joelheiras"]],
+        ["Montaria", ["Selas", "Rédeas e chanfros", "Arreios e caparazões", "Ferraduras"]],
+        ["Metal e ferramentas", ["Fundição", "Carvão", "Prata", "Peças de espada", "Ferramentas", "Kits de reparo"]],
+    ],
+    costura: [
+        ["Roupas", ["Túnicas e camisas", "Casacos e cafetãs", "Vestidos", "Calças e meias", "Calçados", "Luvas", "Chapéus e gorros", "Capuzes e chaperons", "Toucas, véus e adornos", "Roupas cumanas"]],
+        ["Armaduras de pano e couro", ["Gibões e jaquetões", "Brigandinas", "Almofres e coifas", "Mangas de brigandina", "Calças acolchoadas", "Perneiras de brigandina"]],
+        ["Armas de tiro", ["Bestas", "Virotes"]],
+        ["Acessórios e joias", ["Cintos", "Bolsas", "Anéis", "Colares e broches"]],
+        ["Fios e kits", ["Fios", "Kits de reparo"]],
+        ["Casacos com brasão", ["Brasão: *"]],
+    ],
+    fogo: [
+        ["Comida", ["Assados e cozidos", "Pratos", "Pães e massas", "Laticínios", "Sopas"]],
+        ["Bebidas", ["Cervejas e hidromel", "Vinhos e destilados", "Bebidas"]],
+        ["Fios", ["Fios"]],
+    ],
+};
+/* [group heading, category] for each category of the trade, in order. */
+const groupedCats = (counts) => {
+    const groups = CAT_GROUPS[view.station];
+    if (!groups) {
+        return Object.keys(counts).sort().map((c) => ["", c]);
+    }
+    const left = new Set(Object.keys(counts));
+    const out = [];
+    const take = (heading, name) => {
+        const names = name === "Brasão: *" ? [...left].filter((c) => c.indexOf("Brasão: ") === 0).sort() : left.has(name) ? [name] : [];
+        for (const c of names) {
+            left.delete(c);
+            out.push([heading, c]);
+        }
+    };
+    for (const [heading, names] of groups) {
+        for (const name of names) {
+            take(heading, name);
+        }
+    }
+    for (const c of [...left].sort()) {
+        out.push(["Outros", c]);
+    }
+    return out;
+};
 const catOptions = () => {
     const counts = {};
     for (const r of view.recipes) {
         counts[r.cat] = (counts[r.cat] || 0) + 1;
     }
-    return [["", "Todas as categorias", view.recipes.length], ...Object.keys(counts).map((c) => [c, c, counts[c]])];
+    return [["", "Todas as categorias", view.recipes.length], ...groupedCats(counts).map(([heading, c]) => [c, c, counts[c], heading])];
 };
 /* The game's browser does not always move a list that lies over the page with the wheel (2026-10-19: "o scroll no ng select das
    listas"): the list moves itself, a line at a time, and the page behind it stays where it is. */
@@ -489,7 +597,12 @@ const openCats = () => {
     const host = $("cats");
     catList = make("div", "dd-list");
     wheelScroll(catList);
-    for (const [value, label, n] of catOptions()) {
+    let heading = "";
+    for (const [value, label, n, group] of catOptions()) {
+        if (group && group !== heading) {
+            heading = group;
+            catList.appendChild(make("div", "dd-head", group));
+        }
         const row = make("button", "dd-opt" + (cat === value ? " on" : ""));
         row.appendChild(catIcon(value));
         row.appendChild(make("span", null, label));
@@ -529,7 +642,7 @@ const drawCats = () => {
 };
 
 /* The grindstone's rows (2026-10-27) carry their own word and colour: "Pronto" (to repair), "Inteira" or "Sem material". */
-const stateOf = (r) => (r.badge ? r.badge : r.lock ? ["lock", "Nível " + r.lvl] : r.can ? ["ok", "Pronto"] : ["miss", "Falta"]);
+const stateOf = (r) => (r.badge ? r.badge : dyeBarred(r) ? ["lock", "Nobres"] : r.no ? ["lock", r.no.indexOf("nobres") >= 0 ? "Nobres" : "Cidade"] : r.lock ? ["lock", "Nível " + r.lvl] : r.can ? ["ok", "Pronto"] : ["miss", "Falta"]);
 
 const drawList = () => {
     const host = $("list");
@@ -547,9 +660,9 @@ const drawList = () => {
     for (const r of rows.slice(page * size, page * size + size)) {
         const [kind, label] = stateOf(r);
         const b = make("button", "rrow" + (r.id === picked ? " on" : "") + (kind === "lock" ? " locked" : ""));
-        b.appendChild(slot(r.out, "s48"));
+        b.appendChild(iconSlot(r, "s48"));
         const nm = make("span", "nm", nameOf(r.out) + (r.n > 1 ? " ×" + r.n : ""));
-        nm.appendChild(make("small", null, r.t || r.cat));
+        nm.appendChild(make("small", null, (r.nb ? "Nobres e mestres · " : "") + (r.t || r.cat) + (r.vs ? " · " + r.vs.length + " cores" : "")));
         b.appendChild(nm);
         b.appendChild(make("span", "st " + kind, label));
         b.addEventListener("click", () => {
@@ -573,12 +686,33 @@ const drawDetail = () => {
     }
     const q = quantityOf(r);
     const head = make("div", "dhead");
-    head.appendChild(slot(r.out, "s64"));
+    head.appendChild(iconSlot(r, "s64"));
     const t = make("div");
     t.appendChild(make("b", null, nameOf(r.out) + (r.n * q > 1 ? " ×" + r.n * q : "")));
     t.appendChild(make("span", "sub", r.cat));
     head.appendChild(t);
     host.appendChild(head);
+    /* What a potion, a poison or a perfume does (2026-11-02, user: "nas poções de alquimia é bom ter descrição do que cada poção e veneno faz"): the game's own words for it. */
+    if (r.d && view.mode !== "extrair") {
+        host.appendChild(make("div", "k", "Efeito"));
+        host.appendChild(make("p", "effect", r.d));
+    }
+    /* The colour of the garment: the dye picked, and the little square that picks another. */
+    if (r.vs && r.vs.length > 1 && view.station !== "reparo" && view.mode !== "extrair") {
+        const row = make("div", "dye");
+        row.appendChild(make("span", "k", "Cor"));
+        const dye = dyeOut(r);
+        const pick = make("button", "dyebtn");
+        pick.title = "Escolher a cor";
+        pick.disabled = busy !== null;
+        pick.appendChild(slotFor(dye[1], "s32"));
+        pick.appendChild(make("span", null, capital(dye[0])));
+        if (dye[2] > 0) pick.appendChild(make("small", null, "nobres"));
+        pick.appendChild(make("i", "dd-arrow"));
+        pick.addEventListener("click", () => openDyes(r));
+        row.appendChild(pick);
+        host.appendChild(row);
+    }
     if (view.station === "reparo") {
         /* The grindstone (2026-10-27): no ingredients, no level; the weapon's condition and how many of its repairs are used. */
         host.appendChild(make("div", "k", "Estado"));
@@ -592,12 +726,12 @@ const drawDetail = () => {
             const li = make("li");
             li.appendChild(slot(id, "s32"));
             li.appendChild(make("span", "in", nameOf(id)));
-            li.appendChild(make("span", "ic ok", "+" + give));
+            li.appendChild(make("span", "ic ok", "+" + give * q));
             back.appendChild(li);
         }
         host.appendChild(back);
         host.appendChild(make("p", "facts", r.t.charAt(0).toUpperCase() + r.t.slice(1) + "."));
-        host.appendChild(make("p", "facts", "O equipamento é quebrado e não volta. Sem XP."));
+        host.appendChild(make("p", "facts", q > 1 ? "As " + q + " peças são quebradas e não voltam. Sem XP." : "O equipamento é quebrado e não volta. Sem XP."));
     } else {
     host.appendChild(make("div", "k", "Pede"));
     const ul = make("ul", "ings");
@@ -611,6 +745,10 @@ const drawDetail = () => {
         ul.appendChild(li);
     }
     host.appendChild(ul);
+    /* The thread the tavern's and the alchemy rack's workers wet with their own mouths (2026-10-30): no flask asked for, the body's water goes instead, a little with each piece. */
+    if (r.th) {
+        host.appendChild(make("p", "facts", "Molha o linho com a água do próprio corpo: " + r.th[0] * q + " de sede" + (q > 1 ? " (" + q + " peças)" : "") + (r.th[1] > 0 ? ". O seu corpo paga até " + r.th[1] + " peça" + (r.th[1] === 1 ? "" : "s") + " agora." : ". O seu corpo está seco demais: beba antes.")));
+    }
     /* What a garden's crop gives and when (the server writes it: "colheita em 30 min · rende 4 a 6"). */
     if (r.t) {
         host.appendChild(make("div", "k", "Colheita"));
@@ -624,6 +762,18 @@ const drawDetail = () => {
     }
     facts.appendChild(document.createTextNode("+" + r.xp * q + " XP" + (r.s > 0 ? " · " + r.s * q + " s" : "") + (q > 1 ? " · " + q + " vezes" : "")));
     host.appendChild(facts);
+    /* What the piece asks of whoever makes it (2026-10-31): a noble's piece and a town's piece say so, in red for whoever may not; and the quality the level of the trade gives it. */
+    if (r.nb || r.pl || (r.vs && r.vs[dyeAt(r)][2] > 0)) {
+        const asks = make("p", "facts");
+        if (r.nb) asks.appendChild(make("span", r.no && r.no.indexOf("nobres") >= 0 ? "lock" : "", "Apenas nobres e mestres do ofício. "));
+        else if (r.vs && r.vs[dyeAt(r)][2] > 0) asks.appendChild(make("span", dyeBarred(r) ? "lock" : "", "Esta cor é só de nobres e mestres do ofício. "));
+        if (r.pl) asks.appendChild(make("span", r.no && r.no.indexOf("cidad") >= 0 ? "lock" : "", "Só cidadãos de " + r.pl.join(" ou ") + "."));
+        host.appendChild(asks);
+    }
+    if (r.q) {
+        const tier = (n) => ["", "I", "II", "III", "IV", "V", "VI"][n] || String(n);
+        host.appendChild(make("p", "facts", "Qualidade " + (r.q[0] === r.q[1] ? tier(r.q[0]) : tier(r.q[0]) + " a " + tier(r.q[1])) + " (vai até " + tier(r.q[2]) + "): melhora com o nível do ofício."));
+    }
     }
     const work = make("div", "work");
     if (busy && busy.id === r.id) {
@@ -674,10 +824,12 @@ const drawDetail = () => {
             work.appendChild(step);
         }
         const go = make("button", "btn", (r.v || view.verb) + (q > 1 ? " ×" + q : ""));
-        go.disabled = !r.can || busy !== null;
+        go.disabled = !r.can || busy !== null || dyeBarred(r);
         go.addEventListener("click", () => {
-            $("msg") && ($("msg").textContent = "");
-            send("craft:make", r.batch ? { id: r.id, n: q } : { id: r.id });
+            say("");
+            const body = r.batch ? { id: r.id, n: q } : { id: r.id };
+            if (r.vs && dyeAt(r) > 0) body.v = dyeAt(r);
+            send("craft:make", body);
         });
         work.appendChild(go);
     }
@@ -686,6 +838,64 @@ const drawDetail = () => {
     msg.id = "msg";
     host.appendChild(msg);
     reportSlots();
+};
+
+/* The little square that picks the colour (2026-10-31): in place of the list, the detail and the tools, every dye of the garment by the game's own icon and a word; a click picks it and
+   goes back. It is the paper itself (no colour of its own), so that the game's icons, drawn over the page, sit on the same paper as everywhere else. */
+let picking = "";
+const closeDyes = () => {
+    if (!picking) {
+        return false;
+    }
+    picking = "";
+    $("panel").classList.remove("picking");
+    $("vpop").hidden = true;
+    $("vpop").innerHTML = "";
+    drawList();
+    drawDetail();
+    return true;
+};
+const drawDyes = () => {
+    const r = view && view.recipes.find((x) => x.id === picking);
+    if (!r || !r.vs) {
+        closeDyes();
+        return;
+    }
+    const host = $("vpop");
+    host.innerHTML = "";
+    const head = make("div", "vhead");
+    const title = make("div");
+    title.appendChild(make("b", null, nameOf(r.out)));
+    title.appendChild(make("span", "sub", "Escolha a cor · " + r.vs.length + " opções"));
+    head.appendChild(title);
+    const back = make("button", "btn ghost", "Voltar");
+    back.addEventListener("click", closeDyes);
+    head.appendChild(back);
+    host.appendChild(head);
+    const grid = make("div", "vgrid");
+    r.vs.forEach((v, i) => {
+        const tile = make("button", "vtile" + (i === dyeAt(r) ? " on" : "") + (v[2] > 0 ? " rich" : "") + (v[2] === 2 ? " no" : ""));
+        tile.appendChild(slotFor(v[1], "s48"));
+        tile.appendChild(make("span", "vl", capital(v[0])));
+        if (v[2] > 0) tile.appendChild(make("small", null, "nobres"));
+        tile.addEventListener("click", () => {
+            dyeOf[r.id] = i;
+            closeDyes();
+        });
+        grid.appendChild(tile);
+    });
+    host.appendChild(grid);
+    reportSlots();
+};
+const openDyes = (r) => {
+    if (!r.vs || busy !== null) {
+        return;
+    }
+    closeCats();
+    picking = r.id;
+    $("panel").classList.add("picking");
+    $("vpop").hidden = false;
+    drawDyes();
 };
 
 /* The slots cut out of the paper while the icons are up, so they show whether the game draws them under the page or over it. */
@@ -729,7 +939,7 @@ const reportSlots = () => {
         const box = $("paper").getBoundingClientRect();
         const slots = [];
         const rects = [];
-        for (const el of catList ? [] : document.querySelectorAll(".slot")) {
+        for (const el of catList ? [] : document.querySelectorAll(picking ? ".vpop .slot" : ".slot")) {
             const r = el.getBoundingClientRect();
             if (r.width > 0 && el.dataset.icon) {
                 rects.push(r);
@@ -745,7 +955,10 @@ const reportSlots = () => {
     });
 };
 
+/* The words of the last result: the page comes again right after them, and the detail it draws is a new one (2026-11-03). */
+let lastSaid = null;
 const say = (text, kind) => {
+    lastSaid = text ? [text, kind] : null;
     const msg = $("msg");
     if (msg) {
         msg.textContent = text;
@@ -906,6 +1119,12 @@ window.addEventListener("craft:view", (event) => {
     setTrading(false);
     const fresh = !view || view.station !== next.station || (view.mode || "") !== (next.mode || "");
     view = next;
+    if (fresh) {
+        dyeOf = {};
+        picking = "";
+        $("panel").classList.remove("picking");
+        $("vpop").hidden = true;
+    }
     if (!fresh && !view.recipes.some((r) => r.id === picked)) {
         picked = (view.recipes.find((r) => r.can) || view.recipes[0] || { id: "" }).id;
     }
@@ -915,11 +1134,19 @@ window.addEventListener("craft:view", (event) => {
         page = 0;
         $("q").value = "";
         picked = (view.recipes.find((r) => r.can) || view.recipes[0] || { id: "" }).id;
+        lastSaid = null;
     }
     draw();
+    if (lastSaid) {
+        say(lastSaid[0], lastSaid[1]);
+    }
+    if (picking) {
+        drawDyes();
+    }
 });
 window.addEventListener("craft:progress", (event) => {
     const p = event.detail || {};
+    lastSaid = null;
     busy = { id: p.id, ms: p.ms || 1000, doing: p.doing || "Trabalhando", at: Date.now(), i: p.i || 1, n: p.n || 1 };
     picked = p.id || picked;
     drawDetail();
@@ -972,7 +1199,7 @@ document.addEventListener("mousedown", (event) => {
 document.addEventListener("keydown", (event) => {
     if ((event.keyCode || 0) === 27 || event.key === "Escape") {
         event.preventDefault();
-        if (!closeCats()) {
+        if (!closeDyes() && !closeCats()) {
             leave();
         }
     }

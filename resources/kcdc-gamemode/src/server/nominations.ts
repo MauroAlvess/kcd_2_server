@@ -30,13 +30,12 @@ import { familyBaseHeirs, familyHeirs, getSurname, maritalStatus } from "./famil
 import { appointable, BRANCHES, hasNominationPower, judgeNomination, judgeRevocation, labelOf, levelOf, order, raises, summarize, titleById, TITLES } from "./nobility.js";
 import type { TitleDef } from "./nobility.js";
 import { landSummary } from "./properties.js";
-import { addPayload, familyLinked, getFactionId, getGuildId, getSocialStatus, notice, onStatusChange, sendRoster, sendSocial, setNominees, setSocialStatus, SOCIAL_STATUS } from "./status.js";
+import { addLazyPayload, addPayload, familyLinked, getGuildId, getSocialStatus, GUILDS, listGuildMembers, notice, onStatusChange, sendRoster, sendSocial, setNominees, setSocialStatus, SOCIAL_STATUS } from "./status.js";
 import type { SocialStatus } from "./status.js";
-import { addTitle, applyNametag, grantsOf, holders, isFemale, noteName, removeTitle, removeWhere, setShown, shownOf, titlesOf } from "./titles.js";
+import { addTitle, applyNametag, grantsOf, holders, isFemale, labelWithRegion, noteName, regionOfTitle, removeTitle, removeWhere, setShown, shownOf, titlesOf } from "./titles.js";
 import type { Grant } from "./titles.js";
 import { emitLarge } from "./big-emit.js";
-import { townOf } from "./citizenship.js";
-import { tradesmen } from "./scribe.js";
+import { landsOf, TOWNS, townById, townOf } from "./citizenship.js";
 import { nameOfMember } from "./guild-members.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -154,9 +153,46 @@ function holderByKey(key: unknown): string | null {
     return typeof key === "string" ? (holders().find((holder) => keyOf(holder.steamId) === key)?.steamId ?? null) : null;
 }
 
-/** A holder as the hierarchy calls them: the name they had when last seen, and the family's surname when they have one. */
+/**
+ * The players in the game by Steam id, as they were a second ago: every holder of the hierarchy (and of a viewer's list of the ones they named) asked for their own name and
+ * body, and each ask looked at every player, whose Steam id is a read of the engine (some 5 us each: with 200 players and 300 holders, over half a second for one view).
+ * Only for what is shown; whoever is told something (`online`) is looked for afresh.
+ */
+const SHOWN_INDEX_MS = 1_000;
+let shown: { readonly at: number; readonly byId: Map<string, Player> } | null = null;
+function shownOnline(steamId: string): Player | undefined {
+    const now = Date.now();
+    if (shown === null || now - shown.at > SHOWN_INDEX_MS) {
+        const byId = new Map<string, Player>();
+        for (const other of Player.all()) {
+            byId.set(other.steamId, other);
+        }
+        shown = { at: now, byId };
+    }
+    return shown.byId.get(steamId);
+}
+
+/**
+ * What the hierarchy calls a character (user, 2026-10-30: "o nome dos cards deve pegar só o nome que o personagem usou na criação e o nome da família"): the name they
+ * were made with and the family's surname, with no alcunha and never the account's nickname (the cards read "Player" and "Veckks22" when they took what a holder was
+ * called when last seen, and "Gunther von Silberhände von Silberhände" when that already had the surname). Null for a character made before names.
+ */
+function plainName(steamId: string): string | null {
+    const first = getCharacter(steamId)?.name;
+    if (typeof first !== "string" || first.trim() === "") {
+        return null;
+    }
+    const surname = getSurname(steamId);
+    return surname && !first.toLowerCase().endsWith(surname.toLowerCase()) ? `${first.trim()} ${surname}` : first.trim();
+}
+
+/** A holder as the hierarchy calls them: the character's own name and the family's surname; one made before names, the name they had when last seen. */
 function nameFor(steamId: string, stored: string): string {
-    const online = Player.all().find((other) => other.steamId === steamId);
+    const plain = plainName(steamId);
+    if (plain !== null) {
+        return plain;
+    }
+    const online = shownOnline(steamId);
     if (online !== undefined) {
         return nameOf(online);
     }
@@ -166,8 +202,8 @@ function nameFor(steamId: string, stored: string): string {
 }
 
 function femaleOf(steamId: string): boolean {
-    const online = Player.all().find((other) => other.steamId === steamId);
-    return (getCharacter(steamId)?.appearance.gender ?? online?.appearance.gender) === "female";
+    const saved = getCharacter(steamId)?.appearance.gender;
+    return (saved ?? shownOnline(steamId)?.appearance.gender) === "female";
 }
 
 function sinceText(at: number): string {
@@ -179,7 +215,7 @@ function sinceText(at: number): string {
 }
 
 function titleOption(title: TitleDef): Record<string, unknown> {
-    return { id: title.id, male: title.male, female: title.female, native: title.native ?? "", gloss: title.gloss, kind: title.kind, branch: title.branch, raises: raises(title), standing: standingOf(title), names: (title.appoints ?? []).length };
+    return { id: title.id, male: title.male, female: title.female, native: title.native ?? "", gloss: title.gloss, kind: title.kind, branch: title.branch, raises: raises(title), standing: standingOf(title), names: (title.appoints ?? []).length, level: levelOf(title) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -191,6 +227,43 @@ export function candidatesFor(viewer: Player): Array<{ id: number; name: string 
     return Player.all()
         .filter((other) => other.id !== viewer.id && other.ready && other.steamId !== "" && (admin || knows(viewer, other)))
         .map((other) => ({ id: other.id, name: admin ? adminLabel(other) : nameOf(other) }));
+}
+
+/**
+ * The towns a player may name for (2026-10-31, user: "nas nomeações ao nomear um jogador deve se escolher qual região você pode nomear; exemplo se o jogador é um nobre de Suchdol ele só pode
+ * fazer nomeações e escolhe Suchdol"): a title is of a town ("Cavaleiro de Suchdol"), and whoever names names in the towns of the titles of theirs that name: the town the title is of, and, for
+ * a seat, its lands. One who holds no title with a town (a title given before towns, and a holder with no citizenship) names in the town they are a citizen of; one with neither
+ * names in none. An administrator names in every town.
+ */
+export function regionsFor(player: Player): string[] {
+    if (isAdmin(player)) {
+        return TOWNS.map((town) => town.id);
+    }
+    // The town of the highest of their titles that names comes first: it is the one chosen when none is.
+    const mine = new Set<string>();
+    const add = (id: string): void => {
+        const town = townById(id);
+        if (town === null) {
+            return;
+        }
+        mine.add(town.id);
+        for (const land of landsOf(town)) {
+            mine.add(land.id);
+        }
+    };
+    const naming = grantsOf(player.steamId)
+        .filter((grant) => (titleById(grant.id)?.appoints ?? []).length > 0 && grant.region !== undefined && grant.region !== "")
+        .sort((a, b) => order(titleById(a.id) as TitleDef) - order(titleById(b.id) as TitleDef));
+    for (const grant of naming) {
+        add(grant.region as string);
+    }
+    if (mine.size === 0 && hasNominationPower(titlesOf(player.steamId))) {
+        const home = townOf(player.steamId);
+        if (home !== null) {
+            add(home.id);
+        }
+    }
+    return [...mine];
 }
 
 /** What the section needs of one viewer; `visible` false is all a commoner is told. */
@@ -212,7 +285,7 @@ export function nobilityFor(viewer: Player): Record<string, unknown> {
                   .filter((grant) => (admin ? grant.by === "admin" || grant.by === viewer.steamId : grant.by === viewer.steamId))
                   .map((grant) => {
                       const title = titleById(grant.id) as TitleDef;
-                      return { key: keyOf(holder.steamId), name: nameFor(holder.steamId, holder.name), title: grant.id, label: labelOf(title, femaleOf(holder.steamId)), kind: title.kind, branch: title.branch, at: sinceText(grant.at) };
+                      return { key: keyOf(holder.steamId), name: nameFor(holder.steamId, holder.name), title: grant.id, label: labelWithRegion(title, femaleOf(holder.steamId), grant.region), kind: title.kind, branch: title.branch, at: sinceText(grant.at) };
                   }),
     );
     const female = isFemale(viewer);
@@ -221,6 +294,8 @@ export function nobilityFor(viewer: Player): Record<string, unknown> {
         admin,
         power: hasNominationPower(held),
         options: options.map(titleOption),
+        // The towns this viewer may name for, to choose from when a title is given (2026-10-31).
+        regions: regionsFor(viewer).map((id) => ({ id, name: townById(id)?.name ?? id })),
         ...(admin ? { crownOptions: TITLES.map(titleOption) } : {}),
         mine: grantsOf(viewer.steamId).map((grant) => mineLine(grant, female)).sort((a, b) => a.order - b.order),
         named,
@@ -228,9 +303,9 @@ export function nobilityFor(viewer: Player): Record<string, unknown> {
     };
 }
 
-function mineLine(grant: Grant, female: boolean): { id: string; label: string; native: string; gloss: string; kind: string; branch: string; by: string; at: string; order: number } {
+function mineLine(grant: Grant, female: boolean): { id: string; label: string; region: string; native: string; gloss: string; kind: string; branch: string; by: string; at: string; order: number } {
     const title = titleById(grant.id) as TitleDef;
-    return { id: title.id, label: labelOf(title, female), native: title.native ?? "", gloss: title.gloss, kind: title.kind, branch: title.branch, by: grant.by === "admin" ? "" : grant.byName, at: sinceText(grant.at), order: order(title) };
+    return { id: title.id, label: labelWithRegion(title, female, grant.region), region: grant.region ?? "", native: title.native ?? "", gloss: title.gloss, kind: title.kind, branch: title.branch, by: grant.by === "admin" ? "" : grant.byName, at: sinceText(grant.at), order: order(title) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -247,14 +322,30 @@ export interface HierarchyHolder {
     readonly marital: { readonly label: string; readonly gloss: string };
     readonly surname: string | null;
     readonly guildId: string | null;
-    readonly factionId: string | null;
     /** The town they are a citizen of, or null. */
     readonly town: string | null;
     /** The same town's id, for the tree to set them under their own land (2026-10-29: the tree is read region by region). */
     readonly townId: string | null;
     readonly lands: ReadonlyArray<{ readonly region: string; readonly houses: number; readonly chests: number; readonly whole: boolean }>;
-    /** Their living spouses, as the realm calls them beside them (a lord's wife is a Lady); the tree draws them in the holder's own box. */
-    readonly consorts: readonly Consort[];
+    /** Their living spouses, as the realm calls them beside them (a lord's wife is a Lady); the tree draws one who holds no title beside the holder's own card. */
+    readonly consorts: readonly ConsortLine[];
+    /** Whether the character's body is a woman's (the tree sets a couple by rank, then the husband first). */
+    readonly female: boolean;
+}
+
+/** A spouse as a page is told of them: no Steam id, and the key of their own card when they hold a title themselves, so that the tree draws them once. */
+export interface ConsortLine {
+    readonly label: string;
+    readonly name: string;
+    readonly courtesy: boolean;
+    readonly text: string;
+    readonly key: string | null;
+}
+
+function consortLine(consort: Consort, holding: ReadonlySet<string>): ConsortLine {
+    const id = typeof consort.steamId === "string" && consort.steamId !== "" ? consort.steamId : null;
+    const name = (id === null ? null : plainName(id)) ?? consort.name;
+    return { label: consort.label, name, courtesy: consort.courtesy, text: consort.courtesy ? `${consort.label} ${name}` : `${name} (${consort.label.toLowerCase()})`, key: id !== null && holding.has(id) ? keyOf(id) : null };
 }
 
 /**
@@ -262,6 +353,7 @@ export interface HierarchyHolder {
  * header of this file for what is left out on purpose.
  */
 export function hierarchyFor(): Record<string, unknown> {
+    const holding = new Set(holders().map((holder) => holder.steamId));
     const rows: HierarchyHolder[] = holders().map((holder) => {
         const female = femaleOf(holder.steamId);
         const grants = [...holder.grants].sort((a, b) => order(titleById(a.id) as TitleDef) - order(titleById(b.id) as TitleDef));
@@ -271,17 +363,17 @@ export function hierarchyFor(): Record<string, unknown> {
             key: keyOf(holder.steamId),
             name: nameFor(holder.steamId, holder.name),
             self: false,
-            titles: grants.map((grant) => ({ id: grant.id, label: labelOf(titleById(grant.id) as TitleDef, female), by: grant.by === "admin" ? "" : grant.byName, byKey: grant.by === "admin" ? "" : keyOf(grant.by), crown: grant.by === "admin", at: sinceText(grant.at), level: levelOf(titleById(grant.id) as TitleDef), reportsTo: (titleById(grant.id) as TitleDef).reportsTo ?? [] })),
+            titles: grants.map((grant) => ({ id: grant.id, label: labelWithRegion(titleById(grant.id) as TitleDef, female, grant.region), region: grant.region ?? "", by: grant.by === "admin" ? "" : grant.byName, byKey: grant.by === "admin" ? "" : keyOf(grant.by), crown: grant.by === "admin", at: sinceText(grant.at), level: levelOf(titleById(grant.id) as TitleDef), reportsTo: (titleById(grant.id) as TitleDef).reportsTo ?? [] })),
             statusId: status,
             status: SOCIAL_STATUS[status],
             marital: maritalStatus(holder.steamId, gender),
             surname: getSurname(holder.steamId),
             guildId: getGuildId(holder.steamId),
-            factionId: getFactionId(holder.steamId),
             town: townOf(holder.steamId)?.name ?? null,
             townId: townOf(holder.steamId)?.id ?? null,
             lands: landSummary(holder.steamId),
-            consorts: consortsOf(holder.steamId).slice(0, 2),
+            consorts: consortsOf(holder.steamId).slice(0, 2).map((consort) => consortLine(consort, holding)),
+            female,
         };
     });
     const heldBy = new Map<string, string[]>();
@@ -291,18 +383,15 @@ export function hierarchyFor(): Record<string, unknown> {
         }
     }
     // The trades (2026-10-29: "recebe o título, exemplo caçador, e aparece na árvore hierárquica como caçador"): whoever has a guild and holds no title is a node of the tree of their own, a
-    // tradesman, hung from the one who handed them the guild when that one holds a title, and set under the land they are a citizen of.
-    const holding = new Set(holders().map((holder) => holder.steamId));
-    const byKeyOf = new Map(holders().map((holder) => [holder.steamId, keyOf(holder.steamId)] as const));
+    // tradesman, set under the land they are a citizen of.
     const trades = tradesmen()
         .filter((trade) => !holding.has(trade.steamId))
         .map((trade) => ({
             key: keyOf(trade.steamId),
-            name: nameOfMember(trade.steamId),
+            name: plainName(trade.steamId) ?? nameOfMember(trade.steamId),
             guildId: trade.guild,
             townId: trade.town,
             town: trade.town === null ? null : (townOf(trade.steamId)?.name ?? null),
-            byKey: byKeyOf.get(trade.by) ?? "",
             self: false,
         }));
     return {
@@ -317,6 +406,17 @@ export function hierarchyFor(): Record<string, unknown> {
         holders: rows,
         trades,
     };
+}
+
+/** The tradesmen of the realm as the hierarchy's tree hangs them: whoever has a guild, with the town they are a citizen of. */
+function tradesmen(): Array<{ readonly steamId: string; readonly guild: string; readonly town: string | null }> {
+    const found: Array<{ steamId: string; guild: string; town: string | null }> = [];
+    for (const guild of GUILDS) {
+        for (const steamId of listGuildMembers(guild.id)) {
+            found.push({ steamId, guild: guild.id, town: townOf(steamId)?.id ?? null });
+        }
+    }
+    return found;
 }
 
 /**
@@ -364,7 +464,7 @@ function nameOfSteamId(steamId: string): string {
  * `asCrown`: an administrator naming from the Jogadores page, in the Crown's name and by its rules (anybody to anything). From
  * the Nomeação section an administrator names as their character, by its titles, as any noble does.
  */
-export function nominate(actor: Player, target: Player | null, titleId: unknown, asCrown = false): Outcome {
+export function nominate(actor: Player, target: Player | null, titleId: unknown, asCrown = false, regionId: unknown = ""): Outcome {
     if (!canUse(actor)) {
         return fail("Só um nobre pode nomear.");
     }
@@ -384,14 +484,35 @@ export function nominate(actor: Player, target: Player | null, titleId: unknown,
         return fail(staff && !admin ? `${verdict.reason} Em nome da Coroa, qualquer título se dá pela seção Jogadores (F3).` : verdict.reason);
     }
     const title = titleById(titleId) as TitleDef;
+    // The town the title is of (2026-10-31): chosen among the towns this player may name for; the King's is of none.
+    let region = "";
+    if (levelOf(title) > 1) {
+        const allowed = regionsFor(actor);
+        region = typeof regionId === "string" ? regionId : "";
+        if (region === "" && staff) {
+            // An administrator who named none names for the town the nominee lives in.
+            region = townOf(target.steamId)?.id ?? "";
+        }
+        if (region === "" && !staff) {
+            // A noble who named none names for the town of their own title (the first of their towns).
+            region = allowed[0] ?? "";
+        }
+        if (region === "" && !staff) {
+            return fail(allowed.length === 0 ? "Você não tem terras para nomear: escolha a sua cidade na seção Cidadania." : "Escolha a região do título.");
+        }
+        // An administrator may give a title of no town (to somebody who is a citizen of none, and names none).
+        if (region !== "" && !allowed.includes(region)) {
+            return fail(`Você só nomeia nas terras do seu título: ${allowed.map((id) => townById(id)?.name ?? id).join(", ")}.`);
+        }
+    }
     const by = admin ? { steamId: "admin", name: CROWN } : { steamId: actor.steamId, name: nameOf(actor) };
-    const granted = addTitle(target.steamId, target.nickname, title.id, by);
+    const granted = addTitle(target.steamId, target.nickname, title.id, by, region);
     const standing = standingOf(title);
     const risen = standing !== null ? raise(target.steamId, standing) : [];
     const now = getSocialStatus(target.steamId);
     applyNametag(target);
 
-    const label = labelOf(title, isFemale(target));
+    const label = labelWithRegion(title, isFemale(target), region);
     const lines: string[] = [`${nameOf(target)} agora é ${label}.`];
     if (granted.replaced !== null) {
         const old = titleById(granted.replaced);
@@ -452,7 +573,7 @@ export function revoke(actor: Player, holderSteamId: string | null, titleId: unk
     const title = titleById(titleId) as TitleDef;
     const holder = online(holderSteamId);
     const female = femaleOf(holderSteamId);
-    const label = labelOf(title, female);
+    const label = labelWithRegion(title, female, grant?.region);
     if (holder !== undefined) {
         applyNametag(holder);
         if (!own) {
@@ -476,7 +597,7 @@ export function chooseShown(player: Player, titleId: unknown): Outcome {
     }
     applyNametag(player);
     const title = titleById(titleId) as TitleDef;
-    return { ok: true, message: `${labelOf(title, isFemale(player))} aparece sobre a sua cabeça.` };
+    return { ok: true, message: `${labelWithRegion(title, isFemale(player), regionOfTitle(player.steamId, title.id))} aparece sobre a sua cabeça.` };
 }
 
 /** A noble who is a commoner now is no longer a lord, a knight or a prelate: the titles of the blood and of the Church go. */
@@ -516,7 +637,9 @@ export function settleStanding(): string[] {
 }
 
 export function installNominations(): void {
-    addPayload((player) => ({ nobility: nobilityFor(player) }));
+    // The nav needs to know whether the section is the player's; the section itself carries the rest only while it is open (`status.ts`, `SECTION_NEEDS`).
+    addPayload((player) => ({ nobility: { visible: canView(player) } }));
+    addLazyPayload("nobility", (player) => ({ nobility: nobilityFor(player) }));
     const settled = settleStanding();
     if (settled.length > 0) {
         console.log(`nominations: ${settled.length} titular(es) de título de nobreza era(m) plebeu(s) e agora é(são) nobre(s): ${settled.join(", ")}`);
@@ -551,7 +674,7 @@ export function installNominations(): void {
         const id = fieldsOf(payload)["targetId"];
         const target = typeof id === "number" && Number.isInteger(id) ? Player.getById(id) : null;
         // The Jogadores page says it names for the Crown; the Nomeação section says nothing.
-        const result = nominate(actor, target, fieldsOf(payload)["title"], fieldsOf(payload)["via"] === "coroa");
+        const result = nominate(actor, target, fieldsOf(payload)["title"], fieldsOf(payload)["via"] === "coroa", fieldsOf(payload)["region"]);
         hierarchyKept = null;
         notice(actor, result.message);
         sendSocial(actor);

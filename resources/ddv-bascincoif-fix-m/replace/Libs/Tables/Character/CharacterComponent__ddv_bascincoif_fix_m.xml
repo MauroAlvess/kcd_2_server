@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<database xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="barbora" xsi:noNamespaceSchemaLocation="../database.xsd">
+	<CharacterComponents>
+		<Component Name="Male">
+			<DerivedComponents>
+				<Component Name="Clothing">
+					<DerivedComponents>
+						<Component Name="Head">
+							<DerivedComponents>
+								<Clothing Name="Helmet">
+									<DerivedComponents>
+										<Clothing Name="Bascinet">
+											<DerivedComponents>
+												<Clothing Name="BascinetVisor">
+													<DerivedComponents>
+														<Clothing Name="BascinetVisor03_m01" HidingGroups="NeckArea CollarChain" />
+														<Clothing Name="BascinetVisor04_m01" HidingGroups="NeckArea CollarChain" />
+														<Clothing Name="BascinetVisor04_mAulitz" HidingGroups="NeckArea" />
+														<Clothing Name="BascinetVisor07_m01" HidingGroups="CollarChain NeckArea" />
+													</DerivedComponents>
+												</Clothing>
+											</DerivedComponents>
+										</Clothing>
+									</DerivedComponents>
+								</Clothing>
+								<Clothing Name="Coif">
+									<DerivedComponents>
+										<Clothing Name="CoifMail" HidingGroups="CollarChain NeckArea" />
+										<Clothing Name="PaddedCoif">
+											<DerivedComponents>
+												<Clothing Name="CoifLarge" HidingGroups="NeckArea CollarChain" />
+											</DerivedComponents>
+										</Clothing>
+									</DerivedComponents>
+								</Clothing>
+							</DerivedComponents>
+						</Component>
+					</DerivedComponents>
+				</Component>
+			</DerivedComponents>
+		</Component>
+	</CharacterComponents>
+</database>

@@ -695,6 +695,11 @@ function loadBuyLists(): Partial<Record<Trade, readonly string[]>> {
     return buyLists;
 }
 
+/** The names of the goods a trade of `data/vendor-buys.json` buys: the guild vendors (`guild-vendors.ts`) buy by the same lists. */
+export function buyNamesFor(trade: string): readonly string[] {
+    return loadBuyLists()[trade as Trade] ?? [];
+}
+
 /**
  * What the smith buys of the Coletores' finds and of what the forge makes of them (2026-10-21), ahead of the rest of the trade's goods: the
  * game keeps a vendor's first 128 kinds.
@@ -1346,6 +1351,9 @@ export function isVendorId(value: string): value is VendorId {
 }
 
 export function describeVendors(): string[] {
+    if (!vendorSettings.enabled) {
+        return ["  Os vendedores estão desligados (pedido de 29/10/2026): ninguém vende nas vilas, nas estradas e nos banhos. O código e os lugares ficam guardados; `vendorSettings.enabled` os traz de volta."];
+    }
     return VENDORS.map((def) => {
         const spot = homeOf(def);
         const entry = live.get(def.id);
@@ -1379,7 +1387,50 @@ export function restockNow(): void {
     restock();
 }
 
+/**
+ * Whether the vendors exist at all (user, 2026-10-29: "vamos remover todos npcs da cidade vendedores"). Off: the shopkeepers of Suchdol and of the villages, the pedlars and the bath
+ * attendants (every one of them sells) are not made, the houses kept for them go back to the catalog, and only the pedlars' camp fires are lit (the cooking stations stand at them). The
+ * code and the data stay for the day they come back: set it to true.
+ */
+export const vendorSettings = { enabled: false };
+
+/** What a start does with the vendors switched off: their houses are freed (now, and again once the census has mapped what it maps), the camp fires are lit. */
+function retireVendors(): void {
+    const free = (): number => {
+        try {
+            return releaseNpcHomes(new Set());
+        } catch {
+            // The catalog is not there yet: the houses are looked at again a moment later.
+            return 0;
+        }
+    };
+    const released = free();
+    const later = setTimeout(() => {
+        const more = free();
+        if (more > 0) {
+            console.log(`vendors: ${more} casa(s) de NPC voltaram ao catálogo`);
+        }
+    }, NEW_VILLAGES_AFTER_MS);
+    const lit = setTimeout(() => {
+        if (fires.length === 0) {
+            lightFires();
+        }
+    }, SPAWN_AFTER_MS);
+    Events.on("resourceStop", (name) => {
+        if (name === RESOURCE) {
+            clearTimeout(later);
+            clearTimeout(lit);
+            fires.splice(0).forEach((fire) => fire.destroy());
+        }
+    });
+    console.log(`vendors: desligados: ninguém vende nas vilas, nas estradas e nos banhos (${VENDORS.length} lugares ficam sem corpo); ${released} casa(s) de NPC voltaram ao catálogo; só as fogueiras dos acampamentos ficam acesas`);
+}
+
 export function installVendors(): void {
+    if (!vendorSettings.enabled) {
+        retireVendors();
+        return;
+    }
     loadChosen();
     loadPurses();
 

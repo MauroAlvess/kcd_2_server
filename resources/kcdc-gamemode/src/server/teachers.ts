@@ -188,7 +188,17 @@ function tell(player: Player, text: string): void {
 
 export const teaching = new Teaching();
 
+/**
+ * Whether the skill teachers stand in the world (user, 2026-10-29: "vamos remover todos npcs que ensinam coisas também; os demais continuam"). Off: none of the 38 is made. The code and
+ * the data stay for the day they come back: set it to true.
+ */
+export const teacherSettings = { enabled: false };
+
 export function installTeachers(): void {
+    if (!teacherSettings.enabled) {
+        console.log(`teachers: desligados: nenhum dos ${POSTS.length} mestres que ensinavam habilidades fica no mundo`);
+        return;
+    }
     const posts = installPosts("teachers", POSTS, (player, post, npc) => {
         teaching.open(player, post.id, npc);
     });

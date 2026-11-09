@@ -121,11 +121,9 @@ function load({ meadows = MEADOWS, ready = true, farmers = ["hans", "greta", "bo
             "./torch-down.js": torch,
             "./farm-data.js": { farmData: () => ({ gardens: [], beds: [], meadows }) },
             "./guild-crafts.js": { mayCraft: (player, craft) => farmers.includes(player.steamId) && craft === "domar" },
-            "./horse-follow.js": { startFollowing: (horse, owner) => { state.follows.push([horse.id, owner.id]); return { ok: true, message: "O cavalo vai seguir você." }; } },
             "./horse-menu.js": {
                 nearExtras: state.nearExtras,
                 askExtras: state.askExtras,
-                grantClimb: (player, horse) => state.climbs.push([player.id, horse.id]),
             },
             "./language.js": { languageOf: () => state.language, translate: (text, lang) => (lang === "en" ? `[en] ${text}` : text) },
             "./store.js": store.exports,
@@ -392,7 +390,6 @@ test("E at a wild horse shows an Agricultor its menu; anybody else is told whose
     assert.deepEqual(page.options.map((o) => [o.id, o.text, o.enabled]), [
         ["feed", "Oferecer cenoura", true],
         ["mount", "Montar (ele ainda não confia)", false],
-        ["follow", "Mandar seguir (ele ainda não confia)", false],
         ["leave", "Sair", true],
     ]);
     assert.ok(horse.holds >= 1, "the horse is held");
@@ -438,7 +435,7 @@ test("feeding takes the best treat from the bag, adds its trust, pets (a man's a
     assert.deepEqual(hans.played, [["HorsePetting_2", { lockMovement: true }]], "a man pets it");
     sut.state.timers.find((one) => one.ms === 5_000).fn();
     assert.equal(hans.stopped, 1, "the petting is cut at five seconds");
-    assert.match(sut.state.logs.at(-1), /Hans deu cenoura ao cavalo de m1-\d: confiança 5/);
+    assert.match(sut.state.logs.at(-1), /Hans deu cenoura ao cavalo de m1-\d \([a-z_]+, [^;]+; equitação 5, facilidade 1\.\d\d\): confiança 5/);
     const saved = JSON.parse(sut.disk.files.get("playerdata/wild-horses.json"));
     assert.equal(saved.slots["m1-1"].bonds.hans.trust, 5, "kept across a restart");
 
@@ -480,7 +477,7 @@ test("what an Agricultor is told reaches the toast in their language as it reach
     assert.match(hans.emitted.at(-1)[1].text, /^\[en\] Você não tem o que oferecer/, "an English player's toast goes through the translation");
 });
 
-test("the menu comes back after the petting, with the trust it has now; at a hundred it offers Montar and Mandar seguir and no more food", () => {
+test("the menu comes back after the petting, with the trust it has now; at a hundred it offers Montar and no more food", () => {
     const sut = load({ randomValue: 0.9 });
     sut.tick();
     const [horse] = sut.wild();
@@ -506,10 +503,9 @@ test("the menu comes back after the petting, with the trust it has now; at a hun
     assert.deepEqual(plain(page.options.map((o) => [o.id, o.text, o.enabled])), [
         ["feed", "Oferecer comida", false],
         ["mount", "Montar", true],
-        ["follow", "Mandar seguir", true],
         ["leave", "Sair", true],
     ]);
-    assert.match(sut.state.chat.at(-1), /ele confia em você agora\. Monte, ou mande-o seguir\./);
+    assert.match(sut.state.chat.at(-1), /ele confia em você agora\. Monte nele\./);
     assert.equal(sut.api.feed(hans, horse, now + 91_000), "", "no more food is taken once it trusts");
     assert.equal(sut.state.bags.get(hans.id).find((row) => row.item === CARROT).amount, 5, "twenty carrots in all");
 });
@@ -526,16 +522,16 @@ function trusting(options = {}) {
     return { sut, horse, hans };
 }
 
-test("Mandar seguir makes the horse theirs, unlocked, with its own name back, and sends it after them; its place has another horse hours later", () => {
+test("Montar makes the horse theirs, unlocked, with its own name back; its place has another horse hours later", () => {
     const { sut, horse, hans } = trusting();
     const place = sut.api.nearestWild(hans, 1)[0].id;
     sut.state.askExtras[0](hans, horse);
-    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[0].session, hans, "follow");
+    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[0].session, hans, "mount");
     assert.deepEqual(plain(sut.state.given), [[horse.id, hans.id]], "given to the farmer: horses.ts files it, and it is in their Animais");
     assert.equal(horse.name, "", "the breed's own name, for them to change");
     assert.equal(horse.gearLocked, false);
     assert.equal(horse.destroyWithOwner, false);
-    assert.deepEqual(plain(sut.state.follows), [[horse.id, hans.id]]);
+    assert.deepEqual(hans.mounts, [horse.id], "and they are in its saddle");
     assert.equal(sut.api.isWild(horse), false, "no longer wild");
     assert.ok(sut.state.chat.some((line) => /O cavalo agora é seu: veja em Animais \(F2\) para dar um nome\. Ele já vem com sela, rédeas e ferraduras simples\./.test(line)));
     assert.deepEqual(plain(sut.state.gearCalls), ["horse_common02"], "one of the game's plain sets, put on");
@@ -555,14 +551,12 @@ test("Mandar seguir makes the horse theirs, unlocked, with its own name back, an
     assert.deepEqual(saved.slots[place].bonds, {}, "and nobody has won this one yet");
 });
 
-test("Montar makes it theirs and puts them in its saddle by the one climb the menu lets through", () => {
+test("Montar makes it theirs and puts them in its saddle; nothing is sent to follow, since the order is gone (2026-11-09)", () => {
     const { sut, horse, hans } = trusting();
     sut.state.askExtras[0](hans, horse);
     sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[0].session, hans, "mount");
     assert.deepEqual(plain(sut.state.given), [[horse.id, hans.id]]);
-    assert.deepEqual(plain(sut.state.climbs), [[hans.id, horse.id]], "the climb is let through for them");
     assert.deepEqual(hans.mounts, [horse.id]);
-    assert.deepEqual(plain(sut.state.follows), []);
 });
 
 test("a horse that does not trust them yet is not given, whatever the menu is asked; the others' trust does not count", () => {
@@ -570,20 +564,20 @@ test("a horse that does not trust them yet is not given, whatever the menu is as
     sut.tick();
     const [horse] = sut.wild();
     const hans = sut.player("hans", { at: { x: horse.position.x + 2, y: horse.position.y, z: 100 } });
-    assert.equal(sut.api.tame(hans, horse, "follow", T0), false);
+    assert.equal(sut.api.tame(hans, horse, T0), false);
     assert.match(sut.state.chat.at(-1), /Ele ainda não confia em você o bastante\./);
     assert.deepEqual(plain(sut.state.given ?? []), []);
     const greta = sut.player("greta", { at: { x: horse.position.x + 2, y: horse.position.y, z: 100 } });
     sut.api.setTrustNearest(greta, 100);
-    assert.equal(sut.api.tame(hans, horse, "mount", T0), false, "the horse trusts Greta, not Hans");
-    assert.equal(sut.api.tame(greta, horse, "mount", T0), true);
+    assert.equal(sut.api.tame(hans, horse, T0), false, "the horse trusts Greta, not Hans");
+    assert.equal(sut.api.tame(greta, horse, T0), true);
 });
 
 test("the menu's choices are checked again when made: a horse that is gone or far is not fed or taken", () => {
     const { sut, horse, hans } = trusting();
     sut.state.askExtras[0](hans, horse);
     hans.position = { x: horse.position.x + 40, y: horse.position.y, z: 100 };
-    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[0].session, hans, "follow");
+    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[0].session, hans, "mount");
     assert.deepEqual(plain(sut.state.given ?? []), [], "too far");
     assert.match(sut.state.chat.at(-1), /Você se afastou demais do cavalo\./);
     hans.position = { x: horse.position.x + 2, y: horse.position.y, z: 100 };
@@ -593,7 +587,7 @@ test("the menu's choices are checked again when made: a horse that is gone or fa
     // Another player's choice in the same session number is nobody's.
     sut.state.askExtras[0](hans, horse);
     const stranger = sut.player("stranger");
-    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[2].session, stranger, "follow");
+    sut.state.handlers.get("dialogueChoice")[0](sut.state.opened[2].session, stranger, "mount");
     assert.deepEqual(plain(sut.state.given ?? []), []);
 });
 
@@ -712,7 +706,7 @@ test("the plain tack is one of the generic sets, whichever the server has; else 
     raised.state.presets.splice(0, raised.state.presets.length, "horse_common01");
     raised.state.gearFails = false;
     raised.api.setTrustNearest(farmer, 100);
-    assert.equal(raised.api.tame(farmer, wild, "follow", T0), true);
+    assert.equal(raised.api.tame(farmer, wild, T0), true);
     assert.deepEqual(plain(raised.state.gearCalls), ["horse_common01"]);
 });
 
@@ -765,7 +759,7 @@ test("trust that is not kept up fades: nothing for twenty minutes after a feedin
     assert.match(sut.api.menuPageFor(hans, horse, now).line, /Confiança ■■□□□□□□□□ 24\/100/);
     sut.state.clock.now = now;
     assert.equal(Math.round(sut.api.nearestWild(hans, 1)[0].trust), 24);
-    assert.equal(sut.api.tame(hans, horse, "mount", now), false, "faded trust is not a tamed horse");
+    assert.equal(sut.api.tame(hans, horse, now), false, "faded trust is not a tamed horse");
 
     // A feeding starts from what is left, and starts the clock again.
     sut.api.feed(hans, horse, now, () => 0.99);
@@ -809,7 +803,6 @@ test("the menu has a row for each kind of treat in the bag, the best first, and 
         [`feed:${TREAT_ORDER.indexOf(PEAR)}`, "Oferecer pera", true],
         [`feed:${TREAT_ORDER.indexOf(BREAD)}`, "Oferecer pão", true],
         ["mount", "Montar (ele ainda não confia)", false],
-        ["follow", "Mandar seguir (ele ainda não confia)", false],
         ["leave", "Sair", true],
     ]);
 
@@ -874,4 +867,100 @@ test("a refused treat starts the wait of its own kind, not of the others; a bond
     assert.equal(sut.api.waitFor(undefined, APPLE, T0), 0);
     assert.equal(sut.api.waitFor({ fedAt: 0, fed: {} }, APPLE, T0), 0);
     assert.match(sut.api.feed(hans, horse, T0 + 21_000, () => 0.99), /aceita a maçã/, "after the gap the apple is ready though the carrot was refused a moment ago");
+});
+
+// The breeds are not alike, and the tamer grows (wild-horses.ts, 2026-11-04: "à medida que o domador vai ficando mais forte deve ser mais fácil também domar cavalos mais difíceis").
+
+test("each breed has a hardness, 0 to 3; one the table does not know is of good stock; every breed the herds draw from has one", () => {
+    const { api } = load();
+    assert.equal(api.hardnessOf("pebbles"), 0);
+    assert.equal(api.hardnessOf("tarant"), 1);
+    assert.equal(api.hardnessOf("napoli"), 2);
+    assert.equal(api.hardnessOf("kincsem"), 3);
+    assert.equal(api.hardnessOf("never_heard_of_it"), 1);
+    assert.equal(Object.keys(api.BREED_HARDNESS).length, 24, "the 24 breeds a wild horse may be");
+    assert.deepEqual(Array.from(api.HARDNESS_WORDS), ["comum", "de boa linhagem", "nobre", "lendário"]);
+});
+
+test("a tamer's skill is their riding, 5 to 30, and 5 when the game has not said", () => {
+    const { api } = load();
+    assert.equal(api.tamerLevel({}), 5);
+    assert.equal(api.tamerLevel({ getTrack: () => null }), 5);
+    assert.equal(api.tamerLevel({ getTrack: (track) => (track === "horse_riding" ? { level: 18 } : { level: 3 }) }), 18);
+    assert.equal(api.tamerLevel({ getTrack: () => ({ level: 99 }) }), 30);
+    assert.equal(api.tamerLevel({ getTrack: () => { throw new Error("gone"); } }), 5);
+    assert.deepEqual([5, 17.5, 30, 1, 99].map((level) => api.skillOf(level)), [0, 0.5, 1, 0, 1]);
+});
+
+test("a harder breed is harder for a beginner, and as the skill rises it closes the gap: at the top a legendary horse is won faster than an ordinary one was by a beginner", () => {
+    const { api } = load();
+    assert.equal(api.easeOf(0, 5), 1, "an ordinary horse for a beginner is the measure");
+    const beginner = [0, 1, 2, 3].map((hardness) => api.easeOf(hardness, 5));
+    assert.ok(beginner[0] > beginner[1] && beginner[1] > beginner[2] && beginner[2] > beginner[3], "harder breeds are harder");
+    assert.ok(Math.abs(beginner[3] - 1 / 2.6) < 1e-9, "a legendary horse gives a beginner 1/2.6 of the trust");
+    for (const hardness of [0, 1, 2, 3]) {
+        let before = 0;
+        for (const level of [5, 10, 15, 20, 25, 30]) {
+            const ease = api.easeOf(hardness, level);
+            assert.ok(ease > before, `hardness ${hardness}: the more skill, the easier (level ${level})`);
+            before = ease;
+        }
+    }
+    assert.ok(api.easeOf(3, 30) > 1.3, "at the top, even the legendary horse is easier than an ordinary one was to a beginner");
+    // The gap between the hardest and the easiest breed is smaller the stronger the tamer.
+    assert.ok(api.easeOf(0, 5) / api.easeOf(3, 5) > api.easeOf(0, 17) / api.easeOf(3, 17));
+    assert.equal(api.easeOf(0, 30), api.easeOf(3, 30), "and gone at the top");
+    assert.equal(api.effortWord(1.35), "fácil para você");
+    assert.equal(api.effortWord(1), "no seu alcance");
+    assert.equal(api.effortWord(0.6), "difícil para você");
+    assert.equal(api.effortWord(0.38), "muito difícil para você");
+});
+
+test("a harder breed turns a treat down more often, a stronger tamer less; the defaults are what it always was", () => {
+    const { api } = load();
+    assert.equal(api.refusalChance(0), 0.35, "an ordinary horse, a beginner: unchanged");
+    assert.equal(api.refusalChance(50), 0);
+    assert.ok(Math.abs(api.refusalChance(0, 3, 5) - 0.35 * 2.5) < 1e-9, "a legendary horse: two and a half times");
+    assert.ok(api.refusalChance(0, 3, 30) < api.refusalChance(0, 3, 5), "the skill takes refusals away");
+    assert.ok(Math.abs(api.refusalChance(0, 0, 30) - 0.35 * 0.4) < 1e-9, "down to two fifths at the top");
+    assert.ok(api.refusalChance(0, 3, 5) <= 0.9, "never above nine in ten");
+    assert.ok(api.refusalChance(25, 3, 5) < api.refusalChance(0, 3, 5), "and it still fades as the trust grows");
+});
+
+test("a feeding gives the trust of the treat times how easy this breed is for this tamer: the same horse is won faster by a master than by a beginner", () => {
+    const sut = load();
+    sut.tick();
+    const [horse] = sut.wild();
+    const hardness = sut.api.hardnessOf(horse.soul);
+    const near = { x: horse.position.x + 2, y: horse.position.y, z: 100 };
+    const beginner = sut.player("hans", { at: near, bag: [{ item: CARROT, amount: 5 }] });
+    const master = sut.player("greta", { at: near, bag: [{ item: CARROT, amount: 5 }] });
+    master.getTrack = () => ({ level: 30 });
+    sut.api.feed(beginner, horse, T0, () => 0.99);
+    sut.api.feed(master, horse, T0, () => 0.99);
+    const saved = JSON.parse(sut.disk.files.get("playerdata/wild-horses.json"));
+    const slot = Object.values(saved.slots).find((one) => one.bonds.hans !== undefined);
+    assert.ok(Math.abs(slot.bonds.hans.trust - 5 * sut.api.easeOf(hardness, 5)) < 1e-6, `a beginner: a carrot's 5 times the ease of a hardness-${hardness} breed`);
+    assert.ok(Math.abs(slot.bonds.greta.trust - 5 * sut.api.easeOf(hardness, 30)) < 1e-6, "the master: the same carrot, worth more");
+    assert.ok(slot.bonds.greta.trust > slot.bonds.hans.trust || hardness === 0 && slot.bonds.greta.trust > slot.bonds.hans.trust, "and so more than the beginner got");
+    assert.match(sut.state.logs.filter((line) => /Greta deu cenoura/.test(line)).at(-1), /equitação 30, facilidade 1\.35|equitação 30, facilidade 1\.\d\d/);
+});
+
+test("the menu says what the horse is to this tamer: nothing of an ordinary horse that is their match, its stock and how hard it is otherwise", () => {
+    const sut = load();
+    sut.tick();
+    const [horse] = sut.wild();
+    const near = { x: horse.position.x + 2, y: horse.position.y, z: 100 };
+    const beginner = sut.player("hans", { at: near });
+    const master = sut.player("greta", { at: near });
+    master.getTrack = () => ({ level: 30 });
+    const hardness = sut.api.hardnessOf(horse.soul);
+    const first = sut.api.menuPageFor(beginner, horse, T0).line;
+    const second = sut.api.menuPageFor(master, horse, T0).line;
+    if (hardness === 0) {
+        assert.match(first, /^Cavalo selvagem: arisco\./, "an ordinary horse for a beginner: nothing said");
+    } else {
+        assert.match(first, new RegExp(`^Cavalo selvagem \(${sut.api.HARDNESS_WORDS[hardness]}, (difícil|muito difícil) para você\): arisco\.`));
+    }
+    assert.match(second, /\(.*fácil para você\)/, "to a master every breed is easy");
 });

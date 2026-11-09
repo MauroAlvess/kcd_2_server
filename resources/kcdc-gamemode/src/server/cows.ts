@@ -16,7 +16,8 @@ import { isWorking } from "./craft.js";
 import { isFarming } from "./farm.js";
 import { isGathering } from "./gather.js";
 import { mayCraft } from "./guild-crafts.js";
-import { paid } from "./profession-xp.js";
+import { livestockWork } from "./livestock-work.js";
+import { award, paid } from "./profession-xp.js";
 import { allowedTo, EDGE_M, reachTo } from "./reach.js";
 import { lowerTorch } from "./torch-down.js";
 
@@ -25,6 +26,7 @@ const NEAR = `${RESOURCE}:cow.near`;
 const MILK = `${RESOURCE}:cow.milk`;
 const STOP = `${RESOURCE}:cow.stop`;
 const STATE = `${RESOURCE}:cow.state`;
+const WORK = "ordenha";
 
 /** The game's class of a milk cow, and the item it gives (the one the kitchen's recipes take). */
 export const COW = "CattleCow";
@@ -101,7 +103,7 @@ export function whyNotMilk(player: Player, cowId: unknown, now: number = Date.no
         return "Agora não dá.";
     }
     if (!mayCraft(player, "horta")) {
-        return "Ordenhar é ofício dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.";
+        return "Ordenhar é ofício dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.";
     }
     if (typeof cowId !== "number") {
         return "Escolha uma vaca.";
@@ -164,6 +166,7 @@ export function stopMilking(player: Player, message = ""): boolean {
         clearTimeout(job.timer);
     }
     jobs.delete(player.id);
+    livestockWork.end(player.id);
     animalPopulation.release(job.cow);
     stopPlaying(player);
     emitState(player, false);
@@ -175,7 +178,7 @@ export function stopMilking(player: Player, message = ""): boolean {
 
 /** The farmer's E at a cow: the animation, and the milk after `seconds`. Returns "" when it began, else why not. */
 export function startMilking(player: Player, cowId: unknown, now: number = Date.now()): string {
-    if (jobs.has(player.id) || isFarming(player) || isWorking(player) || isGathering(player)) {
+    if (jobs.has(player.id) || livestockWork.of(player.id) !== "" || isFarming(player) || isWorking(player) || isGathering(player)) {
         say(player, "Você já está trabalhando em algo.");
         return "ocupado";
     }
@@ -187,6 +190,7 @@ export function startMilking(player: Player, cowId: unknown, now: number = Date.
     const here = player.position;
     const job: Job = { cow: cowId as number, at: { x: here.x, y: here.y, z: here.z }, timer: null };
     jobs.set(player.id, job);
+    livestockWork.begin(player.id, WORK);
     // The cow stands still until the milking is over or given up (user, 2026-10-27: "quando ordenhar uma vaca ela deve ficar parada e só voltar a andar quando terminar, ou andar e cancelar a ordenha").
     animalPopulation.hold(job.cow, holdMs());
     play(player);
@@ -209,6 +213,7 @@ export function finishMilking(player: Player, job: Job, now: number = Date.now()
         return false;
     }
     jobs.delete(player.id);
+    livestockWork.end(player.id);
     animalPopulation.release(job.cow);
     stopPlaying(player);
     emitState(player, false);
@@ -228,7 +233,7 @@ export function finishMilking(player: Player, job: Job, now: number = Date.now()
         return false;
     }
     milkedAt.set(job.cow, now);
-    const xp = paid(milkSettings.xp);
+    const xp = award(player.steamId, milkSettings.track, paid(milkSettings.xp, "ordenha"));
     try {
         player.addXp(milkSettings.track, xp);
     } catch (error: unknown) {

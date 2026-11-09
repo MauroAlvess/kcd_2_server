@@ -15,12 +15,12 @@ const run = (file, requires = {}) => {
 
 // The list of regions is the real one: read out of the source, as plain literals.
 const source = fs.readFileSync(path.join(__dirname, "../src/server/properties.ts"), "utf8");
-const from = source.indexOf("export const REGIONS: readonly Region[] = [");
+const from = source.indexOf("export const KUTTENBERG_REGIONS: readonly Region[] = [");
 const REGIONS = vm.runInNewContext("(" + source.slice(source.indexOf("[", from), source.indexOf("\n];", from) + 2) + ")");
 
 function load() {
     const data = run("map-places-data.js");
-    const places = run("map-places.js", { "./map-places-data.js": data });
+    const places = run("map-places.js", { "./level.js": { onKuttenberg: () => true }, "./map-places-data-trosecko.js": { MAP_PLACE_DATA_TROSECKO: [] }, "./map-places-data.js": data });
     const hints = run("place-hints.js", { "./properties.js": { REGIONS }, "./map-places.js": places });
     return { data, places, hints };
 }

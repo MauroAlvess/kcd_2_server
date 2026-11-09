@@ -145,6 +145,11 @@ export class ThirstPace {
     readonly kept = new Map<string, number>();
     private readonly dirty = new Set<string>();
     buffs: Buffing = { thirsty: "", parched: "" };
+    /**
+     * Bodies the thirst leaves alone for now, neither dressed in its effects nor hurt by it (a duel keeps every effect off the body,
+     * `duel.ts`, 2026-11-01); the clock goes on, and the effects come back at the first beat after.
+     */
+    suspended: (player: { readonly id: number }) => boolean = () => false;
     private serial = 0;
 
     constructor(
@@ -220,6 +225,30 @@ export class ThirstPace {
         return value;
     }
 
+    /**
+     * Work that is paid with the body's own water (2026-10-30, the thread the Tabernarii and the Alchemistae wet with their mouths: "quanto mais ele faz mais sede ele fica"): the measure
+     * drops by `amount`, the buffs put right at once. Nothing is paid while thirst is off.
+     */
+    spend(player: Thirsty, amount: number): number {
+        if (!this.enabled || !(amount > 0)) {
+            return this.value(player);
+        }
+        const value = this.set(player, this.value(player) - amount);
+        this.settle(player);
+        return value;
+    }
+
+    /**
+     * How many pieces of work that cost `each` points of water the body can pay now, of `most` at most: never to under `PARCHED` (the game's Desidratação is for whoever drinks too
+     * little, not for whoever works), and all of them while thirst is off.
+     */
+    pieces(player: { readonly id: number }, each: number, most: number): number {
+        if (!this.enabled || !(each > 0)) {
+            return most;
+        }
+        return Math.max(0, Math.min(most, Math.floor((this.value(player) - PARCHED) / each)));
+    }
+
     /** A drink of the game's tables was drunk: what it is, how much it quenches. Zero for what is no drink. */
     consumed(player: Thirsty, item: string): number {
         const drink = DRINKS[item.toLowerCase()];
@@ -266,6 +295,9 @@ export class ThirstPace {
 
     /** Puts the buff of the level on, and the other off; asked again each tick for a body that lost it (a death, a new body). */
     private dress(player: Thirsty, level: Level, force: boolean): void {
+        if (this.suspended(player)) {
+            return;
+        }
         const wanted = level === 1 ? this.buffs.thirsty : level === 2 ? this.buffs.parched : "";
         const other = level === 1 ? this.buffs.parched : level === 2 ? this.buffs.thirsty : "";
         try {
@@ -306,7 +338,7 @@ export class ThirstPace {
             this.push(player, true);
             this.settle(player);
             const value = this.value(player);
-            if (value <= 0 && player.maxHealth > 0 && Number.isFinite(player.health)) {
+            if (value <= 0 && player.maxHealth > 0 && Number.isFinite(player.health) && !this.suspended(player)) {
                 const floor = player.maxHealth * FAILING.floor;
                 if (player.health > floor) {
                     player.setHealth(Math.max(floor, player.health - player.maxHealth * FAILING.share));

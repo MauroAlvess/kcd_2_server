@@ -2,23 +2,65 @@
 
 Lista de todos os NPCs que o gamemode `kcdc-gamemode` mantém, gerada a partir do código, dos dados e do log de início do servidor (17/10/2026; vilas e cocheiros atualizados em 21/10/2026).
 
+> **Atualização de 31/10/2026.** Voltam os vendedores, de outro jeito: **um comerciante por guilda em cada cidade** (veja "Comerciantes de guilda", abaixo). Os comerciantes antigos de Suchdol, das vilas, das fogueiras e dos banhos continuam desligados.
+
+> **Atualização de 29/10/2026.** Os NPCs **vendedores** (os comerciantes de Suchdol, o ferreiro, o boticário e o taberneiro das vilas, os mascates e os banhistas) e os **mestres de habilidade** foram **removidos** a pedido do dono do servidor: compra e venda são entre jogadores, e as habilidades se aprendem jogando. Os interruptores `vendorSettings.enabled` (`src/server/vendors.ts`) e `teacherSettings.enabled` (`src/server/teachers.ts`) ficam em `false`; o código e os dados continuam no projeto, e as seções abaixo descrevem como eles eram. Continuam: cocheiros, barbeiros, bandidos e animais.
+
 ## Resumo
 
 | Grupo | Quantos | Onde / como vivem |
 | --- | ---: | --- |
-| Comerciantes de Suchdol | 5 | cada um na sua loja, à noite em casa (entram e saem pelo degrau de fora da porta) |
-| Ferreiro, boticário e taberneiro das vilas | 27 | Malešov, Raborsch, Wysoka, Bylany, Bohunowitz, Minas, Kuttenberg, Miskowitz, Pschitoky: fora de uma casa livre da vila, de dia pela vila e à noite na cama (sem casa livre, ficam no lugar) |
+| ~~Comerciantes de Suchdol~~ (removidos) | 5 | cada um na sua loja, à noite em casa (entram e saem pelo degrau de fora da porta) |
+| ~~Ferreiro, boticário e taberneiro das vilas~~ (removidos) | 27 | Malešov, Raborsch, Wysoka, Bylany, Bohunowitz, Minas, Kuttenberg, Miskowitz, Pschitoky: fora de uma casa livre da vila, de dia pela vila e à noite na cama (sem casa livre, ficam no lugar) |
+| **Comerciantes de guilda** | 128 (8 em cada uma das 16 cidades) | parados onde o jogo põe o ofício; só de dia (de noite somem) |
 | Cocheiros da viagem rápida | 13 | ao lado da carroça de cada parada; de noite vão dormir na casa mais perto |
-| Mascates (e bufarinheiras) | 13 | uma em cada fogueira de beira de estrada |
-| Banhistas | 8 | nos banhos de Suchdol, Zikmundovo, Minas, Kuttenberg e Malešov; à noite entram pela porta de prédio mais perto (ou somem onde estão, sem ninguém vendo) |
+| ~~Mascates (e bufarinheiras)~~ (removidos) | 13 | uma em cada fogueira de beira de estrada |
+| ~~Banhistas~~ (removidos) | 8 | nos banhos de Suchdol, Zikmundovo, Minas, Kuttenberg e Malešov; à noite entram pela porta de prédio mais perto (ou somem onde estão, sem ninguém vendo) |
 | Barbeiros | 5 | um em cada vila grande, com cadeira |
-| Mestres de habilidade | 38 | onde o jogo os põe; ensinam por moedas |
+| ~~Mestres de habilidade~~ (removidos) | 38 | onde o jogo os põe; ensinam por moedas |
 | Bandidos de acampamento | 25 em 5 acampamentos | os do nível, com baús de saque |
 | Bandidos de esconderijo | 53 em 14 esconderijos | na mata, a mais de 300 m de qualquer lugar com gente |
 | Salteadores de estrada | até 4 bandos de cada vez | aparecem nas estradas diante de quem viaja (sem lugar fixo) |
 | Animais selvagens e de fazenda | até 700 corpos ao mesmo tempo | 4796 vagas nos pontos do nível; só existem perto de jogadores |
 
-Fixos (lojas, vilas, mascates, banhos, barbeiros, mestres e cocheiros): **109**. Com os bandidos de lugar fixo, **187**. Os animais vêm e vão com os jogadores.
+Fixos hoje (cocheiros e barbeiros): **18** (eram 109 com as lojas, vilas, mascates, banhos e mestres). Com os bandidos de lugar fixo, **96** (eram 187). Os animais vêm e vão com os jogadores.
+
+## Comerciantes de guilda
+
+Pedido de 31/10/2026: *um NPC por guilda, parado onde devia ficar no jogo; E abre o menu Comprar/Vender, Aprender Guilda Ofício e Sair*. São **oito comerciantes em cada uma das 16 cidades e terras** da Cidadania (`src/server/guild-vendors.ts`, `guild-shops.ts`, lugares em `guild-posts-data.ts`, feito por `tools/make-guild-posts.py`). Ficam em pé, sem rotina (nada de passeio nem de cama), e **só existem de dia**: o dia do mundo dura 40 minutos reais e a noite outros 40; ao anoitecer o corpo some e de manhã volta. Cada corpo existe só enquanto há um jogador a menos de 110 m, e ninguém os fere; um que cai no rio ou fica preso é refeito no lugar (o guarda de `npc-keeper.ts`).
+
+**Onde ficam.** Cada um no lugar que o próprio jogo dá ao ofício: o ferreiro na loja do ferreiro (ou na ferraria), o taberneiro no balcão da taverna (ou junto do estalajadeiro do nível), o alquimista na mesa de alquimia ou na casa do boticário, o caçador junto do curtidor ou do açougueiro, o coletor nos serrados e minas, o agricultor nas lavouras, o domador onde o nível vende cavalos, o artesão no alfaiate, no sapateiro ou em loja de feira. Em Suchdol, os cinco primeiros ficam onde estavam os vendedores antigos. **79 dos 128** têm lugar do jogo; os **49 restantes** (vilas pequenas, sem aquele ofício no mapa) ficam em volta do meio da vila, para o dono mover com `/mercador aqui <id>`.
+
+**No chão** (01/11/2026: *ficam no ar voando*): quando um jogador chega a 40 m, o jogo dele diz o que há sob os pés do comerciante, e um comerciante no ar (mais de 0,3 m) ou afundado é posto no chão; o log diz `guild-vendors: ... estava N m acima do chão ...: posto no chão`. Os 42 que ainda estão na roda em volta do meio da vila (`ring`, na contagem de 01/11/2026) ficam onde a altura foi estimada: o melhor é o administrador pô-los no lugar com `/mercador aqui <número>`.
+
+**O menu (E).** *Comprar/Vender*, *Aprender Guilda: <ofício>*, *Tirar dúvidas* e *Sair*.
+
+**Tirar dúvidas** (01/11/2026: *conversas possíveis com eles para tirar dúvidas, exemplo: o que eu posso fazer sendo um ferreiro*): seis perguntas, três do ofício (o que se faz nele, onde se trabalha e como começar, de onde vêm os materiais; no Domador, onde ficam os cavalos selvagens e que comida aceitam) e três de todo comerciante (como subir de nível, o que ele compra e vende, como entrar na guilda). Respostas longas vêm em partes, com *Continuar*; depois *Outra pergunta*, *Voltar* ou *Sair*. As respostas estão em `src/server/vendor-talk.ts`: mude junto com o ofício.
+
+| Guilda | Nome | Vende (só o básico) | Compra |
+| --- | --- | --- | --- |
+| Ferreiro | Mestre Ferreiro | kits de reparo (armadura, arma, arco), sucata, ferro, aço, cobre, material de fixação, carvão | o que ele vende, o que a forja faz (armas, arcos, bestas, ferraduras, peças de espada, barra de prata) |
+| Caçador | Mestre Caçador | peles (vaca, porco, ovelha, veado) e flechas | peles, carne, peixe, penas, presas, o que o defumador faz |
+| Taberneiro | Taberneiro | farinha, malte, lúpulo, ovos, água, leite, sal, mel, banha (a banha também vem do porco abatido por caçador) | o que ele vende, bebidas e o que o fogo faz |
+| Alquimista | Boticário | flores (camomila, dente-de-leão, calêndula, hipérico, hortelã, sálvia, valeriana, cardo, confrei, urtiga) e água potável | **todas as ervas**, poções, o que o secador faz |
+| Artesão | Costureira | linha, pano, peles | linha, pano e o que a costura faz (roupas, joias) |
+| Coletor | Mestre Coletor | machado e picareta | o machado e a picareta, lenha, madeira de arco e exótica, minério de prata, enxofre, salitre, jaspe, pó de esmalte, teia (**não compra lasca de pedra**) |
+| Agricultor | Agricultor | sementes das lavouras comuns (legumes, grãos, linho) | as colheitas (menos as ervas), as sementes, o que se beneficia na horta |
+| Domador | Mestre Domador | **os três cavalos mais fracos do jogo, a 200 moedas cada** (Pebbles, o cavalo comum e Bitterklee, de sela e rédea simples; **um por jogador**, outro só quando esse morrer) e o que um cavalo come | comida de cavalo e ferraduras |
+
+**O dinheiro.** Cada jogador tem **300 moedas com cada ofício** (31/10/2026: *o limite de 300 deve valer para todos os NPCs do mesmo tipo no mapa, isso evita o jogador farmar infinito*): os ferreiros de todas as cidades vendem a você, juntos, até 300 moedas de mercadoria e pagam, juntos, até 300 moedas por coisa sua; o que você comprou ou vendeu no ferreiro de Suchdol já saiu do ferreiro de Kuttenberg. Os caçadores têm a sua bolsa, os taberneiros a deles, e assim por diante. Outro jogador esvaziar o comerciante não muda o seu valor. Tudo volta ao normal um dia depois do primeiro negócio (`playerdata/guild-shops.json`, uma linha para cada jogador e ofício; o arquivo antigo, com uma linha por comerciante, é juntado na subida: vale o que sobrou de menos). A tela de compra é a do próprio jogo, numa loja feita só para aquele jogador. Ao abrir a tela o comerciante diz no chat quanto ainda compra **de você**, que a conta é só sua e vale para todos os comerciantes do ofício, e quando enche de novo (01/11/2026: um jogador achou que os valores *estavam todos zerados e não eram individuais*; em `guild-shops.json` não há conta partilhada entre jogadores: cada uma é de um jogador e um ofício, e a que ele via era a dele, gasta num outro comerciante do mesmo ofício). Exemplo: *Mestre Ferreiro: ainda compra até 200 moedas de você. A conta é só sua e vale para todos os vendedores desse ofício no reino; enche de novo em 19 h.*
+
+**Os preços** são **pela raridade do item** (Boêmia, 1403: bem mais baixos que os do jogo): comum 2 moedas, incomum 6, raro 18, muito raro 50, excepcional 150; o comerciante paga **40%** disso.
+
+**Um preço só para cada coisa, em todo o reino (03/11/2026:** *"padronizar ... igual valor de venda de couro do NPC e o valor de compra de outro NPC, para evitar jogadores quebrarem a economia"***).** Até então cada comerciante dava preço do seu jeito, e dava para comprar num e vender noutro com lucro: a **pele de vaca** saía a 6 no Caçador e na Costureira e o Boticário pagava 7,2 por ela; o **cobre** saía a 6 no Ferreiro e o Coletor pagava 7,2; o **sal**, o **linho** e o **lúpulo** saíam a 2 e outro comerciante pagava 2,4. E o que os ofícios fazem era comprado pelo valor do jogo, três a dez vezes o do reino: o Boticário pagava **20 moedas** por uma poção *do Henry* feita com uma moeda de ervas, e o Ferreiro e o Caçador **60** por qualquer espada, arco ou besta (também as dos bandidos). Agora (`makePriceBook` em `src/server/guild-shops.ts`):
+- **O que um comerciante vende** custa a raridade, a mesma em todos que vendem (a pele de vaca é incomum em todo lugar).
+- **O que os ofícios fazem** vale o que entra nele: o preço das coisas cruas da receita mais barata (o carvão é a sua lenha, o aço o seu ferro e carvão), mais **5% por nível** da receita (o ofício vale alguma coisa: no nível 10 é 1,5 vez, no 30 é 2,5 vezes), nunca mais que a raridade pelo valor do jogo. O comerciante paga 40% disso, então paga por uma peça **no máximo o que os materiais custam na prateleira**: comprar o material para fazer e vender de volta nunca dá lucro; fazer com o que se colheu, cortou, plantou ou caçou dá. Exemplos: Aqua Vitalis do Henry 20 → **8**; a fraca 7,2 → **4**; espada militar 60 → **15,7**; espada de caça 20 → **7,9**; arco da vila 20 → **5,3**; balestra de caça antiga 60 → **13,5**; carne de cervo defumada 2,4 → **2,6**. Uma coisa que o comerciante vende mas que sai barata da receita é comprada pelo valor da receita: a linha (3 carretéis de um linho) por 0,3, a água fervida por 0,2, o carvão por 0,6.
+- **Equipamento que nenhum ofício faz** (o elmo de um bandido, uma arma de missão) vale no máximo como coisa **rara** (o comerciante paga até 7,2).
+- **Um comprador só:** cada coisa é comprada pelos comerciantes de **uma guilda**: quem vende compra de volta; senão as **ervas** são do Boticário, o que a **horta** dá e beneficia é do Agricultor, o que as **árvores e pedras** dão é do Coletor, o que uma **bancada** faz é da guilda dela (forja → Ferreiro, costura → Costureira, alquimia e secador → Boticário, defumador → Caçador, fogo → Taberneiro), e o resto do primeiro comerciante cuja lista o nomeia. Antes, **84 coisas** eram compradas por duas ou três guildas, e a mesma mercadoria enchia várias bolsas de 300 moedas por dia (no último dia antes da mudança, contas tiraram de 1.000 a 1.234 moedas de cinco guildas). O Domador compra agora só o que ele vende (pera, beterraba e nabo); ferraduras são do Ferreiro e cenoura e maçã do Agricultor.
+- A **lasca de pedra** não é mais comprada por ninguém: é o "nada" da pedra (um quarto de cada batida) e, a 0,8 moeda, era dinheiro.
+- O log do início diz `guild-vendors: um preço por coisa em todo o reino, e uma guilda que compra cada uma (ferreiro N, cacador N, ... tipos)` na primeira tela de compra aberta.
+
+**Aprender Guilda.** O comerciante ensina o seu ofício, numa conversa, **só a quem é cidadão da vila onde ele vive**. **O primeiro ofício que um jogador aprende é de graça; cada outro custa 100 moedas** (um ofício aprendido de novo também), sem usar a troca grátis do painel. Quem aprende ganha o título do ofício e o kit da guilda. Desde 09/11/2026 não há mais o Escrivão: quem cedia a guilda pelo painel (o escrivão, o mestre de ofício e o senhor das terras) deixou de poder, e o jogador escolhe a guilda sozinho na seção **Guildas** do painel. O administrador aprende sem pagar.
 
 ## Comerciantes de Suchdol
 
@@ -169,9 +211,22 @@ Esconderijos na mata (escolhidos pelo servidor a cada subida, longe de qualquer 
 | 13 | Esconderijo 13 | 4 | 1017, 963 |
 | 14 | Esconderijo 14 | 4 | 1665, 3321 |
 
-A agressividade é uma escolha da administração (`/bandidos agressividade baixa|media|alta`): quão longe veem, quão forte batem e quanto tempo o acampamento persegue. Eles gritam ao ver alguém, ao dar o alarme e ao levar um golpe.
+A agressividade é uma escolha da administração (`/bandidos agressividade baixa|media|alta`): quão longe veem, quão forte batem, quantos lutam de perto por vez, até onde se ouve o alarme e quanto tempo o acampamento persegue. Eles gritam ao ver alguém, ao dar o alarme e ao levar um golpe.
+
+**O cerco** (2026-10-30: *"eles correram junto e fizeram tudo junto, sem mecânica nem cerco; quase impossível matar só um"*): um acampamento não ataca mais todo de uma vez.
+
+- O alarme só é ouvido por quem está perto de um bandido que já luta (30 m no nível médio, 15 no baixo, 50 no alto) e cada um responde depois de um instante: a reação própria (0,3 a 1,8 s) mais o tempo do grito até ele (8 m por segundo). Quem foi golpeado sabe quem bateu e luta na hora. Atacar um bandido isolado, longe dos outros, não chama o acampamento.
+- Dos bandidos atrás de um jogador, só **um** luta de perto por vez em todos os níveis (desde 02/11; mais um para cada amigo do jogador a até 12 m, até dois). Os arqueiros atiram, **afastados uns dos outros**: quem para a menos de 2,2 m de outro homem dá 3,5 m para o lado e atira de lá (04/11). Os demais **cercam** a 5,5 m do jogador, um de cada lado e depois atrás, chegando por fora (nunca através dele), e **não ficam parados**: de 3,5 a 6 s dão um passo pequeno, um pouco de lado e mais perto, e se viram de novo para ele (04/11).
+- **Turnos de 15 a 25 s** (eram 6 a 10 s até 04/11): acabada a vez, quem estava na frente volta para o cerco e o mais próximo assume. Um bandido com menos de 45% da vida recua e outro assume; quem o jogador encosta (2,5 m) ou quem leva um golpe luta na hora e **segura a posição 6 s depois do último contato**; quem acabou de dar a vez não volta só porque o jogador chegou perto, mas **reage a um golpe novo**. Um ponto do cerco onde o jogo não consegue pôr o bandido o manda para a frente depois de duas recusas.
+- Mais fáceis de derrubar: vida 140 (veteranos 200), golpe ×1,4 no nível médio (×1,0 no baixo, ×1,8 no alto), poção que cura 35% da vida.
 
 ## Animais
+
+**Vendedores de guilda (31/10/2026).** Cada vendedor mostra o nome do ofício sobre a cabeça (Ferreiro, Caçador, Taberneiro, Alquimista, Artesão, Coletor, Agricultor, Domador). Na tela F3 há a seção **NPCs** (título "NON LUSOR PERSONA"): os 128 vendedores por região (um senhorio e as suas terras) e por vila, cada um com o número que `/mercador aqui <número>` pede, o estado (em pé, é noite, sem ninguém), a origem do lugar, a posição e um botão que copia o comando. Busca por vila, ofício ou número; filtro por ofício (`npcListing`, `src/server/guild-vendors.ts`). **Um vendedor desativado (botão *Desativar NPC*) não conta** entre os moradores que a seção Cidadania mostra de cada cidade (01/11/2026), e volta a contar quando é ativado.
+
+**O lorde e a trava (04/11/2026), retirados em 09/11/2026.** *"delete também a tela de npc que um lorde pode ter acesso onde ele consegue desativar npcs, deixando só a tela de npc do admin"*. A seção **NPCs** do **F2** (grupo Reino), onde o lorde ativava e desativava os vendedores de guilda das terras dele, saiu, e com ela o botão **Trancar NPC / Destrancar NPC** do F3, que só existia para manter o lorde de fora, e a recusa que ele lia (*"Este NPC foi trancado por um administrador..."*). Fica a seção **NPCs** do **F3**, só do administrador: os vendedores de guilda, os barbeiros e os cocheiros por região e vila, com o número que `/mercador aqui` pede, o estado, o lugar, a posição, o botão que copia o comando e **Ativar NPC** / **Desativar NPC** (os vendedores de guilda). Desativado, o vendedor **some do mundo** até ser ativado de novo e deixa de contar entre os moradores da vila. Tudo fica em `playerdata/guild-disabled.json` (`off`) e sobrevive a um reinício; um arquivo de antes, com a lista `locked`, é lido sem ela. Código: `src/server/guild-vendors.ts` (`npcListing`), eventos `status.npcs` e `status.npcDisable`, só do administrador.
+
+**Cavalos mortos (31/10/2026).** O corpo de um cavalo que morre, de jogador, selvagem ou do nível, fica no chão **5 minutos** (o tempo de um caçador abatê-lo) e é tirado do mundo (`src/server/horse-corpses.ts`); um que voltou à vida no meio tempo (o do dono que está fora do jogo) fica. Os corpos dos outros animais saem depois de 90 segundos, como antes.
 
 | Animal | Vagas nos pontos do nível |
 | --- | ---: |

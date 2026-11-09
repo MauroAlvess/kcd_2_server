@@ -30,7 +30,7 @@ export type Sensitivity = (typeof SENSITIVITIES)[number];
 
 /**
  * How big the server's pages are drawn, in percent of what fits the screen (user, 2026-10-25: "uma opção de resolução para o jogador poder mudar a
- * resolução da interface"): the panel, the trades, the creator, the notice board, the welcome and the chat (`src/client/ui-scale.ts`).
+ * resolução da interface"): the panel, the trades, the creator, the notice board and the chat (`src/client/ui-scale.ts`).
  */
 export const UI_SCALES = ["80", "90", "100", "110", "125"] as const;
 export type UiScale = (typeof UI_SCALES)[number];
@@ -43,7 +43,7 @@ export interface PlayerOptions {
     readonly ui: UiScale;
 }
 
-export const DEFAULT_OPTIONS: PlayerOptions = { thirdPerson: false, view: "normal", mic: "aberto", sensitivity: "media", ui: "100" };
+export const DEFAULT_OPTIONS: PlayerOptions = { thirdPerson: false, view: "normal", mic: "apertar", sensitivity: "media", ui: "100" };
 
 let cache: Record<string, PlayerOptions> | null = null;
 

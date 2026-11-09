@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="us-ascii"?>
+<database xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="barbora" xsi:noNamespaceSchemaLocation="../database.xsd">
+	<CharacterComponents>
+		<Component Name="Male">
+			<DerivedComponents>
+				<Component Name="Clothing">
+					<DerivedComponents>
+						<Clothing Name="Underwear">
+							<DerivedComponents>
+								<Clothing Name="m_underwear01_m01" HidingGroups=""/>
+								<Clothing Name="prepadeniCaponBreeches" HidingGroups=""/>
+								<Clothing Name="prepadeniHenryBreeches" HidingGroups=""/>
+								<Clothing Name="m_underwear03_m01" HidingGroups=""/>
+								<Clothing Name="m_underwear04_m01" HidingGroups=""/>
+							</DerivedComponents>
+						</Clothing>
+					</DerivedComponents>
+				</Component>
+			</DerivedComponents>
+		</Component>
+	</CharacterComponents>
+</database>

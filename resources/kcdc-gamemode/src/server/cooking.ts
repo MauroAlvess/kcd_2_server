@@ -23,6 +23,7 @@
 import { cookingAnimation, playCooking, stopCooking } from "./cook-animation.js";
 import { COOKED, DRIED, MEATS, SMOKED } from "./cooking-data.js";
 import { mayCraft, refusal } from "./guild-crafts.js";
+import { litForCooking } from "./pot-fires.js";
 import { sendItemUses } from "./item-uses.js";
 import { itemLine } from "./item-names.js";
 import { STATIONS } from "./stations-data.js";
@@ -188,6 +189,10 @@ export function cookAnimated(player: Player, only: string | undefined, done: (te
     if (work.length === 0) {
         done(cook(player, only));
         return;
+    }
+    // The cauldron cooked at burns (2026-11-02, `pot-fires.ts`).
+    if (stationsNear(player.position).includes("fogo")) {
+        litForCooking(player);
     }
     const started = playCooking(player);
     const job: Job = { timer: null };

@@ -19,6 +19,7 @@
 
 import { maybeGesture } from "./idle-gestures.js";
 import { keeperNote, npcKeeper } from "./npc-keeper.js";
+import { speak, turnBackAfterTalk } from "./npc-speech.js";
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -108,14 +109,17 @@ export function clothe(npc: Npc, soul: Soul, seed: string = String(npc.id)): boo
     }
 }
 
-/** A townsperson's body: nobody's quest-giver, nobody's loot. */
-export function townsperson(soul: Soul, name: string, position: Vector3, yaw: number, outfit = ""): Npc {
+/**
+ * A townsperson's body: nobody's quest-giver, nobody's loot. With a `label` the body wears it as its nametag over its head (the guild vendors wear their trade, 2026-10-31); `name` is still
+ * what picks its clothes.
+ */
+export function townsperson(soul: Soul, name: string, position: Vector3, yaw: number, outfit = "", label = ""): Npc {
     const options: Parameters<typeof Npc.create>[0] = {
         soul,
         position,
         rotation: new Vector3(0, 0, yaw),
-        name,
-        nametag: false,
+        name: label !== "" ? label : name,
+        nametag: label !== "",
         interactable: true,
         invulnerable: true,
         lootable: false,
@@ -181,8 +185,10 @@ export function installPosts(label: string, posts: readonly Post[], talk: (playe
     Events.on("npcInteract", (npc, player) => {
         const post = byNpc.get(npc.id);
         if (post !== undefined) {
+            // It turns to the player, and back to its own way when the talk is over (2026-11-02).
             npc.lookAt(player);
             talk(player, post, npc);
+            turnBackAfterTalk(npc, player, post.yaw ?? 0);
         }
     });
 
@@ -376,8 +382,9 @@ export function installPostLife(handle: PostHandle, lines: readonly string[], se
         mode: "about" | "home" | "asleep";
         /** Where it goes in at night; undefined until it is looked for. */
         door?: Vector3 | null;
-        /** Its place on the walkable ground, worked out once. */
+        /** Its place on the walkable ground, worked out once for the spot it was worked out for (`placeFor`): a post moved by an administrator gets its new one. */
         place?: Vector3;
+        placeFor?: string;
         started: number;
     }
     const state = new Map<string, Life>();
@@ -428,6 +435,12 @@ export function installPostLife(handle: PostHandle, lines: readonly string[], se
                 // Fallen into a river, strayed or shut in a house: made again at its place by day, in for the night by night (`npc-keeper.ts`).
                 const here = npc.position;
                 const hereFlat = { x: here.x, y: here.y };
+                const spotKey = `${post.x},${post.y},${post.z}`;
+                if (mine.placeFor !== spotKey) {
+                    mine.place = undefined;
+                    mine.door = undefined;
+                    mine.placeFor = spotKey;
+                }
                 const place = mine.place ?? placeOf(post);
                 if (Navigation.ready) {
                     mine.place = place;
@@ -501,7 +514,8 @@ export function installPostLife(handle: PostHandle, lines: readonly string[], se
                         mine.greeted.set(near.id, now);
                         npc.playAnimation("GreetingsUpperBody", { tags: GREETINGS[Math.floor(Math.random() * GREETINGS.length)] });
                         const line = lines.length === 0 ? "" : ` ${lines[Math.floor(Math.random() * lines.length)]}`;
-                        npc.say(`${greetingWord(hour)}${line}`);
+                        // Said to the one greeted, in their chat card too (`npc-speech.ts`): the game's line over the body was not seen.
+                        speak(npc, post.name, `${greetingWord(hour)}${line}`, { to: [near] });
                     }
                     continue;
                 }
@@ -512,7 +526,7 @@ export function installPostLife(handle: PostHandle, lines: readonly string[], se
                     const [soon, late] = settings.chatEveryMs;
                     mine.chatAt = now + soon + Math.random() * (late - soon);
                     npc.lookAt(passer);
-                    npc.say(AMBIENT_LINES[Math.floor(Math.random() * AMBIENT_LINES.length)] ?? "");
+                    speak(npc, post.name, AMBIENT_LINES[Math.floor(Math.random() * AMBIENT_LINES.length)] ?? "", { to: [passer] });
                 }
                 if (!day || !Navigation.ready || now < mine.next || npc.status === "running" || standing.some((one) => flatDistance(one, hereFlat) <= settings.quietM)) {
                     continue;

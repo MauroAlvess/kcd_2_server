@@ -10,11 +10,12 @@ class FakeVector3 {
     constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
 }
 
-function load({ placed = false, random = 0 } = {}) {
-    const state = { handlers: new Map(), logs: [], placedFor: [] };
+function load({ placed = false, random = 0, kuttenberg = true } = {}) {
+    const state = { handlers: new Map(), logs: [], placedFor: [], kuttenberg };
     const context = {
         exports: {},
         require: (id) => {
+            if (id === "./level.js") return { onKuttenberg: () => state.kuttenberg !== false };
             assert.equal(id, "./position.js");
             return { placeBack: (player) => { state.placedFor.push(player.nickname); return placed; } };
         },
@@ -68,4 +69,21 @@ test("on spawning, somebody with no saved place arrives on the road; somebody wh
     const back = newcomer();
     returning.state.handlers.get("playerSpawning")(back);
     assert.deepEqual(back.spawns, [], "put back by position.ts, which did the spawn itself");
+});
+
+test("on another level a newcomer is given no start point: the level's own start point stands, and one with a saved place is still put back", () => {
+    const fresh = load({ placed: false, kuttenberg: false });
+    fresh.api.installSpawns();
+    assert.equal(fresh.api.pickSpawnPoint(), null, "Kuttenberg's road is not a place of this level");
+    assert.equal(fresh.api.pickSpawnPoint("chegada"), null);
+    const hans = newcomer();
+    fresh.state.handlers.get("playerSpawning")(hans);
+    assert.deepEqual(hans.spawns, [], "nothing is asked of the player: the game puts them at its own start");
+    assert.deepEqual(Array.from(fresh.state.placedFor), ["Hans"], "the saved place is asked first, as ever");
+
+    const back = load({ placed: true, kuttenberg: false });
+    back.api.installSpawns();
+    const jan = newcomer();
+    back.state.handlers.get("playerSpawning")(jan);
+    assert.deepEqual(jan.spawns, []);
 });

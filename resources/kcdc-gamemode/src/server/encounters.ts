@@ -9,7 +9,10 @@
  * - **Jogar dados**: an invitation they answer in their own dialogue list; accepted, the two sit down at the dice table
  *   they share and agree the score (`dice.ts`). It is offered only when both stand at the same dice table.
  * - **Negociar**: the same kind of invitation; accepted, a trade opens on both screens (`trade.ts`).
- * - **Prender** / **Soltar** (`arrest.ts`, 2026-10-29): for an officer, on somebody below them on the ladder, or somebody they may let go.
+ * - **Desafiar para um duelo** (2026-11-01): the same kind of invitation, with the rules under the question; accepted, a duel
+ *   begins (`duel.ts`). Nobody in a duel is talked to, traded with or invited to anything until it is over.
+ * - **Prender** / **Soltar** (`arrest.ts`, 2026-10-29): for an officer, on somebody below them on the ladder, or somebody they may let go; and **Conduzir** / **Parar de conduzir** on a
+ *   prisoner in handcuffs (2026-11-01).
  * - **Sair**.
  *
  * Nothing happens to a player without their answer, and an unanswered invitation lapses.
@@ -18,6 +21,7 @@
 import { introduce, knows, labelFor, nameOf } from "./acquaintances.js";
 import { choose as arrestChoose, isArrested, menuOptions as arrestOptions } from "./arrest.js";
 import { diceLobby } from "./dice.js";
+import { duels, INVITATION_NOTES } from "./duel.js";
 import { applyNametag, restoreNametag } from "./titles.js";
 import { trades } from "./trade.js";
 import { allowedTo, EDGE_M } from "./reach.js";
@@ -33,7 +37,7 @@ export const REQUEST_MS = 30_000;
 /** How long before the same invitation can be sent to the same player again. */
 export const REQUEST_COOLDOWN_MS = 15_000;
 
-type RequestKind = "dice" | "trade";
+type RequestKind = "dice" | "trade" | "duel";
 
 interface Talk {
     readonly speaker: Player;
@@ -48,7 +52,10 @@ interface Request {
     readonly expires: number;
 }
 
-const WHAT: Readonly<Record<RequestKind, string>> = { dice: "jogar dados", trade: "negociar" };
+const WHAT: Readonly<Record<RequestKind, string>> = { dice: "jogar dados", trade: "negociar", duel: "duelar" };
+
+/** What a refusal of each invitation is called when the one who asked is told. */
+const REFUSED: Readonly<Record<RequestKind, string>> = { dice: "o jogo de dados", trade: "a negociação", duel: "o duelo" };
 
 function tell(player: Player, text: string): void {
     Chat.sendToPlayer(player, text);
@@ -101,6 +108,7 @@ export class Encounters {
             if (why !== null) console.log(`encounters: dados indisponíveis no menu: ${why}`);
         }
         options.push({ id: "trade", text: "Negociar", enabled: true });
+        options.push(duels.busy(speaker) || duels.busy(target) ? { id: "duel", text: "Desafiar para um duelo (já em duelo)", enabled: false } : { id: "duel", text: "Desafiar para um duelo", enabled: true });
         options.push(...arrestOptions(speaker, target));
         options.push({ id: "leave", text: "Sair", enabled: true });
         return { line: undefined, onRight: false, options };
@@ -125,6 +133,14 @@ export class Encounters {
         }
         if (diceLobby.playingNow(target)) {
             tell(speaker, `${labelFor(speaker, target)} está jogando dados.`);
+            return false;
+        }
+        // The same for a duel (2026-11-01): the hint is gone from a duelist, and the press does nothing.
+        if (duels.busy(speaker)) {
+            return false;
+        }
+        if (duels.busy(target)) {
+            tell(speaker, `${labelFor(speaker, target)} está em um duelo.`);
             return false;
         }
         const session = Dialogue.open(speaker.id, this.menu(speaker, target));
@@ -176,7 +192,7 @@ export class Encounters {
             }
             return;
         }
-        if (option === "arrest" || option === "release") {
+        if (option === "arrest" || option === "release" || option === "escort" || option === "unescort") {
             this.end(session);
             const said = arrestChoose(speaker, target, option);
             if (said !== null) {
@@ -184,7 +200,7 @@ export class Encounters {
             }
             return;
         }
-        if (option === "dice" || option === "trade") {
+        if (option === "dice" || option === "trade" || option === "duel") {
             this.end(session);
             this.ask(option, speaker, target);
         }
@@ -202,15 +218,24 @@ export class Encounters {
             tell(from, "Espere um pouco antes de chamar de novo.");
             return;
         }
-        if (isArrested(to) || isArrested(from) || Dialogue.sessionOf(to.id) !== 0 || trades.isTrading(to) || trades.isTrading(from) || diceLobby.playingNow(to) || diceLobby.playingNow(from)) {
+        if (isArrested(to) || isArrested(from) || Dialogue.sessionOf(to.id) !== 0 || trades.isTrading(to) || trades.isTrading(from) || diceLobby.playingNow(to) || diceLobby.playingNow(from) || duels.busy(to) || duels.busy(from)) {
             tell(from, `${labelFor(from, to)} não pode agora.`);
             return;
         }
+        if (kind === "duel") {
+            const why = duels.canChallenge(from, to);
+            if (why !== null) {
+                tell(from, why);
+                return;
+            }
+        }
+        const notes: DialogueOption[] = (kind === "duel" ? INVITATION_NOTES : []).map((text, index) => ({ id: `note${index}`, text, enabled: false }));
         const page: DialoguePage = {
             line: undefined,
             onRight: false,
             options: [
                 { id: "info", text: `${labelFor(to, from)} quer ${WHAT[kind]} com você.`, enabled: false },
+                ...notes,
                 { id: "accept", text: "Aceitar", enabled: true },
                 { id: "decline", text: "Recusar", enabled: true },
             ],
@@ -233,11 +258,20 @@ export class Encounters {
         this.requests.delete(session);
         Dialogue.close(session);
         if (option === "decline") {
-            tell(from, `${labelFor(from, to)} recusou ${kind === "dice" ? "o jogo de dados" : "a negociação"}.`);
+            tell(from, `${labelFor(from, to)} recusou ${REFUSED[kind]}.`);
             return;
         }
         if (!present(from) || from.virtualWorld !== to.virtualWorld || apart(from, to) > ANSWER_REACH_M) {
             tell(to, "Quem chamou não está mais por perto.");
+            return;
+        }
+        if (kind === "duel") {
+            const why = duels.start(from, to);
+            if (why !== null) {
+                for (const player of [from, to]) {
+                    tell(player, `O duelo não pôde começar: ${why}`);
+                }
+            }
             return;
         }
         if (kind === "trade") {
@@ -273,7 +307,7 @@ export class Encounters {
     /** What `viewer` calls the player with network id `id`, for the label over the talk hint. Empty for nobody there. */
     peek(viewer: Player, id: number): string {
         const target = Player.getById(id);
-        if (target === null || target.id === viewer.id || !target.ready || diceLobby.playingNow(target)) {
+        if (target === null || target.id === viewer.id || !target.ready || diceLobby.playingNow(target) || duels.busy(target) || duels.busy(viewer)) {
             return "";
         }
         return labelFor(viewer, target);

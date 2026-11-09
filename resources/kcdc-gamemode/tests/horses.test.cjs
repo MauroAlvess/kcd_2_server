@@ -95,6 +95,10 @@ function load({ seed, admins = [] } = {}) {
             if (id === "./auth.js" || id === "../auth.js") return { isAdmin: (player) => admins.includes(player.steamId) };
             if (id === "./position.js") return { yawOf: (rotation) => rotation.z };
             if (id === "../horses.js") return context.exports;
+            // The horses' hunger is off here: /cavalo says what it said (horsehunger.test.cjs has it on).
+            if (id === "../horse-hunger.js") {
+                return { chooseHorseHunger() {}, describeHorseHunger: () => "A fome dos cavalos está desligada.", FOOD_WORDS: "aveia", foodOf: () => 100, foodText: (food) => `fome ${food}%`, horseHungerState: { enabled: false }, hungerWord: () => "alimentado", setFood: () => false };
+            }
             assert.fail(`unexpected require ${id}`);
         },
         console: { log: (line) => logs.push(line), error: (line) => logs.push(line) },
@@ -230,6 +234,58 @@ test("where it was left is written when its rider gets off, and when its gear ch
     assert.equal(sut.saved()[0].gear.saddle, "saddle_b");
 });
 
+test("a horse that abandons its owner (2026-11-04) is lost as a dead one is: gone from their animals, nobody's, sent running away from them, taken out of the world later", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1, { x: 100, y: 100, z: 5 });
+    const horse = sut.makeHorse({ position: { x: 110, y: 100, z: 5 }, name: "Trovão" });
+    horse.giveTo(mauro);
+    const [record] = sut.saved();
+    assert.equal(sut.api.abandonHorse("not-a-key", mauro.position), false);
+    assert.equal(sut.api.abandonHorse(record.key, mauro.position), true);
+    assert.deepEqual(sut.saved(), [], "gone from the owner's animals");
+    assert.equal(horse.owner, null, "nobody's");
+    assert.equal(horse.moves.length, 1);
+    assert.deepEqual([horse.moves[0].target.x, horse.moves[0].target.y], [260, 100], "150 metres straight away from the owner");
+    assert.equal(horse.moves[0].options.speed, "run");
+    const gone = sut.timeouts.at(-1);
+    assert.equal(gone.ms, 25_000);
+    assert.equal(sut.horses.has(horse.id), true);
+    gone.fn();
+    assert.equal(sut.horses.has(horse.id), false, "taken out of the world");
+    assert.equal(sut.saved().length, 0, "and not filed again by the destroy");
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro abandonou o dono, que bateu nele/.test(line)));
+});
+
+test("a horse in a bad mood carries nobody, not even its owner, and does not come at the whistle; a calm one does (2026-11-04)", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1, { x: 0, y: 0, z: 0 });
+    const horse = sut.makeHorse({ position: { x: 10, y: 0, z: 0 }, name: "Trovão" });
+    horse.giveTo(mauro);
+    const [record] = sut.saved();
+    assert.equal(sut.api.moodOf(sut.api.recordOf(record.key)), 100, "a record that says nothing is in the best of moods");
+    assert.equal(sut.api.sulking(horse), false);
+    assert.equal(sut.api.setMood(horse, 25), true);
+    assert.equal(sut.saved()[0].mood, 25, "filed with the record");
+    assert.equal(sut.api.moodOfHorse(horse), 25);
+    assert.equal(sut.api.sulking(horse), true);
+    assert.equal(sut.fire("horseMounting", horse, mauro), false, "the owner is refused");
+    assert.match(sut.chat.at(-1), /Trovão está de mau humor e não deixa ninguém montar/);
+    const called = sut.api.callHorse(mauro, null);
+    assert.equal(called.ok, false);
+    assert.match(called.message, /Trovão está de mau humor e não vem/);
+    assert.equal(horse.moves.length, 0, "it did not move");
+    // Calm again: it carries and comes.
+    sut.api.setMood(horse, 60);
+    assert.equal(sut.api.sulking(horse), false);
+    assert.notEqual(sut.fire("horseMounting", horse, mauro), false);
+    assert.equal(sut.api.callHorse(mauro, null).ok, true);
+    assert.equal(sut.api.setMood(horse, 500) && sut.api.moodOfHorse(horse), 100, "held to a hundred");
+    assert.equal(sut.api.moodWord(80), "calmo");
+    assert.equal(sut.api.moodWord(45), "irritado");
+    assert.equal(sut.api.moodWord(10), "de mau humor");
+    assert.equal(sut.api.setMood({ id: 9999, name: "" }, 10), false, "a horse nobody keeps has no mood");
+});
+
 test("a horse that dies is forgotten, as in the game", () => {
     const sut = load();
     const horse = sut.makeHorse({ name: "Trovão" });
@@ -239,10 +295,8 @@ test("a horse that dies is forgotten, as in the game", () => {
     assert.ok(sut.logs.some((line) => /Trovão de Mauro morreu/.test(line)));
 });
 
-test("a kept horse that is knocked out is dead for good after two looks: gone from its owner's animals, its alforjes lost, made nobody's and killed (2026-10-25)", () => {
+test("a kept horse that is knocked out is dead for good after two looks: gone from its owner's animals, made nobody's and killed (2026-10-25)", () => {
     const sut = load();
-    const lost = [];
-    sut.api.horseLost.push((record, horse) => lost.push([record.name, horse.id]));
     const mauro = sut.player(MAURO, "Mauro", 1);
     const horse = sut.makeHorse({ name: "Trovão" });
     horse.giveTo(mauro);
@@ -255,7 +309,6 @@ test("a kept horse that is knocked out is dead for good after two looks: gone fr
 
     sut.intervals[1].fn();
     assert.deepEqual(sut.saved(), [], "the record is gone, so is the line in Animais");
-    assert.deepEqual(lost, [["Trovão", horse.id]], "its alforjes are handled like a dead horse's");
     assert.equal(horse.owner, null, "nobody's from now on");
     assert.equal(horse.killed, 1);
     assert.equal(horse.alive, false);
@@ -609,4 +662,150 @@ test("a kept horse knocked out while its owner is away gets up by itself: it is 
     sut.intervals[1].fn();
     sut.intervals[1].fn();
     assert.deepEqual(sut.saved(), [], "with the owner back in the game the knockout is the death again");
+});
+
+// A horse whose owner is away is no training dummy (2026-11-04, src/server/horses.ts `parkHorse`): killed by a player it goes out of the world and comes back when the owner does.
+
+/** A horse of Mauro's, kept, with Mauro away, and Hans standing there to kill it. */
+function parkScene() {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const hans = sut.player(HANS, "Hans", 2);
+    const horse = sut.makeHorse({ name: "Trovão", position: { x: 10, y: 20, z: 30 }, gear: { saddle: "saddle-1", head: null, torso: null, shoe: null } });
+    horse.giveTo(mauro);
+    mauro.ready = false;
+    return { sut, mauro, hans, horse };
+}
+
+/** The engine's death of a horse by a player's hand: it lies dead and horseDeath names who struck the last blow. */
+function killedBy(sut, horse, killer) {
+    horse.alive = false;
+    sut.fire("horseDeath", horse, killer, "combat");
+}
+
+test("a kept horse killed by a player while its owner is away is put out of the world, not brought back to be killed again: its record stays (2026-11-04: the XP farm)", () => {
+    const { sut, hans, horse } = parkScene();
+    horse.position = { x: 11, y: 22, z: 33 };
+    killedBy(sut, horse, hans);
+    assert.equal(sut.timeouts.filter((timer) => timer.ms === sut.api.REVIVE_AFTER_MS).length, 0, "never revived where it fell");
+    assert.equal(sut.saved().length, 1, "the record is kept: it is not a death");
+    assert.equal(sut.saved()[0].parked, true);
+    assert.deepEqual([sut.saved()[0].x, sut.saved()[0].y, sut.saved()[0].z], [11, 22, 33], "it waits where it fell");
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro foi morto por Hans \[76561198000000002\] com o dono fora do jogo: guardado fora do mundo/.test(line)), sut.logs.join("|"));
+    const away = sut.timeouts.find((timer) => timer.ms === sut.api.PARK_AFTER_MS);
+    assert.ok(away, "its body goes a moment later");
+    away.fn();
+    assert.equal(sut.horses.has(horse.id), false, "out of the world");
+    assert.equal(sut.saved().length, 1, "going out of the world did not forget it");
+    assert.equal(sut.logs.filter((line) => /de Mauro morreu$/.test(line)).length, 0, "never logged as lost");
+});
+
+test("the owner who comes in has the horse back where it fell, whole, with its gear, as theirs, and is told; a restart does not bring it back for anybody else to strike", () => {
+    const { sut, mauro, hans, horse } = parkScene();
+    horse.position = { x: 11, y: 22, z: 33 };
+    killedBy(sut, horse, hans);
+    sut.timeouts.find((timer) => timer.ms === sut.api.PARK_AFTER_MS).fn();
+
+    // A restart: the parked horse is not put back into the world.
+    const restarted = load({ seed: JSON.parse(sut.disk.files.get("playerdata/horses.json")) });
+    assert.equal(restarted.spawned.length, 0, "nothing spawned at the start");
+    assert.equal(JSON.parse(restarted.disk.files.get("playerdata/horses.json")).horses[0].parked, true, "still parked in the file");
+
+    // The owner comes in.
+    mauro.ready = true;
+    sut.spawned.length = 0;
+    sut.fire("playerSpawned", mauro);
+    assert.equal(sut.spawned.length, 1, "put back into the world");
+    assert.deepEqual([sut.spawned[0].position.x, sut.spawned[0].position.y, sut.spawned[0].position.z], [11, 22, 33]);
+    assert.equal(sut.spawned[0].name, "Trovão");
+    assert.equal(sut.spawned[0].gear.saddle, "saddle-1");
+    const back = [...sut.horses.values()][0];
+    assert.equal(back.owner, mauro, "theirs again");
+    assert.equal(sut.saved()[0].parked, undefined, "no longer parked");
+    assert.ok(sut.notices.some((notice) => notice.to === 1 && /Seu cavalo Trovão foi atacado enquanto você estava fora, mas está bem/.test(notice.text)));
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro voltou ao mundo com o dono/.test(line)));
+});
+
+test("a horse parked is not brought back for anybody but its owner; the owner's horse that dies with the owner there is lost for real, as before", () => {
+    const { sut, hans, horse } = parkScene();
+    killedBy(sut, horse, hans);
+    sut.timeouts.find((timer) => timer.ms === sut.api.PARK_AFTER_MS).fn();
+    sut.spawned.length = 0;
+    sut.fire("playerSpawned", hans);
+    assert.equal(sut.spawned.length, 0, "Hans coming in does not bring Mauro's horse back");
+
+    const live = load();
+    const mauro = live.player(MAURO, "Mauro", 1);
+    const other = live.makeHorse({ name: "Brasa" });
+    other.giveTo(mauro);
+    other.kill();
+    assert.deepEqual(live.saved(), [], "the owner there: it dies for real");
+    assert.equal(live.timeouts.filter((timer) => timer.ms === live.api.PARK_AFTER_MS).length, 0);
+});
+
+test("a horse that dies with nobody to blame while its owner is away is brought back twice, and the third time in five minutes it is put away like the others", () => {
+    const { sut, horse } = parkScene();
+    for (let deaths = 1; deaths <= 2; deaths += 1) {
+        horse.alive = false;
+        sut.fire("horseDeath", horse, null, "scripted");
+        sut.timeouts.filter((timer) => timer.ms === sut.api.REVIVE_AFTER_MS).at(-1).fn();
+        assert.equal(horse.alive, true, `brought back (${deaths})`);
+    }
+    assert.equal(sut.saved()[0].parked, undefined);
+    horse.alive = false;
+    sut.fire("horseDeath", horse, null, "scripted");
+    assert.equal(sut.saved()[0].parked, true, "the third in a short while: put away");
+    assert.ok(sut.logs.some((line) => /morreu 3 vezes em poucos minutos com o dono fora do jogo: guardado fora do mundo/.test(line)));
+});
+
+test("a horse put away while its owner was coming in has missed the spawn: the save round brings it back", () => {
+    const { sut, mauro, hans, horse } = parkScene();
+    killedBy(sut, horse, hans);
+    sut.timeouts.find((timer) => timer.ms === sut.api.PARK_AFTER_MS).fn();
+    mauro.ready = true;
+    sut.spawned.length = 0;
+    sut.intervals[0].fn();
+    assert.equal(sut.spawned.length, 1);
+    assert.equal(sut.saved()[0].parked, undefined);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Let go to the free world, and a loaded horse's call (2026-11-04).
+
+test("the owner lets a horse go: it leaves their animals, it runs off from them and is taken out of the world", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1, { x: 100, y: 100, z: 5 });
+    const horse = sut.makeHorse({ position: { x: 105, y: 100, z: 5 }, name: "Trovão" });
+    horse.giveTo(mauro);
+    const [record] = sut.saved();
+
+    const outcome = sut.api.letHorseGo(mauro, record.key);
+    assert.equal(outcome.ok, true);
+    assert.match(outcome.message, /Trovão foi solto: ele corre para a mata, livre, e não volta/);
+    assert.deepEqual(sut.saved(), [], "gone from the owner's animals");
+    assert.equal(horse.owner, null, "nobody's");
+    assert.deepEqual([horse.moves[0].target.x, horse.moves[0].target.y], [255, 100], "150 metres straight away from the owner");
+    sut.timeouts.at(-1).fn();
+    assert.equal(sut.horses.has(horse.id), false, "taken out of the world");
+    assert.ok(sut.logs.some((line) => /o cavalo Trovão de Mauro foi solto pelo dono/.test(line)));
+});
+
+test("only the owner lets a horse go, and not while somebody is on it or while it is not in the world", () => {
+    const sut = load();
+    const mauro = sut.player(MAURO, "Mauro", 1);
+    const hans = sut.player(HANS, "Hans", 2);
+    const horse = sut.makeHorse({ name: "Trovão" });
+    horse.giveTo(mauro);
+    const [record] = sut.saved();
+
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.api.letHorseGo(hans, record.key))), { ok: false, message: "Esse cavalo não é seu." });
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.api.letHorseGo(mauro, "no-such-key"))), { ok: false, message: "Esse cavalo não é seu." });
+    horse.rider = hans;
+    assert.match(sut.api.letHorseGo(mauro, record.key).message, /Trovão está montado: desça antes de soltá-lo/);
+    horse.rider = null;
+    horse.alive = false;
+    assert.match(sut.api.letHorseGo(mauro, record.key).message, /Trovão não está no mundo agora/);
+    horse.alive = true;
+    assert.equal(sut.saved().length, 1, "the horse is still the owner's after every refusal");
+    assert.equal(horse.moves.length, 0);
 });

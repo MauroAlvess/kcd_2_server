@@ -7,8 +7,8 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { lowered, torch } = require("./torchstub.cjs");
 const { profession } = require("./reachpatch.cjs");
-// The tables' own pace: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, 4 times in play): the tests of the pace set it.
-profession.professionXp.rate = 1;
+// The tables' own XP and no day's limit: these tests are of the work and not of the pace the trades' XP is paid at (src/server/profession-xp.ts, the standard of 2026-11-03): the tests of the pace set it.
+profession.useTables();
 
 // The Agricultores' gardens (src/server/farm.ts, 2026-10-22): E at the soil of a village's bed opens the page of what can be sown; sowing
 // digs the bed with a shovel and takes a seed; the bed grows in real time, shows its plant, and is harvested with E for the crop and seeds back.
@@ -276,21 +276,25 @@ test("a harvest is a share of the crop's range, one more from level 15, and one 
     assert.equal(sut.api.minutesText(1), "1 min", "never zero");
 });
 
-test("the plants: forty of them, from the onion and the flax at level 0 to the pepper, vegetables, fibre, grain, herbs, fruit and a spice, each with a seed of our own and a time to ripen", () => {
-    assert.equal(FARM_CROPS.length, 40);
-    // The apothecaries' herbs the vendors sold and nobody sowed (2026-10-27): thirteen more with the elder's leaves, nineteen in all, so that the alchemists need no one to forage for them.
-    assert.equal(FARM_CROPS.filter((crop) => crop.category === "Ervas").length, 19);
+test("the plants: fifty-nine of them, from the onion and the flax at level 0 to the pepper, vegetables, fibre, grain, herbs, fruit and spices, each with a seed of our own and a time to ripen", () => {
+    // Nineteen more on 2026-11-02 ("vamos adicionar mais sementes e frutos para plantação").
+    assert.equal(FARM_CROPS.length, 59);
+    // The apothecaries' herbs the vendors sold and nobody sowed (2026-10-27): thirteen more with the elder's leaves, nineteen, so that the alchemists need no one to forage for them; the dill (2026-11-02).
+    assert.equal(FARM_CROPS.filter((crop) => crop.category === "Ervas").length, 20);
     assert.equal(FARM_CROPS[0].id, "cebola");
     assert.equal(FARM_CROPS[0].level, 0);
     assert.equal(FARM_CROPS.at(-1).id, "pimenta", "the pepper (2026-10-24) is the last, the slowest and the rarest");
     assert.ok(FARM_CROPS.every((crop) => crop.minutes >= 25 && crop.minutes <= 90 && crop.least >= 1 && crop.most >= crop.least && crop.seed.startsWith("kcdc-craft:semente-")), "half an hour to an hour and a half");
     assert.deepEqual(Array.from(new Set(FARM_CROPS.map((crop) => crop.category))).sort(), ["Ervas", "Especiarias", "Fibras", "Frutas", "Grãos", "Legumes"]);
     // The trades that wait on the garden (2026-10-27, SINERGIA.md): flax for the Artifices, wheat and barley and hops for the Tabernarii, grapes for the wine.
-    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Fibras" || crop.category === "Grãos").map((crop) => [crop.id, CRAFT_ITEMS[crop.harvest][0]])), [["linho", "Linho"], ["trigo", "Trigo"], ["cevada", "Cevada"], ["lupulo", "Lúpulo"]]);
+    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Fibras" || crop.category === "Grãos").map((crop) => [crop.id, CRAFT_ITEMS[crop.harvest][0]])), [["linho", "Linho"], ["trigo", "Trigo"], ["centeio", "Centeio"], ["cevada", "Cevada"], ["aveia", "Aveia"], ["lupulo", "Lúpulo"]]);
     assert.equal(FARM_CROPS.find((crop) => crop.id === "linho").level, 0, "a new farmer can sow flax at once: the Artifices' trade hangs on it");
-    // The fruit (2026-10-24: "nas plantações do agricultor vamos colocar pimenta e frutas"): the game's own apple, pear, plums, peach and watermelon.
-    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Frutas").map((crop) => crop.id)), ["maca", "pera", "ameixa", "pessego", "uva", "melancia"]);
-    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Frutas").map((crop) => CRAFT_ITEMS[crop.harvest][0])), ["Maçã", "Pera", "Ameixas", "Pêssego", "Uvas", "Melancia"]);
+    // The fruit (2026-10-24: "nas plantações do agricultor vamos colocar pimenta e frutas"): the game's own apple, pear, plums, peach and watermelon; the berries, the cherry, the quince,
+    // the hazelnut (our own items) and the walnut (the game's) since 2026-11-02.
+    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Frutas").map((crop) => crop.id)), ["morango", "amora", "maca", "cereja", "pera", "framboesa", "mirtilo", "ameixa", "groselha", "marmelo", "pessego", "avela", "uva", "melancia", "noz"]);
+    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Frutas").map((crop) => CRAFT_ITEMS[crop.harvest][0])), ["Morangos", "Amoras", "Maçã", "Cerejas", "Pera", "Framboesas", "Mirtilos", "Ameixas", "Groselhas", "Marmelos", "Pêssego", "Avelãs", "Uvas", "Melancia", "Nozes"]);
+    // The game's mustard (`estragonSpice`, "uma especiaria rara das terras do sul") and the pepper.
+    assert.deepEqual(plain(FARM_CROPS.filter((crop) => crop.category === "Especiarias").map((crop) => [crop.id, CRAFT_ITEMS[crop.harvest][0]])), [["mostarda", "Mostarda"], ["pimenta", "Pimenta"]]);
     assert.equal(CRAFT_ITEMS[FARM_CROPS.at(-1).harvest][0], "Pimenta");
     const levels = plain(FARM_CROPS.map((crop) => crop.level));
     assert.deepEqual(levels, [...levels].sort((a, b) => a - b), "listed from the easiest");
@@ -331,7 +335,7 @@ test("E at a free bed opens the page of the plants: what each gives, takes and n
     assert.equal(view.payload.verb, "Plantar");
     assert.equal(view.payload.img, "data:image/webp;base64,HORTA", "its title image goes with it");
     assert.match(view.payload.sub, /Horta de Suchdol · 0 de 10 canteiros seus semeados · nível 0 de Sobrevivência/);
-    assert.equal(view.payload.recipes.length, 40 + 3 + 40, "the plants, the three pieces of work on the harvest, and a seed kept back from each plant (2026-10-27)");
+    assert.equal(view.payload.recipes.length, 59 + 4 + 59, "the plants, the four pieces of work on the harvest (the rye's milling since 2026-11-02), and a seed kept back from each plant (2026-10-27)");
     const spin = view.payload.recipes.find((row) => row.id === "beneficiar:fiar-linha");
     assert.equal(spin.cat, "Beneficiar");
     assert.equal(spin.v, "Fazer", "its button is not 'Plantar'");
@@ -839,10 +843,19 @@ test("the work on the harvest: flax is spun into thread, grain milled and malted
     assert.equal(sut.sentTo("hans", "craft.result").at(-1).payload.ok, true);
     assert.equal(sut.sentTo("hans", "craft.view").length > 0, true, "and the page is sent again with what the bag holds now");
 
+    // The next one waits a moment, so the game's view of the bag keeps up (2026-11-01: flour and malt made eleven times in three seconds could not be taken out of the bag).
+    const added = sut.state.added.length;
+    assert.equal(sut.api.processFromPage(hans, "beneficiar:moer-trigo"), "cedo");
+    assert.match(sut.state.chat.at(-1), /Espere um instante/);
+    assert.equal(sut.state.added.length, added, "nothing taken, nothing given");
+    assert.equal(sut.state.bags.get(hans.id).find((row) => row.item === `guid:${WHEAT}`).amount, 3);
+    sut.state.clock.now += sut.api.farmSettings.processGapMs;
     assert.equal(sut.api.processFromPage(hans, "beneficiar:moer-trigo"), "");
     assert.deepEqual(sut.state.added.at(-1), ["Hans", "guid:kcdc-craft:farinha", 1]);
+    sut.state.clock.now += sut.api.farmSettings.processGapMs;
     assert.equal(sut.api.processFromPage(hans, "beneficiar:maltear-cevada"), "");
     assert.deepEqual(sut.state.added.at(-1), ["Hans", "guid:kcdc-craft:malte", 1]);
+    sut.state.clock.now += sut.api.farmSettings.processGapMs;
     assert.equal(sut.api.processFromPage(hans, "beneficiar:semente-cebola"), "");
     assert.deepEqual(sut.state.added.at(-1), ["Hans", "guid:kcdc-craft:semente-cebola", 1], "two onions for a seed: a farmer needs no vendor for one");
     assert.equal(sut.state.bags.get(hans.id).find((row) => row.item === ONION.harvest).amount, 2);
@@ -922,8 +935,8 @@ test("a long row shows five plants and a short one three, spread along it (2026-
     assert.equal(sut.api.plantSpots(short).length, 3, "five metres is still a short row");
 });
 
-test("the harvest of a long bed is more, the pace of the trades is paid in the garden too: four times the crop's XP on the harvest, and the sowing's", () => {
-    profession.professionXp.rate = 4;
+test("the harvest of a long bed is more, the pace of the trades is paid in the garden too: four times the crop's XP on the harvest, and the sowing's (the standard of 2026-11-03)", () => {
+    profession.useStandard();
     try {
         const { sut, hans } = sown();
         sut.api.tickFarm(T0 + 31 * 60_000);
@@ -938,7 +951,7 @@ test("the harvest of a long bed is more, the pace of the trades is paid in the g
         const planting = sut.sentTo("hans", "craft.view").at(-1).payload.recipes.find((row) => row.id === "horta:cebola");
         assert.equal(planting.xp, 24, "the page says what the harvest will give");
     } finally {
-        profession.professionXp.rate = 1;
+        profession.useTables();
     }
 });
 

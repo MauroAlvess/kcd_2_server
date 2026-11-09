@@ -40,7 +40,7 @@ test("the saddles run from the Prague saddle at the second level to the dragon s
         assert.ok(recipe.seconds >= 12);
     }
     const dearest = saddles.at(-1).ingredients.map(([id, n]) => [CRAFT_ITEMS[id][0], n]);
-    assert.deepEqual(plain(dearest.find(([name]) => /^Pele de /.test(name))), ["Pele de cervo", 6], "deer hide at the top, by the saddle's weight");
+    assert.deepEqual(plain(dearest.find(([name]) => /^Pele de /.test(name))), ["Pele de cervo", 9], "deer hide at the top, by the saddle's weight (6), and 2% more for each of its 22 levels (2026-11-01)");
 });
 
 test("the tack has the icon of the game's piece, and the pieces a tamed horse is dressed in by name are among them", () => {

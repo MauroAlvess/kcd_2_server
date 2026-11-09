@@ -138,7 +138,7 @@ export function sendRights(player: Player): void {
 
 /** What a player who may not is told. */
 export function refusal(craft: Craft): string {
-    return `Só ${WHO[CRAFT_GUILD[craft]] ?? "a guilda do ofício"} usam ${PLACE[craft]}. Escolha a guilda no painel (F2), em Guildas.`;
+    return `Só ${WHO[CRAFT_GUILD[craft]] ?? "a guilda do ofício"} usam ${PLACE[craft]}. Aprenda o ofício com o comerciante da guilda da sua cidade.`;
 }
 
 /** What each place is for, the word of its choice in the menu a refused player is shown. */
@@ -197,7 +197,7 @@ function noteAllowed(player: Player, craft: Craft, reason: string): void {
 }
 
 /** What a player who is not a hunter is told after butchering a carcass: what it held is gone. */
-export const BUTCHER_UNDONE = "Só os caçadores (guilda Venatores) sabem abater animais: você estragou a carcaça, e a carne e o couro se perderam. Escolha a guilda no painel (F2), em Guildas.";
+export const BUTCHER_UNDONE = "Só os caçadores (guilda Venatores) sabem abater animais: você estragou a carcaça, e a carne e o couro se perderam. Aprenda o ofício com o comerciante da guilda da sua cidade.";
 
 export function installGuildCrafts(): void {
     Events.on("craftingStarting", (player, proposal) => {

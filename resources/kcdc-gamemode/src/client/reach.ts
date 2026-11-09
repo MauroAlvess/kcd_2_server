@@ -38,6 +38,8 @@ export const EDGE_M = {
     dog: 0.5,
     /** A cow's point is its middle, three quarters of a metre or so from its flank (`cows.ts`, the milking). */
     cow: 0.8,
+    /** A sheep is smaller: its point is its middle, half a metre or so from its flank (`sheep.ts`, the shearing, 2026-10-31). */
+    sheep: 0.6,
     /** A cart is measured to the stretch down its middle (`carts.ts`), about a metre from either side. */
     cart: 1,
 } as const;

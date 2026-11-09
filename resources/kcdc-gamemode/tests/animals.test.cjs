@@ -572,7 +572,27 @@ test("a hare dies of a blow that would not have killed a boar; the blows of an u
     assert.deepEqual(boar.kills, []);
     population.forgetWounds(boar.id);
     population.wounded(boar, null, 54);
-    assert.equal(later.length, 1, "forgotten wounds start again from the kind's health");
+    assert.equal(later.length, 2, "forgotten wounds start again from the kind's health: no new death for the boar (the hare's was looked at again: the second is that check)");
+});
+
+test("a list of kinds is asked at once: the ewes and the rams of a flock, nearest first, and no cow or pig among them (the shearing, 2026-10-31)", () => {
+    const { api, made } = populated({ players: [walker(100)] });
+    const population = new api.AnimalPopulation(api.animalPopulationSettings, () => 1_000_000, () => 0);
+    population.add(point(3, "SheepEwe", "ewes"), 0);
+    population.add(point(2, "SheepRam", "rams"), 0);
+    population.add(point(2, "CattleCow", "cows"), 0);
+    for (let i = 0; i < 4; i += 1) population.tick();
+    const sheep = made.filter((npc) => npc.options.class === "SheepEwe" || npc.options.class === "SheepRam");
+    assert.ok(sheep.some((npc) => npc.options.class === "SheepEwe") && sheep.some((npc) => npc.options.class === "SheepRam"), "both kinds are made");
+    const from = { x: sheep[0].position.x + 1, y: sheep[0].position.y, z: sheep[0].position.z };
+    const found = population.near(["SheepEwe", "SheepRam"], from, 0, 60);
+    assert.ok(found.length >= 2, "the flock, ewes and rams together");
+    assert.ok(found.every((one) => sheep.some((npc) => npc.id === one.id)), "no cow among them");
+    assert.ok(found.every((one, index) => index === 0 || one.distance >= found[index - 1].distance), "nearest first");
+    assert.equal(found[0].id, sheep[0].id);
+    // One kind alone, as a string, is as it always was.
+    assert.ok(population.near("SheepRam", from, 0, 60).every((one) => made.find((npc) => npc.id === one.id).options.class === "SheepRam"));
+    assert.equal(population.near([], from, 0, 60).length, 0, "no kind, nothing");
 });
 
 test("the living animals of a kind near a point, nearest first, and only those that could be that near are asked of the engine (the milking, 2026-10-27)", () => {
@@ -648,4 +668,86 @@ test("a held animal stands: the round sends it on no walk until it is let go, or
     assert.equal(other.hold(9999, 1000), false, "no such body");
     lost.alive = false;
     assert.equal(other.hold(lost.id, 1000), false, "a dead one is not held");
+});
+
+test("a round that has used its time stops where it is and the next one goes on from there: every herd is looked at in the end, none skipped (the lag at the combat, 2026-10-31)", () => {
+    const { api, made } = populated({ players: [walker(100)] });
+    const population = new api.AnimalPopulation({ ...api.animalPopulationSettings, budgetMs: -1 }, () => 1_000_000, () => 0);
+    for (const guid of ["a", "b", "c", "d"]) population.add(point(1, "Hare", guid), 0, 0, 0.3);
+    assert.equal(api.animalPopulationSettings.budgetMs, 30, "thirty milliseconds a round");
+    population.tick();
+    assert.equal(made.length, 1, "out of time after the first site: only its herd was made");
+    assert.equal(population.budgeted, 1);
+    for (let i = 0; i < 6; i += 1) population.tick();
+    assert.equal(made.length, 4, "the rounds that followed went on from where the first stopped, and every herd has its body");
+    assert.ok(population.budgeted >= 4);
+
+    // With the time there is, one round does it all and is never cut.
+    const fast = populated({ players: [walker(100)] });
+    const whole = new fast.api.AnimalPopulation(fast.api.animalPopulationSettings, () => 1_000_000, () => 0);
+    for (const guid of ["a", "b", "c", "d"]) whole.add(point(1, "Hare", guid), 0, 0, 0.3);
+    whole.tick();
+    assert.ok(fast.made.length >= 2, "a whole round makes what the spawns of a round allow");
+    assert.equal(whole.budgeted, 0, "and is not cut");
+});
+
+
+// The last blow that does not kill (2026-11-06, "alguns dos animais e caça bugam às vezes ficando imortais"): the death is looked at again, asked for again, and a body that still lives is taken out.
+
+function dying() {
+    const sut = populated({ players: [walker(100)] });
+    const later = [];
+    const population = new sut.api.AnimalPopulation(sut.api.animalPopulationSettings, () => 1_000_000, () => 0, (run, ms) => later.push({ run, ms }));
+    population.add(point(3, "RoeDeer", "r"), 0);
+    population.tick();
+    const [deer] = sut.made;
+    const killed = [];
+    const removed = [];
+    deer.kill = (by) => killed.push(by);
+    deer.hold = () => undefined;
+    deer.remove = () => removed.push(deer.id);
+    deer.maxHealth = 1000;
+    deer.status = "running";
+    deer.simulator = null;
+    const hunter = { id: 7, steamId: "7656", nickname: "Hans" };
+    return { sut, later, population, deer, killed, removed, hunter };
+}
+
+test("an animal that is still alive after the last blow's death is asked for again, and after three tries it is taken out of the world", () => {
+    const { sut, later, population, deer, killed, removed, hunter } = dying();
+    population.wounded(deer, hunter, 500);
+    assert.equal(later.length, 1);
+    assert.equal(later[0].ms, sut.api.animalPopulationSettings.finishDelayMs);
+    later[0].run();
+    assert.deepEqual(killed, [hunter], "the first death asked for");
+    assert.equal(later.length, 2);
+    assert.equal(later[1].ms, sut.api.animalPopulationSettings.finishCheckMs, "looked at again a moment later");
+    later[1].run();
+    later[2].run();
+    assert.deepEqual(killed, [hunter, hunter, hunter], "asked three times in all, still with the hunter's name");
+    assert.deepEqual(removed, [], "not yet");
+    later[3].run();
+    assert.deepEqual(removed, [deer.id], "a body that cannot die is taken out");
+    assert.equal(later.length, 4, "and nothing more is scheduled");
+    assert.deepEqual(killed.length, 3);
+});
+
+test("an animal that dies is left alone by the check, and the blow its own death raises does not start a second chain", () => {
+    const { later, population, deer, killed, removed, hunter } = dying();
+    population.wounded(deer, hunter, 500);
+    // The kill raises a blow of its own before the body is dead.
+    later[0].run();
+    population.wounded(deer, hunter, 1000);
+    assert.equal(later.length, 2, "no second death scheduled: the first one is being seen to");
+    deer.alive = false;
+    later[1].run();
+    assert.equal(later.length, 2, "dead: the check ends the chain");
+    assert.deepEqual(killed, [hunter]);
+    assert.deepEqual(removed, []);
+
+    // Forgotten when it goes, so that a new body with the same number starts clean.
+    population.forgetWounds(deer.id);
+    deer.alive = true;
+    population.wounded(deer, hunter, 500);
+    assert.equal(later.length, 3, "a new chain starts");
 });

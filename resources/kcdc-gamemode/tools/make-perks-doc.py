@@ -4,7 +4,7 @@
 
 The user's request: "vamos ver todas as passivas e ver quais fazem sentido para um co-op e quais são muito roubadas e quais precisamos add no sistema de
 ofício, exemplo uma que faz mais poções ou que melhora comida e por aí vai". The passives (the game's `perk` rows that are `Visible`, 268 of them, not the
-fifty-one weapon combos, which are `COMBOS.md`'s) come from the game's tables and texts; the opinion on each is `perks-verdicts.py`'s, an opinion read from the
+fifty-one weapon combos) come from the game's tables and texts; the opinion on each is `perks-verdicts.py`'s, an opinion read from the
 texts and from what the server does and does not have, none of it tried in the game.
 """
 
@@ -126,7 +126,7 @@ def main() -> None:
 
     shown = defaultdict(list)
     for perk in perks.values():
-        # The weapon combos are the Esgrima's (COMBOS.md), and what the game hides is no passive of the player's: only what the perk screen shows.
+        # The weapon combos and what the game hides are no passive of the player's: only what the perk screen shows.
         if perk.get("visibility") != "2":
             continue
         if "skill_selector" in perk:
@@ -160,7 +160,7 @@ def main() -> None:
         "",
         "Pedido de 26/10/2026: *vamos ver todas as passivas e ver quais fazem sentido para um co-op e quais são muito roubadas e quais precisamos add no sistema de ofício, exemplo uma que faz mais poções ou que melhora comida e por aí vai.*",
         "",
-        f"São as **{sum(total.values())} passivas** que o jogo mostra na tela de vantagens (as de visibilidade *Visible*, as de cada habilidade e atributo e as de herança e prestígio), com o que cada uma faz **nas palavras do próprio jogo** e a **opinião** desta revisão. Ficam de fora as 51 combinações de arma (`COMBOS.md`) e o que o jogo esconde. Gerado por `tools/make-perks-doc.py` a partir das tabelas e dos textos do jogo; as opiniões são de `tools/perks-verdicts.py` e podem ser mudadas lá.",
+        f"São as **{sum(total.values())} passivas** que o jogo mostra na tela de vantagens (as de visibilidade *Visible*, as de cada habilidade e atributo e as de herança e prestígio), com o que cada uma faz **nas palavras do próprio jogo** e a **opinião** desta revisão. Ficam de fora as 51 combinações de arma e o que o jogo esconde. Gerado por `tools/make-perks-doc.py` a partir das tabelas e dos textos do jogo; as opiniões são de `tools/perks-verdicts.py` e podem ser mudadas lá.",
         "",
         "> **Nada disto foi testado no jogo.** Os veredictos vêm do texto de cada passiva, de quais sistemas do jogo o servidor usa (os vendedores são os nossos, as fechaduras são as nossas, a alquimia e os outros ofícios se fazem na página dos ofícios, o cão do apoiador é do servidor, não há reputação, regateio nem guardas conversando com o jogador) e de bom senso de RP. Um número que o texto não diz (o quanto uma luta fica mais fácil) fica sem número: a opinião é qualitativa.",
         "",
@@ -186,7 +186,7 @@ def main() -> None:
         lines.append("")
 
     lines += ["## O que a revisão pede, em resumo", ""]
-    block("forte", "Bloquear (forte demais para um servidor de RP)", "São passivas que o jogador escolhe na tela de vantagens e que mudam o que o servidor quer decidir pelo RP: a morte, a fechadura, a corrida, o ferimento. Bloqueadas, o jogo não as concede e o servidor as tira de quem tem (como se faz com as combinações).")
+    block("forte", "Bloquear (forte demais para um servidor de RP)", "São passivas que o jogador escolhe na tela de vantagens e que mudam o que o servidor quer decidir pelo RP: a morte, a fechadura, a corrida, o ferimento. Bloqueadas, o jogo não as concede e o servidor as tira de quem tem (como se faz com as combinações). **Bloqueadas desde 01/11/2026** (pedido: *desativa essas passivas roubadas, deixe apenas Marbon com elas; os jogadores que a tinham, retire e devolve os pontos*): ninguém as aprende na tela de vantagens; quem as tinha as perde ao entrar e recebe o ponto de volta na árvore de cada uma, com um aviso; só o Marbon fica com as nove (`STRONG_KEEPERS` em `src/server/perk-guard.ts`).")
     block("oficio", "Levar para o sistema de ofícios", "Agem em trabalhos que o jogo faz numa tela dele (a mesa de alquimia, o caldeirão, a bigorna) e que aqui se fazem na página dos ofícios: o jogador que gastou o ponto não recebe nada. Cada uma pode virar um efeito do ofício (rendimento, qualidade, tempo, Cansaço); a primeira da lista, as poções extras, é a mais clara.")
     lines += PROPOSAL
     block("atencao", "Vigiar (fortes em luta de jogador contra jogador ou na economia)", "Ficam, mas pesam: bola de neve em luta, golpes que se encadeiam, esquiva e armadura baratas, tiros que se somam, vendas em dobro. Se o RP pedir, o corte é de passiva em passiva.")

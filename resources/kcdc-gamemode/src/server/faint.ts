@@ -34,6 +34,25 @@ export const NURSE_FROM_TRY = 3;
 /** The families that hold a body down: the faint, and the drink that caused it. */
 export const WAKE_FAMILIES: readonly string[] = ["unconscious", "alcohol_drunk"];
 
+/**
+ * The effects that hold a drunk body down, taken off by name (2026-11-01: Václav lay 643 s through 37 tries; his body carried `unconscious_alcohol`, with `drunkenness` and
+ * `overeat`, and taking the two families off never woke it).
+ */
+export const WAKE_BUFFS: readonly string[] = ["unconscious_alcohol", "drunkenness"];
+
+/**
+ * A drunk body that comes round further than this from where it lay is put back there (2026-11-01, user: "quando um jogador beber demais e desmaiar ele deve acordar no mesmo
+ * local que desmaiou"). Moved further than `JUMP_M` between two looks while it lay, it was taken by the game, not carried: where it lay before is kept.
+ */
+export const SAME_PLACE_M = 3;
+export const JUMP_M = 15;
+
+interface Spot {
+    readonly x: number;
+    readonly y: number;
+    readonly z: number;
+}
+
 /** What the pace needs of a player: what a player object offers. */
 export interface Faintable {
     readonly id: number;
@@ -43,7 +62,10 @@ export interface Faintable {
     readonly consciousness: number;
     readonly drunkenness: number;
     readonly buffs: readonly { readonly name: string; readonly aiTag: string | null }[];
+    readonly position?: Spot;
     clearBuffs(tag: string): boolean;
+    removeBuff?(buff: string): boolean;
+    teleport?(position: Spot): boolean;
     heal(options?: { health?: boolean; injuries?: boolean; poisons?: boolean; bleeding?: boolean }): boolean;
 }
 
@@ -52,7 +74,16 @@ interface Down {
     drunk: boolean;
     tries: number;
     nextAt: number;
+    /** Where the body lies, to wake it there; null when its place could not be read. */
+    at: Spot | null;
 }
+
+const spotOf = (player: Faintable): Spot | null => {
+    const at = player.position;
+    return at !== undefined && Number.isFinite(at.x) && Number.isFinite(at.y) && Number.isFinite(at.z) ? { x: at.x, y: at.y, z: at.z } : null;
+};
+
+const apart = (a: Spot, b: Spot): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
 export interface Waking {
     ok: boolean;
@@ -71,6 +102,8 @@ function drunkBody(player: Faintable): boolean {
 
 export class FaintWatch {
     private readonly down = new Map<number, Down>();
+    /** Where each body last stood on its feet, at the last look. */
+    private readonly standing = new Map<number, Spot>();
 
     /** One look at everybody; `now` is the clock in milliseconds. */
     tick(players: readonly Faintable[], now: number): void {
@@ -82,18 +115,32 @@ export class FaintWatch {
             seen.add(player.id);
             if (player.consciousness > 0) {
                 this.up(player, now);
+                const here = spotOf(player);
+                if (here !== null) {
+                    this.standing.set(player.id, here);
+                }
                 continue;
             }
             const drunk = drunkBody(player);
             let state = this.down.get(player.id);
+            const here = spotOf(player);
             if (state === undefined) {
-                state = { since: now, drunk, tries: 0, nextAt: now + (drunk ? WAKE_DRUNK_MS : WAKE_OTHER_MS) };
+                // Where it lies, or where it stood a look ago when the game took the falling body somewhere else.
+                const stood = this.standing.get(player.id);
+                const at = here !== null && stood !== undefined && apart(here, stood) > JUMP_M ? stood : here;
+                state = { since: now, drunk, tries: 0, nextAt: now + (drunk ? WAKE_DRUNK_MS : WAKE_OTHER_MS), at };
                 this.down.set(player.id, state);
                 console.log(`faint: ${player.nickname} caiu${drunk ? " de bêbado" : ""}; ${effectsOf(player)}; acorda sozinho em ${Math.round((state.nextAt - now) / 1000)} s se não se levantar`);
-            } else if (drunk && !state.drunk) {
-                // Drink was found on a body first seen as struck down: it is a drunk one from here on.
-                state.drunk = true;
-                state.nextAt = Math.min(state.nextAt, state.since + WAKE_DRUNK_MS);
+            } else {
+                if (drunk && !state.drunk) {
+                    // Drink was found on a body first seen as struck down: it is a drunk one from here on.
+                    state.drunk = true;
+                    state.nextAt = Math.min(state.nextAt, state.since + WAKE_DRUNK_MS);
+                }
+                // A body dragged or carried while it lies is followed; one the game took far between two looks is not.
+                if (here !== null && (state.at === null || apart(here, state.at) <= JUMP_M)) {
+                    state.at = here;
+                }
             }
             if (now >= state.nextAt) {
                 this.wake(player, state, now);
@@ -103,6 +150,11 @@ export class FaintWatch {
         for (const id of [...this.down.keys()]) {
             if (!seen.has(id)) {
                 this.down.delete(id);
+            }
+        }
+        for (const id of [...this.standing.keys()]) {
+            if (!seen.has(id)) {
+                this.standing.delete(id);
             }
         }
     }
@@ -132,6 +184,7 @@ export class FaintWatch {
 
     forget(playerId: number): void {
         this.down.delete(playerId);
+        this.standing.delete(playerId);
     }
 
     private up(player: Faintable, now: number): void {
@@ -141,6 +194,17 @@ export class FaintWatch {
         }
         this.down.delete(player.id);
         console.log(`faint: ${player.nickname} voltou a si depois de ${Math.round((now - state.since) / 1000)} s${state.tries > 0 ? `, com ${state.tries} tentativa(s) do servidor` : ""}`);
+        // A drunk one wakes where it fell.
+        const here = spotOf(player);
+        if (state.drunk && state.at !== null && here !== null && apart(here, state.at) > SAME_PLACE_M) {
+            let back = false;
+            try {
+                back = player.teleport?.(state.at) === true;
+            } catch {
+                back = false;
+            }
+            console.log(`faint: ${player.nickname} acordou a ${Math.round(apart(here, state.at))} m de onde caiu: ${back ? "posto de volta lá" : "o jogo não deixou pôr de volta"}`);
+        }
     }
 
     private wake(player: Faintable, state: Down, now: number): void {
@@ -154,6 +218,16 @@ export class FaintWatch {
                 }
             } catch {
                 // A family the game's tables do not know: the others are still asked.
+            }
+        }
+        // The drunk faint's own effects, by name: the families above leave them on.
+        for (const buff of state.drunk ? WAKE_BUFFS : []) {
+            try {
+                if (player.buffs.some((one) => one.name === buff) && player.removeBuff?.(buff) === true) {
+                    sent += 1;
+                }
+            } catch {
+                // An effect the game's tables do not know.
             }
         }
         let nursed = false;

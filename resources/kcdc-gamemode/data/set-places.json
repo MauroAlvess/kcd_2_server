@@ -1,0 +1,25 @@
+{
+  "_note": "Which town of the server owns the sets of the game's armour presets (data/armor-sets.json) and the coats of arms of a house (the 'Brasão: <casa>' categories of the tailor). Used by tools/make-craft-recipes.py (2026-10-31, user: 'só um cidadão de Suchdol pode fabricar armaduras de Suchdol e armas, e só um artesão pode fabricar os casacos e coisas de Suchdol ou de um cavaleiro que vivia na região no jogo'): a piece that belongs only to the sets of mapped places is made only by a citizen of those towns (a land counts for its seat). A place that is not here is open to every member of the trade. Edit and run the generator again. 'markers' are words in the game's own item names that say whose a piece is (Coat04_mKuttenberg, shieldKite_bergov): a piece with one is that town's.",
+  "places": {
+    "Kuttenberg": "kuttenberg",
+    "Suchdol": "suchdol",
+    "Raborsch": "raborsch",
+    "Malešov": "malesov",
+    "Trosky": "pschitoky"
+  },
+  "houses": {
+    "Kuttenberg": "kuttenberg",
+    "Bergow": "malesov"
+  },
+  "towns": {
+    "kuttenberg": "Kuttenberg",
+    "suchdol": "Suchdol",
+    "raborsch": "Raborsch",
+    "malesov": "Malešov",
+    "pschitoky": "Pschitoky"
+  },
+  "markers": {
+    "kuttenberg": "kuttenberg",
+    "bergov": "malesov"
+  }
+}

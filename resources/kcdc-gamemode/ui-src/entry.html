@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Kingdom RP BRASIL - Entrada</title>
+<style>
+    /* The door of the server (src/client/entry.ts, src/server/entry.ts; user, 2026-10-29: "entrou: trailer; abre o formulário de etapas com pergunta da whitelist; ao responder e for aprovado
+       ele vai para a tela de criação de personagem"; the trailer was taken out on 2026-11-09: "vamos remover o trailer"). The hub of ten multiple-choice questions on the realm's paper card (the welcome
+       form's look). The page is opaque: nothing of the game shows behind it. It has no way out and listens to no key: the server lets a player through only when the questions are passed. */
+    @font-face {
+        font-family: "Cinzel";
+        src: url("fonts/cinzel.woff2") format("woff2");
+        font-weight: 400 900;
+        font-display: block;
+    }
+
+    :root {
+        --btn: rgba(124, 3, 5, 0.992);
+        --btn-hi: rgb(152, 9, 12);
+        --bg: rgba(210, 179, 140, 0.992);
+        --ink: rgba(32, 27, 23, 0.99);
+        --ink-2: rgba(32, 27, 23, .68);
+        --rule: rgba(32, 27, 23, .30);
+        --rule-soft: rgba(32, 27, 23, .15);
+        --display: "Cinzel", "Palatino Linotype", Georgia, serif;
+        --body: "Constantia", "Sitka Text", Georgia, "Palatino Linotype", serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { font-size: calc(clamp(12px, 1.48vh, 17px) * var(--ui, 1)); }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #070403; }
+    body { font: 1rem/1.5 var(--body); color: var(--ink); user-select: none; font-variant-numeric: lining-nums; }
+    img { display: block; -webkit-user-drag: none; }
+    [hidden] { display: none !important; }
+    button { font-family: var(--display); color: inherit; cursor: pointer; background: none; border: 0; }
+    button, button:focus { outline: none; }
+
+    .stage { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 42%, #2a1a0b, #070403 78%); transition: opacity .5s ease; }
+    .stage.leaving { opacity: 0; }
+
+    .btn.ghost:hover:not(:disabled) { background: rgba(213, 161, 86, .2); }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+    <section class="card" id="card" hidden>
+        <div class="paper"><div class="layer base"></div><div class="layer photo"></div><div class="layer grain"></div><div class="layer sheen"></div></div>
+        <div class="inner"></div>
+        <img class="orn orn-tl" src="img/frame-corner-tl.webp" alt="">
+        <img class="orn orn-br" src="img/frame-corner-br.webp" alt="">
+        <div class="langs"><button id="l-pt" class="on">PT</button><button id="l-en">EN</button></div>
+
+        <header class="head">
+            <img class="head-title" id="titleImg" alt="" hidden>
+            <h1 id="title">Bene advenisti</h1>
+            <div class="bar"><i></i><i></i><i></i></div>
+            <p class="when" id="when"></p>
+        </header>
+
+        <div class="scroll" id="scroll"></div>
+
+        <footer class="foot" id="foot"></footer>
+    </section>
+</div>
+
+<script>
+"use strict";
+
+/* The player's own size for the server's pages (Opções, Resolução da interface), told by the client as ui:scale: the root size times it. */
+window.addEventListener("ui:scale", (event) => {
+    const scale = Number(event.detail && event.detail.scale);
+    if (scale >= 0.5 && scale <= 2) document.documentElement.style.setProperty("--ui", String(scale));
+});
+
+const send = (name, payload) => {
+    if (typeof callEvent === "function") {
+        callEvent(name, payload === undefined ? null : JSON.stringify(payload));
+    }
+};
+const $ = (id) => document.getElementById(id);
+const make = (tag, className, text) => {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text !== undefined && text !== null) el.textContent = text;
+    return el;
+};
+
+/* The words of the door, in both languages the server speaks. */
+const TEXT = {
+    pt: {
+        title: "Bene advenisti",
+        when: "Boêmia · Anno Domini 1403 · Região de Kuttenberg",
+        lead: "Sejam todos bem-vindos à Boêmia de 1403, na região de Kuttenberg.",
+        before: "Antes de entrar",
+        intro: "Este é um servidor de roleplay: você interpreta uma pessoa de 1403. Para jogar, responda a dez perguntas sobre RP e sobre Kingdom Come: Deliverance e acerte sete ou mais. Leia antes o resumo abaixo.",
+        rulesHead: "As regras do jogo",
+        rules: [
+            ["RDM", "é matar ou agredir sem motivo de RP. Só se ataca por um motivo de RP (um conflito, um crime, a defesa) e aceitando as consequências."],
+            ["HDM", "é usar o cavalo para atropelar ou ferir sem motivo de RP."],
+            ["Anti-RP", "é ignorar a lógica e as consequências da cena (seguir lutando com uma flecha no peito)."],
+            ["Metagaming", "é usar no jogo o que se soube fora dele (Discord, stream, outro personagem seu)."],
+            ["Powergaming", "é forçar ações ou resultados sobre outro personagem sem deixar que ele reaja."],
+            ["Fear RP", "é o esperado: valorize a vida do personagem e aja de acordo com o perigo que ele enfrenta."],
+            ["Respeito", "tolerância zero com misoginia, racismo, assédio, violência sexual e abusos fora do RP; a Staff pode punir. OOC é falar como jogador, não como personagem."],
+            ["Erros do jogo", "ao achar um, avise a Staff; não explore."],
+        ],
+        howHead: "Como se vive aqui",
+        how: [
+            ["Guilda", "escolha a sua no painel (F2), em Guildas: a primeira é de graça, a primeira troca também, e as seguintes custam 100 moedas."],
+            ["Casas e terras", "cada região tem o seu senhor: peça a ele uma casa, ou acesso a uma."],
+            ["Títulos", "são nomeados por quem os pode dar, sempre abaixo do seu; para ser cavaleiro, um lorde (ou acima) que o conheça o nomeia. Só prende quem tem cargo para isso, e quem está abaixo na hierarquia."],
+            ["Comprar e vender", "o comerciante de cada guilda vende o básico do ofício, só de dia; o resto é entre jogadores: E diante de outro jogador, Negociar."],
+            ["Morrer", "é acordar na sua cidade (ou numa igreja); o que levava fica no lugar da morte. A voz é de proximidade: só ouve quem está perto."],
+            ["O reino", "Boêmia, 1403; o servidor fica na região de Kuttenberg, cobiçada pelas minas de prata."],
+        ],
+        start: "Responder às perguntas",
+        count: "Pergunta",
+        of: "de",
+        back: "Voltar",
+        next: "Próxima",
+        finish: "Concluir",
+        sending: "Conferindo as respostas…",
+        okTitle: "Aprovado",
+        okText: (score, total) => "Você acertou " + score + " de " + total + ". Que a sorte lhe acompanhe, viajante.",
+        noTitle: "Ainda não",
+        noText: (score, total, need) => "Você acertou " + score + " de " + total + "; são necessários " + need + ". Releia o resumo e tente de novo.",
+        retry: "Tentar de novo",
+        retryIn: (s) => "Tentar de novo em " + s + " s",
+        cont: "Continuar",
+        waitText: "Espere um pouco antes de tentar de novo.",
+    },
+    en: {
+        title: "Bene advenisti",
+        when: "Bohemia · Anno Domini 1403 · Kuttenberg region",
+        lead: "Welcome, all of you, to the Bohemia of 1403, in the region of Kuttenberg.",
+        before: "Before you enter",
+        intro: "This is a roleplay server: you play a person of 1403. To play, answer ten questions about RP and about Kingdom Come: Deliverance and get seven or more right. Read the summary below first.",
+        rulesHead: "The rules of the game",
+        rules: [
+            ["RDM", "is killing or attacking with no RP reason. You only attack for an RP reason (a feud, a crime, self-defence) and accepting the consequences."],
+            ["HDM", "is using the horse to run down or hurt somebody with no RP reason."],
+            ["Anti-RP", "is ignoring the logic and the consequences of the scene (going on fighting with an arrow in the chest)."],
+            ["Metagaming", "is using in the game what you learned outside it (Discord, a stream, another character of yours)."],
+            ["Powergaming", "is forcing actions or results on another character without letting them react."],
+            ["Fear RP", "is what is expected: value the character's life and act according to the danger they face."],
+            ["Respect", "zero tolerance for misogyny, racism, harassment, sexual violence and abuse outside RP; the Staff may punish it. OOC is speaking as the player, not as the character."],
+            ["Game flaws", "when you find one, tell the Staff; do not exploit it."],
+        ],
+        howHead: "How life is lived here",
+        how: [
+            ["Guild", "is chosen in the panel (F2), in Guilds: the first is free, the first change too, and the next ones cost 100 coins."],
+            ["Houses and lands", "every region has its lord: ask him for a house, or for access to one."],
+            ["Titles", "are named by whoever can give them, always below their own; to become a knight, a lord (or above) who knows you names you. Only those with an office for it arrest, and only someone below them in the hierarchy."],
+            ["Buying and selling", "each guild's vendor sells the basics of the trade, by day only; the rest is between players: E in front of another player, Trade."],
+            ["Dying", "is waking up in your town (or in a church); what you carried stays where you died. The voice is by proximity: only those near you hear it."],
+            ["The realm", "Bohemia, 1403; the server lies in the region of Kuttenberg, coveted for its silver mines."],
+        ],
+        start: "Answer the questions",
+        count: "Question",
+        of: "of",
+        back: "Back",
+        next: "Next",
+        finish: "Finish",
+        sending: "Checking the answers…",
+        okTitle: "Approved",
+        okText: (score, total) => "You got " + score + " of " + total + " right. May fortune go with you, traveller.",
+        noTitle: "Not yet",
+        noText: (score, total, need) => "You got " + score + " of " + total + " right; " + need + " are needed. Read the summary again and try once more.",
+        retry: "Try again",
+        retryIn: (s) => "Try again in " + s + " s",
+        cont: "Continue",
+        waitText: "Wait a little before trying again.",
+    },
+};
+
+let lang = "pt";
+let need = 7;
+let total = 10;
+let opened = false;
+let step = "intro";
+let questions = [];
+let at = 0;
+let picks = [];
+let result = null;
+let retryTimer = 0;
+let retryAt = 0;
+const words = () => TEXT[lang];
+
+/* ---------- the hub ---------- */
+
+function showHub() {
+    $("card").hidden = false;
+    step = "intro";
+    draw();
+}
+
+function draw() {
+    const w = words();
+    $("title").textContent = w.title;
+    $("when").textContent = w.when;
+    $("l-pt").classList.toggle("on", lang === "pt");
+    $("l-en").classList.toggle("on", lang === "en");
+    const scroll = $("scroll");
+    const foot = $("foot");
+    scroll.innerHTML = "";
+    foot.innerHTML = "";
+    clearInterval(retryTimer);
+    if (step === "intro") drawIntro(scroll, foot, w);
+    else if (step === "quiz") drawQuestion(scroll, foot, w);
+    else if (step === "sending") scroll.appendChild(make("p", "lead", w.sending));
+    else drawResult(scroll, foot, w);
+    scroll.scrollTop = 0;
+}
+
+function drawIntro(scroll, foot, w) {
+    scroll.appendChild(make("p", "lead", w.lead));
+    scroll.appendChild(make("div", "k", w.before));
+    scroll.appendChild(make("p", "t", w.intro));
+    scroll.appendChild(make("div", "k", w.rulesHead));
+    for (const [name, text] of w.rules) scroll.appendChild(ruleRow(name, text));
+    scroll.appendChild(make("div", "k", w.howHead));
+    for (const [name, text] of w.how) scroll.appendChild(ruleRow(name, text));
+    const go = make("button", "btn", w.start);
+    go.addEventListener("click", () => {
+        go.disabled = true;
+        send("entry:start");
+    });
+    foot.appendChild(go);
+}
+
+function ruleRow(name, text) {
+    const row = make("div", "rule");
+    row.appendChild(make("b", null, "◆"));
+    const p = make("p");
+    p.appendChild(make("strong", null, name));
+    p.appendChild(document.createTextNode(" " + text));
+    row.appendChild(p);
+    return row;
+}
+
+function drawQuestion(scroll, foot, w) {
+    const question = questions[at];
+    const pips = make("div", "pips");
+    for (let n = 0; n < questions.length; n += 1) pips.appendChild(make("i", n < at ? "done" : n === at ? "now" : ""));
+    scroll.appendChild(pips);
+    scroll.appendChild(make("div", "count", w.count + " " + (at + 1) + " " + w.of + " " + questions.length));
+    scroll.appendChild(make("p", "ask", question[lang].q));
+    const list = make("div", "opts");
+    question[lang].options.forEach((text, place) => {
+        const button = make("button", "opt" + (picks[at] === place ? " on" : ""));
+        button.appendChild(make("b", null, "ABCD".charAt(place)));
+        button.appendChild(make("span", null, text));
+        button.addEventListener("click", () => {
+            picks[at] = place;
+            draw();
+        });
+        list.appendChild(button);
+    });
+    scroll.appendChild(list);
+    const back = make("button", "btn ghost", w.back);
+    back.disabled = at === 0;
+    back.addEventListener("click", () => {
+        at -= 1;
+        draw();
+    });
+    const last = at === questions.length - 1;
+    const next = make("button", "btn", last ? w.finish : w.next);
+    next.disabled = typeof picks[at] !== "number";
+    next.addEventListener("click", () => {
+        if (!last) {
+            at += 1;
+            draw();
+            return;
+        }
+        step = "sending";
+        draw();
+        send("entry:answer", { picks });
+    });
+    foot.appendChild(back);
+    foot.appendChild(next);
+}
+
+function drawResult(scroll, foot, w) {
+    if (result === null) return;
+    if (result.waitOnly) {
+        scroll.appendChild(make("p", "lead", w.waitText));
+    } else {
+        scroll.appendChild(make("p", "big " + (result.passed ? "ok" : "no"), result.passed ? w.okTitle : w.noTitle));
+        scroll.appendChild(make("p", "score", result.passed ? w.okText(result.score, result.total) : w.noText(result.score, result.total, result.need)));
+    }
+    if (result.passed) {
+        const go = make("button", "btn", w.cont);
+        go.addEventListener("click", () => {
+            go.disabled = true;
+            send("entry:finish");
+        });
+        foot.appendChild(go);
+        return;
+    }
+    const again = make("button", "btn", w.retry);
+    foot.appendChild(again);
+    const tick = () => {
+        const left = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+        again.disabled = left > 0;
+        again.textContent = left > 0 ? w.retryIn(left) : w.retry;
+        if (left <= 0) clearInterval(retryTimer);
+    };
+    again.addEventListener("click", () => {
+        again.disabled = true;
+        send("entry:start");
+    });
+    tick();
+    retryTimer = setInterval(tick, 500);
+}
+
+function chooseLanguage(next) {
+    if (next === lang) return;
+    lang = next;
+    send("entry:lang", { lang });
+    if (!$("card").hidden) draw();
+}
+$("l-pt").addEventListener("click", () => chooseLanguage("pt"));
+$("l-en").addEventListener("click", () => chooseLanguage("en"));
+
+/* ---------- what the client sends ---------- */
+
+window.addEventListener("entry:open", (event) => {
+    if (opened) return;
+    opened = true;
+    const data = event.detail || {};
+    lang = data.lang === "en" ? "en" : "pt";
+    need = Number(data.need) || 7;
+    total = Number(data.total) || 10;
+    if (typeof data.img === "string" && data.img.indexOf("data:image/") === 0) {
+        $("titleImg").src = data.img;
+        $("titleImg").hidden = false;
+        $("title").hidden = true;
+    }
+    showHub();
+});
+
+window.addEventListener("entry:questions", (event) => {
+    const data = event.detail || {};
+    if (typeof data.wait === "number" && data.wait > 0) {
+        result = { passed: false, waitOnly: true, score: 0, total, need };
+        retryAt = Date.now() + data.wait;
+        step = "result";
+        draw();
+        return;
+    }
+    if (!Array.isArray(data.questions) || data.questions.length === 0) return;
+    questions = data.questions;
+    total = data.total || questions.length;
+    need = data.need || need;
+    picks = [];
+    at = 0;
+    step = "quiz";
+    draw();
+});
+
+window.addEventListener("entry:result", (event) => {
+    const data = event.detail || {};
+    result = { passed: data.passed === true, score: Number(data.score) || 0, total: Number(data.total) || total, need: Number(data.need) || need };
+    retryAt = Date.now() + (Number(data.wait) || 0);
+    step = "result";
+    draw();
+});
+
+window.addEventListener("entry:close", () => {
+    $("stage").classList.add("leaving");
+});
+
+send("entry:ready");
+</script>
+</body>
+</html>

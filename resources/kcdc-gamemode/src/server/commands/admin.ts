@@ -1,6 +1,5 @@
 import { demote, promote } from "../auth.js";
 import type { Command, CommandContext } from "../command.js";
-import { esgrima } from "../esgrima.js";
 import { sendSocial } from "../status.js";
 
 export const adminCommand: Command = {
@@ -18,8 +17,6 @@ export const adminCommand: Command = {
         // The panel learns the new role at once: F3 opens the administrator's sections without F2 first (or closes them).
         if (result.ok) {
             sendSocial(player);
-            // The weapon combos follow the role at once: all of them for an administrator (user, 2026-10-26), only their own for one who stopped being it.
-            esgrima.roleChanged(player);
         }
     },
 };

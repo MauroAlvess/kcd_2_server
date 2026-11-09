@@ -14,7 +14,7 @@ const HANS = "76561198000000002";
 const KAT = "76561198000000003";
 const ADMIN = "76561198000000009";
 
-function load({ saved = null, lords = { Suchdol: { steamId: LORD, name: "Radovan I Zelený" }, "Malešov": { steamId: KAT, name: "Kateřina" } }, online = [] } = {}) {
+function load({ saved = null, lords = { Suchdol: { steamId: LORD, name: "Radovan I Zelený" }, "Malešov": { steamId: KAT, name: "Kateřina" } }, online = [], vendorsOn = true, kuttenberg = true } = {}) {
     const files = new Map();
     if (saved !== null) files.set("playerdata/citizenship.json", saved);
     const writes = [];
@@ -50,9 +50,9 @@ function load({ saved = null, lords = { Suchdol: { steamId: LORD, name: "Radovan
         "./change-fee.js": fees,
         "./auth.js": { isAdmin: (player) => player.steamId === ADMIN },
         "./barbers.js": { BARBERS: [{ id: "barbeiro-suchdol" }, { id: "barbeiro-malesov" }, { id: "barbeiro-wysoka" }] },
-        "./vendors.js": { VENDORS: [{ village: "Suchdol", trade: "ferreiro" }, { village: "Suchdol", trade: "alfaiate" }, { village: "Suchdol", trade: "banhista" }, { village: "Malešov", trade: "taberneiro" }, { village: "Malešov, na mata", trade: "mascate" }, { village: "Bylansko", trade: "mascate" }, { village: "Bylany", trade: "taberneiro", home: { x: 1700, y: 1000, z: 106, yaw: 0 } }] },
-        "./family.js": { getSurname: (steamId) => (steamId === LORD ? "Zelený" : null) },
-        "./consort.js": { consortsOf: (steamId) => (steamId === LORD ? [{ label: "Lady", name: "Ludmilla Zelená", courtesy: true, text: "Lady Ludmilla Zelená" }] : []) },
+        "./vendors.js": { vendorSettings: { enabled: vendorsOn }, VENDORS: [{ village: "Suchdol", trade: "ferreiro" }, { village: "Suchdol", trade: "alfaiate" }, { village: "Suchdol", trade: "banhista" }, { village: "Malešov", trade: "taberneiro" }, { village: "Malešov, na mata", trade: "mascate" }, { village: "Bylansko", trade: "mascate" }, { village: "Bylany", trade: "taberneiro", home: { x: 1700, y: 1000, z: 106, yaw: 0 } }] },
+        "./family.js": { getSurname: (steamId) => (steamId === LORD ? "Zelený" : null), crestOf: (steamId) => (steamId === LORD ? "https://example.com/zeleny.png" : "") },
+        "./consort.js": { consortsOf: (steamId) => (steamId === LORD ? [{ label: "Lady", name: "Ludmilla Zelená", courtesy: true, text: "Lady Ludmilla Zelená", steamId: "76561198000000999" }] : []) },
         "./guild-members.js": { nameOfMember: (steamId) => names[steamId] ?? "um jogador" },
         "./properties.js": {
             regionLordOf: (region) => lords[region] ?? null,
@@ -65,7 +65,8 @@ function load({ saved = null, lords = { Suchdol: { steamId: LORD, name: "Radovan
             },
         },
         "./respawn.js": { CHURCHES: [{ id: "suchdol", place: "Suchdol", x: 1, y: 2, z: 3 }, { id: "raborsch", place: "Raborsch", x: 10, y: 20, z: 30 }, { id: "grunta", place: "Minas", x: 30, y: 31, z: 33 }, { id: "sao-tiago", place: "São Tiago, em Kuttenberg", x: 300, y: 400, z: 50 }, { id: "wysoka", place: "Wysoka", x: 440, y: 2497, z: 218.5 }, { id: "stara-kutna", place: "Stará Kutná", x: 3058, y: 1441, z: 106 }], setHomeResolver: (fn) => { resolver = fn; }, wakePoint: (church) => ({ x: church.x, y: church.y, z: church.z + 0.3 }) },
-        "./status.js": { addPayload: (fn) => payloads.push(fn), notice: (player, text) => notices.push([player.steamId, text]), sendSocial: (player) => socials.push(player.steamId) },
+        "./level.js": { onKuttenberg: () => kuttenberg },
+        "./status.js": { addPayload() {}, addLazyPayload: (set, fn) => { assert.equal(set, "citizenship"); payloads.push(fn); }, notice: (player, text) => notices.push([player.steamId, text]), sendSocial: (player) => socials.push(player.steamId) },
         "./store.js": {
             ensureDir() {},
             read: (file) => (files.has(file) ? { status: "ok", value: JSON.parse(files.get(file)) } : { status: "missing" }),
@@ -263,10 +264,11 @@ test("the payload tells each town's crest, lord, the lord's family name, seat an
     const mine = of(hans);
     assert.equal(mine.mine, "raborsch");
     assert.deepEqual(mine.lordOf, []);
+    assert.ok(!JSON.stringify(mine).includes("76561198000000999"), "the lord's spouse is told by name, never by Steam id (the tree's Consort.steamId stays on the server)");
     const suchdol = mine.towns.find((town) => town.id === "suchdol");
-    assert.deepEqual(suchdol, { id: "suchdol", name: "Suchdol", crest: "town-suchdol.webp", lord: "Radovan I Zelený", family: "Zelený", consort: lady, seat: null, seatName: null, lands: ["Wysoka", "Opatowitz"], citizens: 0, closed: false, npcs: 4 });
+    assert.deepEqual(suchdol, { id: "suchdol", name: "Suchdol", crest: "town-suchdol.webp", crestUrl: "", lord: "Radovan I Zelený", family: "Zelený", consort: lady, seat: null, seatName: null, lands: ["Wysoka", "Opatowitz"], citizens: 0, closed: false, npcs: 4 });
     const wysoka = mine.towns.find((town) => town.id === "wysoka");
-    assert.deepEqual(wysoka, { id: "wysoka", name: "Wysoka", crest: "town-suchdol.webp", lord: "Radovan I Zelený", family: "Zelený", consort: lady, seat: "suchdol", seatName: "Suchdol", lands: [], citizens: 0, closed: false, npcs: 1 }, "a land: its seat's crest, its seat's lord, and the seat named");
+    assert.deepEqual(wysoka, { id: "wysoka", name: "Wysoka", crest: "town-suchdol.webp", crestUrl: "", lord: "Radovan I Zelený", family: "Zelený", consort: lady, seat: "suchdol", seatName: "Suchdol", lands: [], citizens: 0, closed: false, npcs: 1 }, "a land: its seat's crest, its seat's lord, and the seat named");
     const raborsch = mine.towns.find((town) => town.id === "raborsch");
     assert.deepEqual([raborsch.lord, raborsch.family, raborsch.citizens, raborsch.lands], [null, null, 1, ["Bohunowitz", "Horschan"]], "no lord yet: the lands are not ceded");
 
@@ -274,9 +276,9 @@ test("the payload tells each town's crest, lord, the lord's family name, seat an
     assert.equal(of(lord).mine, null);
     assert.deepEqual(of(admin).lordOf, plain(sut.api.TOWNS.map((town) => town.id))); // every town, whatever its lord: an administrator opens, closes and expels anywhere
     const kuttenberg = mine.towns.find((town) => town.id === "kuttenberg");
-    assert.deepEqual(kuttenberg, { id: "kuttenberg", name: "Kuttenberg", crest: "@town-kuttenberg", lord: null, family: null, consort: null, seat: null, seatName: null, lands: ["Stará Kutná", "Danemark"], citizens: 0, closed: false, npcs: 0 });
+    assert.deepEqual(kuttenberg, { id: "kuttenberg", name: "Kuttenberg", crest: "@town-kuttenberg", crestUrl: "", lord: null, family: null, consort: null, seat: null, seatName: null, lands: ["Stará Kutná", "Danemark"], citizens: 0, closed: false, npcs: 0 });
     const miskowitz = mine.towns.find((town) => town.id === "miskowitz");
-    assert.deepEqual(miskowitz, { id: "miskowitz", name: "Miskowitz", crest: "@town-pschitoky", lord: null, family: null, consort: null, seat: "pschitoky", seatName: "Pschitoky", lands: [], citizens: 0, closed: false, npcs: 0 });
+    assert.deepEqual(miskowitz, { id: "miskowitz", name: "Miskowitz", crest: "@town-pschitoky", crestUrl: "", lord: null, family: null, consort: null, seat: "pschitoky", seatName: "Pschitoky", lands: [], citizens: 0, closed: false, npcs: 0 });
 });
 
 test("the page's three events: choose, ask for the citizens, depose, each answered", () => {
@@ -351,8 +353,9 @@ test("a file that cannot be read is left alone", () => {
     const files = new Map([["playerdata/citizenship.json", "x"]]);
     const writes = [];
     const requires = {
-        "./auth.js": { isAdmin: () => false }, "./barbers.js": { BARBERS: [] }, "./vendors.js": { VENDORS: [] }, "./family.js": { getSurname: () => null }, "./guild-members.js": { nameOfMember: () => "x" }, "./properties.js": { regionLordOf: () => null, regionCeded: [], cedeRegionTo() { return { given: 0, chests: 0, npc: 0, kept: 0 }; } },
-        "./respawn.js": { CHURCHES: [], setHomeResolver() {}, wakePoint: () => ({}) }, "./status.js": { addPayload() {}, notice() {}, sendSocial() {} },
+        "./auth.js": { isAdmin: () => false }, "./barbers.js": { BARBERS: [] }, "./vendors.js": { vendorSettings: { enabled: true }, VENDORS: [] }, "./family.js": { getSurname: () => null, crestOf: () => "" }, "./guild-members.js": { nameOfMember: () => "x" }, "./properties.js": { regionLordOf: () => null, regionCeded: [], cedeRegionTo() { return { given: 0, chests: 0, npc: 0, kept: 0 }; } },
+        "./respawn.js": { CHURCHES: [], setHomeResolver() {}, wakePoint: () => ({}) }, "./status.js": { addPayload() {}, addLazyPayload() {}, notice() {}, sendSocial() {} },
+        "./level.js": { onKuttenberg: () => true },
         "./store.js": { ensureDir() {}, read: () => ({ status: "corrupt", reason: "bad" }), write: (file, text) => writes.push(file) },
     };
     const sandbox = { exports: {}, require: (id) => requires[id], console: { log() {} }, Events: { onClient() {} }, Player: { all: () => [] }, Navigation: { ready: false } };
@@ -512,7 +515,7 @@ test("an expelled citizen is told, and told whether the town is closed to them n
 test("every region of the catalog is a town or a land now, and the five houses hold two or three lands each", () => {
     const { api } = load();
     const properties = fs.readFileSync(path.join(__dirname, "../src/server/properties.ts"), "utf8");
-    const table = properties.slice(properties.indexOf("const REGIONS"), properties.indexOf("How far around the map's own outline"));
+    const table = properties.slice(properties.indexOf("const KUTTENBERG_REGIONS"), properties.indexOf("The places of the Trosky level"));
     const mapped = [...table.matchAll(/ name: "([^"]+)",\s*minX:/g)].map((match) => match[1]);
     assert.ok(mapped.length >= 16, `the table of mapped regions was read: ${mapped.join(", ")}`);
     const covered = new Set(api.TOWNS.map((town) => town.region));
@@ -587,4 +590,41 @@ test("a land that already has a lord of its own keeps him, and one that was hand
     const odd = load({ saved: JSON.stringify({ v: 1, citizens: {}, granted: ["Wysoka", "ninguem", 5] }), lords: {} });
     assert.deepEqual(plain(odd.ceded), []);
     assert.equal(odd.writes.length, 0, "nothing to give, nothing written");
+});
+
+test("with the vendors switched off the NPCs that live in a town are only its barber (2026-10-29)", () => {
+    const off = load({ vendorsOn: false });
+    assert.equal(off.api.npcsOf(off.api.townById("suchdol")), 1, "no smith, no seamstress, no bath maid: the barber");
+    assert.equal(off.api.npcsOf(off.api.townById("malesov")), 1, "no tavern keeper: the barber");
+    assert.equal(off.api.npcsOf(off.api.townById("raborsch")), 0);
+});
+
+test("on the Trosky level the towns are Trosky's: eight, none with a crest or a church, each waking its citizens at its own square; Kuttenberg's are not there (2026-11-09)", () => {
+    const sut = load({ kuttenberg: false });
+    assert.deepEqual([...sut.api.TOWNS.map((town) => town.id)], ["semine", "nebakov", "acampamento-nomade", "zhelejov", "troskowitz", "tachov", "trosky", "apolonia"]);
+    assert.ok(sut.api.TOWNS.every((town) => town.crest === "" && town.church === null && town.seat === null && town.square !== null), "no crest of its own, no church, no seat, a square");
+    assert.equal(sut.api.setCitizenship(HANS, "suchdol"), false, "Suchdol is not a town of this level");
+    assert.equal(sut.api.setCitizenship(HANS, "semine"), true);
+    const home = sut.resolver()(HANS);
+    assert.equal(home.place, "Semine");
+    assert.deepEqual([Math.round(home.point.x), Math.round(home.point.y)], [1498, 1582], "at Semine's square, on the floor the navigation found");
+    assert.equal(sut.api.townById("trosky").name, "Castelo de Trosky");
+    assert.equal(sut.api.townById("trosky").region, "Trosky", "the catalog's region of the castle");
+    const kuttenberg = load();
+    kuttenberg.api.setCitizenship(HANS, "suchdol");
+    assert.equal(kuttenberg.resolver()(HANS).place, "Suchdol", "on Kuttenberg's level it is as it was");
+});
+
+test("a town with no crest of its own tells the crest link of its lord's family, and none when the lord or the family has none; a town with a crest of its own keeps it (2026-11-09)", () => {
+    const lord = body(2, LORD);
+    const none = load({ kuttenberg: false, online: [lord], lords: {} });
+    assert.ok(plain(none.payloads[0](lord).citizenship.towns).every((town) => town.crest === "" && town.crestUrl === ""), "no lord: no crest");
+    const sut = load({ kuttenberg: false, online: [lord], lords: { Semine: { steamId: LORD, name: "Radovan I Zelený" } } });
+    const of = () => plain(sut.payloads[0](lord).citizenship.towns);
+    const semine = of().find((town) => town.id === "semine");
+    assert.equal(semine.crestUrl, "https://example.com/zeleny.png", "the crest of the lord's family");
+    assert.equal(of().find((town) => town.id === "tachov").crestUrl, "", "another town, another lord: none");
+    const kuttenberg = load({ online: [lord] });
+    const suchdol = plain(kuttenberg.payloads[0](lord).citizenship.towns).find((town) => town.id === "suchdol");
+    assert.deepEqual([suchdol.crest, suchdol.crestUrl], ["town-suchdol.webp", ""], "a town with a crest of its own keeps it");
 });

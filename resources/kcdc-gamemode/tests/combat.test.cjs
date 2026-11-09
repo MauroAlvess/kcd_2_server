@@ -298,3 +298,17 @@ test("when the resource stops everybody is let back into the lock-on", () => {
     c.handlers.get("resourceStop")("kcdc-gamemode");
     assert.deepEqual(c.targetable.slice(2).sort(), [[2, true], [3, true]]);
 });
+
+test("endFightBetween ends the fight of one pair at once, whatever its age, and leaves the others; with no fight it does nothing", () => {
+    const s = setup(); const [a, b, c] = s.players;
+    s.emit("playerAttack", a, b); s.emit("playerAttack", a, c);
+    s.api.endFightBetween(a, b, "duelo: teste");
+    assert.deepEqual(s.cancelled, [[a.id, b.id]]);
+    assert.equal(b.state.length, 0);
+    assert.equal(a.state.length, 1); assert.equal(a.state[0].opponent, c.id);
+    assert.ok(s.logs.some((line) => /acabou \(duelo: teste\)/.test(line)));
+    s.api.endFightBetween(b, c, "sem luta");
+    assert.equal(s.cancelled.length, 1);
+    s.api.endFightBetween(a, b, "de novo");
+    assert.equal(s.cancelled.length, 1);
+});

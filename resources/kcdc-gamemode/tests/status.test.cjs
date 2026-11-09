@@ -8,6 +8,8 @@ require("./reachpatch.cjs");
 /** Every player a test has made since the last load(), for Player.all / Player.getById. */
 const online = [];
 let nextId = 1;
+/** The status module of the last load(): a player a test makes is put on a section that needs every set of data, so the payload carries everything (the sections that send one set at a time have tests of their own). */
+let lastApi = null;
 
 /**
  * The real place hints (`place-hints.ts`), over the game's real map places and the real list of regions, read out of the source as plain literals: for the
@@ -22,9 +24,9 @@ function placeHintsModule() {
             return sandbox.exports;
         };
         const source = fs.readFileSync(path.join(__dirname, "../src/server/properties.ts"), "utf8");
-        const from = source.indexOf("export const REGIONS: readonly Region[] = [");
+        const from = source.indexOf("export const KUTTENBERG_REGIONS: readonly Region[] = [");
         const REGIONS = vm.runInNewContext("(" + source.slice(source.indexOf("[", from), source.indexOf("\n];", from) + 2) + ")");
-        const places = run("map-places.js", { "./map-places-data.js": run("map-places-data.js") });
+        const places = run("map-places.js", { "./level.js": { onKuttenberg: () => true }, "./map-places-data-trosecko.js": { MAP_PLACE_DATA_TROSECKO: [] }, "./map-places-data.js": run("map-places-data.js") });
         placeHints = run("place-hints.js", { "./properties.js": { REGIONS }, "./map-places.js": places });
     }
     return placeHints;
@@ -62,12 +64,13 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, 
     /** What the world says of a door or chest's lock right now; unknown when left out. */
     const worldLocks = {};
     const kitCalls = [];
-    const kit = { handed: [], colours: [] };
+    const kit = { handed: [] };
     const benefits = [];
     const revoked = [];
     const supporterSummaries = {};
     /** The accounts banned (`bans.ts`) by Steam id, who was put out, and what is reserved for an account that is not in the game (`supporters.queue`). */
     const banned = new Map();
+    const sentenced = new Set();
     const kicked = [];
     const queued = [];
     /** When each account was last seen in the world, by Steam id (`position.ts`). */
@@ -188,6 +191,7 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, 
                     allCharacters: () => Object.entries(characters).map(([steamId, saved]) => ({ steamId, name: saved.name ?? saved.nickname, epithet: saved.epithet ?? "", nickname: saved.nickname, named: Boolean(saved.name) })),
                 };
             }
+            if (id === "./sentences.js") return { sentences: { has: (steamId) => sentenced.has(steamId) } };
             if (id === "./bans.js") {
                 return {
                     bans: {
@@ -265,6 +269,10 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, 
                     issueKey: (giver, propertyId, target, admin) => { grants.push({ steamId: giver.steamId, propertyId, admin, ...(target !== giver ? { to: target.steamId } : {}) }); return { ok: true, message: "chave dada" }; },
                     assignOwner: (giver, propertyId, target) => done("owner", { id: propertyId, to: target.steamId }),
                     clearOwner: (propertyId) => done("disown", { id: propertyId }),
+                    // A lord's taking back of a house whose owner stopped coming (2026-11-02): the days as the real one counts them, the rest recorded.
+                    LORD_RECLAIM_DAYS: 7,
+                    daysAway: (seen, now = Date.now()) => (seen === null ? 999 : Math.max(0, Math.floor((now - seen) / 86_400_000))),
+                    reclaimHouse: (lord, propertyId, seenAt) => done("reclaim", { id: propertyId, by: lord.steamId, seen: seenAt(find(propertyId)?.ownerSteamId ?? "") }),
                     renameProperty: (propertyId, name) => done("name", { id: propertyId, name }),
                     describeProperty: (propertyId, text) => done("description", { id: propertyId, text }),
                     setRegion: (propertyId, region) => done("region", { id: propertyId, region }),
@@ -310,11 +318,14 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, 
                 // The server's own thirst: a measure of a hundred for whoever is asked after.
                 return { thirstPace: { value: (player) => thirstOf[player.id] ?? 100 } };
             }
+            // When an owner was last here, for a lord's taking back of a house (2026-11-02): `extras.seen` by Steam id, nobody known by default.
+            if (id === "./character-state.js") {
+                return { lastSeenAt: (steamId) => (extras.seen ?? {})[steamId] ?? null };
+            }
             if (id === "./kits.js") {
                 return {
                     grantGuildKit: (player, guildId) => { kitCalls.push({ steamId: player.steamId, guildId }); return kit.handed; },
                     guildKitHint: (guildId) => (guildId === "collectores" ? "Para cortar lenha ou minerar: E." : ""),
-                    grantFactionColours: (player, factionId) => { kitCalls.push({ steamId: player.steamId, factionId }); return kit.colours; },
                 };
             }
             if (id === "./supporters.js") {
@@ -348,6 +359,8 @@ function load(roles = {}, catalog = [], characters = {}, seed = {}, towns = {}, 
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/status.js"), "utf8"), context);
     context.exports.installStatus();
+    context.exports.SECTION_NEEDS.all = ["citizenship", "family", "properties", "nobility"];
+    lastApi = context.exports;
     return { api: context.exports, accessCalls, lords, freeLeft, purse, languages, handlers, chat, files, grants, edits, labels, worldLocks, levelLocks, kitCalls, kit, benefits, revoked, supporterSummaries, titles, shown, family: familyModule, banned, kicked, queued, seenAt };
 }
 
@@ -355,6 +368,9 @@ function makePlayer(steamId, nickname = `jogador-${steamId.slice(-2) || "x"}`) {
     const sent = [];
     const player = { id: nextId++, nickname, ready: true, alive: true, steamId, sent, position: { x: 0, y: 0, z: 0 }, health: 72.4, maxHealth: 100, hunger: 64.6, maxHunger: 100, appearance: { gender: "male" }, emit: (event, payload) => sent.push({ event, payload: JSON.parse(payload) }) };
     online.push(player);
+    if (lastApi !== null) {
+        lastApi.setSection(player, "all");
+    }
     return player;
 }
 
@@ -387,23 +403,22 @@ test("a new player is a Plebeius with no guild, and sees the eight guilds", () =
     }
 });
 
-test("a player no longer chooses a guild (2026-10-29): the panel's choice is refused with a word on where to find one; an administrator's choice is saved and answered, once", () => {
+test("a player chooses a guild in the panel: the first is a choice, saved and answered once; an administrator's is the same (2026-11-09)", () => {
     const { handlers, chat, files } = load({ "76561198000000004": "admin" });
     const player = makePlayer("76561198000000002");
     handlers.get(SELECT)(player, { guildId: "venatores" });
-    const told = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
-    assert.match(told.payload.text, /A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras/);
-    assert.equal(files.get("playerdata/social.json"), undefined, "nothing saved");
+    assert.equal(player.sent.at(-1).payload.guildId, "venatores");
+    assert.match(chat.at(-1), /Venatores/);
+    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000002"].guildId, "venatores");
+
+    handlers.get(SELECT)(player, { guildId: "venatores" });
+    const same = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
+    assert.match(same.payload.text, /Você já faz parte de Venatores/);
 
     const admin = makePlayer("76561198000000004");
     handlers.get(SELECT)(admin, { guildId: "venatores" });
     assert.equal(admin.sent.at(-1).payload.guildId, "venatores");
-    assert.match(chat.at(-1), /Venatores/);
     assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000004"].guildId, "venatores");
-
-    handlers.get(SELECT)(admin, { guildId: "venatores" });
-    const same = admin.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
-    assert.match(same.payload.text, /Você já faz parte de Venatores/);
 });
 
 test("an administrator's remedy: a guild taken away lets the player be handed another, and the members of a guild are listed", () => {
@@ -433,14 +448,14 @@ test("the tailors' guild is gone: it cannot be chosen, and a saved choice of it 
     assert.equal(player.sent.length, 0, "refused");
     assert.match(chat.at(-1), /não pode ser selecionada/);
 
-    files.set("playerdata/social.json", JSON.stringify({ "76561198000000092": { socialStatus: "plebeius", guildId: "sartores", factionId: null, showcase: "guild", updatedAt: 1 } }));
+    files.set("playerdata/social.json", JSON.stringify({ "76561198000000092": { socialStatus: "plebeius", guildId: "sartores", showcase: "guild", updatedAt: 1 } }));
     const older = makePlayer("76561198000000092");
     handlers.get(POLL)(older);
     assert.equal(older.sent[0].payload.guildId, null);
 });
 
-test("an administrator's first guild brings its kit once, announced on the panel; a swap brings none, and a player's choice brings nothing (2026-10-29)", () => {
-    const { handlers, kitCalls, kit } = load({ "76561198000000093": "admin" });
+test("a first guild brings its kit once, announced on the panel; an administrator's swap brings none, and a player's change brings the new guild's kit (2026-11-09)", () => {
+    const { handlers, kitCalls, kit, freeLeft } = load({ "76561198000000093": "admin" });
     const player = makePlayer("76561198000000093");
 
     kit.handed = ["10 sucata de metal", "aço"];
@@ -451,12 +466,15 @@ test("an administrator's first guild brings its kit once, announced on the panel
 
     kit.handed = [];
     handlers.get(SELECT)(player, { guildId: "venatores" });
-    assert.equal(kitCalls.length, 1, "a swap brings no kit");
+    assert.equal(kitCalls.length, 1, "an administrator's swap brings no kit");
 
     const common = makePlayer("76561198000000095");
     handlers.get(SELECT)(common, { guildId: "alchemistae" });
-    assert.equal(kitCalls.length, 1, "a refused choice brings no kit");
-    assert.equal(common.sent.filter((entry) => entry.event === "kcdc-gamemode:status.social").length, 0);
+    assert.deepEqual(kitCalls[1], { steamId: "76561198000000095", guildId: "alchemistae" }, "a player's first guild brings its kit");
+    freeLeft.add("76561198000000095:guild");
+    handlers.get(SELECT)(common, { guildId: "venatores" });
+    assert.deepEqual(kitCalls[2], { steamId: "76561198000000095", guildId: "venatores" }, "and so does a change");
+    assert.equal(kitCalls.length, 3);
 });
 
 test("a guild that is not in the catalog, or a missing Steam id, is refused and nothing is saved", () => {
@@ -486,7 +504,6 @@ test("a status set by a script shows with its Latin label and Portuguese gloss",
     assert.equal(api.getSocialStatus("76561198000000005"), "plebeius");
 });
 
-const SELECT_FACTION = "kcdc-gamemode:status.selectFaction";
 const SELECT_SHOWCASE = "kcdc-gamemode:status.selectShowcase";
 
 test("the panel's payload carries the player's role, straight from auth.ts, for the page to gate on", () => {
@@ -520,56 +537,17 @@ test("the panel is told the name the player gave the character, and nothing for 
     assert.equal(nobody.sent[0].payload.characterName, "", "no saved character at all");
 });
 
-test("a new player has no faction, sees both houses, and the character page starts on the guild", () => {
+test("a new player has no guild and the character page starts on the guild; no faction travels to the page any more (2026-11-09)", () => {
     const { handlers } = load();
     const player = makePlayer("76561198000000011");
     handlers.get(POLL)(player);
 
     const payload = player.sent[0].payload;
-    assert.equal(payload.factionId, null);
     assert.equal(payload.showcase, "guild");
-    assert.deepEqual(payload.factions.map((faction) => faction.id), ["leao-dourado", "corvo"]);
-    for (const faction of payload.factions) {
-        for (const key of ["id", "name", "motto", "crest"]) {
-            assert.equal(typeof faction[key], "string", `${faction.id} has a ${key}`);
-        }
-        assert.match(faction.crest, /\.webp$/);
-    }
-    assert.equal(payload.factions[0].name, "Casa do Leão Dourado");
-    assert.equal(payload.factions[0].motto, "Pela honra, a lei e o sangue, manteremos a ordem.");
-    assert.equal(payload.factions[1].name, "Casa do Corvo");
-    assert.equal(payload.factions[1].motto, "Nas sombras da guerra, a astúcia conquista o que a força não pode.");
+    assert.ok(!("factionId" in payload) && !("factions" in payload), "the factions are gone from the page's data");
 });
 
-test("swearing to a house saves it by Steam id and answers with the new state; the oath is for good, only an administrator undoes it", () => {
-    const { handlers, chat, files } = load();
-    const player = makePlayer("76561198000000012");
-
-    handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
-    assert.equal(player.sent.at(-1).payload.factionId, "corvo");
-    assert.match(chat.at(-1), /Casa do Corvo/);
-    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000012"].factionId, "corvo");
-
-    handlers.get(SELECT_FACTION)(player, { factionId: "leao-dourado" });
-    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000012"].factionId, "corvo", "a second oath changes nothing");
-    const toast = player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1);
-    assert.match(toast.payload.text, /Você já jurou lealdade à Casa do Corvo: o juramento é definitivo/);
-    handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
-    assert.match(player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1).payload.text, /Você já jurou lealdade à Casa do Corvo\./);
-});
-
-test("an administrator's remedy: a sworn faction taken away lets the player swear again", () => {
-    const { handlers, api } = load();
-    const player = makePlayer("76561198000000013");
-    handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
-    assert.equal(api.clearFactionId("76561198000000013"), true);
-    assert.equal(api.clearFactionId("76561198000000013"), false, "nothing left to clear");
-    assert.equal(api.clearFactionId(""), false);
-    handlers.get(SELECT_FACTION)(player, { factionId: "leao-dourado" });
-    assert.equal(player.sent.at(-1).payload.factionId, "leao-dourado");
-});
-
-test("the character page may show the citizenship too, as a third choice", () => {
+test("the character page may show the citizenship too, as its second choice", () => {
     const { handlers, api } = load();
     const player = makePlayer("76561198000000014");
     handlers.get(SELECT_SHOWCASE)(player, { showcase: "citizenship" });
@@ -578,90 +556,37 @@ test("the character page may show the citizenship too, as a third choice", () =>
     assert.equal(api.getShowcase("76561198000000014"), "citizenship", "a bad value is ignored");
 });
 
-test("swearing to a house hands its colours, and the player is told in the chat and on the page", () => {
-    const { handlers, chat, kitCalls, kit } = load();
-    const player = makePlayer("76561198000000019");
-    kit.colours = ["o manto azul (casaco bordado)", "a gola acolchoada azul"];
-
-    handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
-    assert.deepEqual(kitCalls.map((call) => ({ ...call })), [{ steamId: "76561198000000019", factionId: "corvo" }]);
-    assert.match(chat.at(-1), /cores da facção.*manto azul.*gola acolchoada azul.*inventário/);
-    const notice = player.sent.find((entry) => entry.event === "kcdc-gamemode:status.notice");
-    assert.match(notice.payload.text, /manto azul/);
-    assert.equal(player.sent.at(-1).event, SOCIAL, "the page is redrawn after the notice");
-});
-
-test("a house whose colours were handed before says nothing more about them, and a refused oath hands nothing", () => {
-    const { handlers, chat, kitCalls } = load();
-    const player = makePlayer("76561198000000020");
-
-    handlers.get(SELECT_FACTION)(player, { factionId: "leao-dourado" });
-    assert.ok(!chat.some((line) => /cores da facção/.test(line)));
-    assert.ok(!player.sent.some((entry) => entry.event === "kcdc-gamemode:status.notice"));
-
-    kitCalls.length = 0;
-    handlers.get(SELECT_FACTION)(player, { factionId: "no-such-house" });
-    assert.deepEqual(kitCalls, []);
-});
-
-test("choosing a faction leaves the guild and the social status alone", () => {
-    const { api, handlers } = load();
-    const player = makePlayer("76561198000000013");
-    api.setSocialStatus(player.steamId, "nobilis");
-    api.setGuildId(player.steamId, "tabernarii");
-    handlers.get(SELECT_FACTION)(player, { factionId: "corvo" });
-
-    const payload = player.sent.at(-1).payload;
-    assert.equal(payload.guildId, "tabernarii");
-    assert.equal(payload.factionId, "corvo");
-    assert.deepEqual(payload.socialStatus, { label: "Nobilis", gloss: "nobre" });
-});
-
-test("a faction that is not in the catalog, or a missing Steam id, is refused and nothing is saved", () => {
-    const { handlers, chat, files } = load();
-    const player = makePlayer("76561198000000014");
-
-    handlers.get(SELECT_FACTION)(player, { factionId: "no-such-house" });
-    handlers.get(SELECT_FACTION)(player, "corvo");
-    handlers.get(SELECT_FACTION)(player, null);
-    assert.equal(player.sent.length, 0);
-    assert.equal(chat.length, 3);
-
-    const anonymous = makePlayer("");
-    handlers.get(SELECT_FACTION)(anonymous, { factionId: "corvo" });
-    assert.equal(anonymous.sent.length, 0);
-    assert.equal(files.size, 0);
-});
-
-test("the character page remembers whether it shows the guild or the faction", () => {
+test("the character page remembers whether it shows the guild or the citizenship", () => {
     const { handlers, files } = load();
     const player = makePlayer("76561198000000015");
 
-    handlers.get(SELECT_SHOWCASE)(player, { showcase: "faction" });
-    assert.equal(player.sent.at(-1).payload.showcase, "faction");
-    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000015"].showcase, "faction");
+    handlers.get(SELECT_SHOWCASE)(player, { showcase: "citizenship" });
+    assert.equal(player.sent.at(-1).payload.showcase, "citizenship");
+    assert.equal(JSON.parse(files.get("playerdata/social.json"))["76561198000000015"].showcase, "citizenship");
 
     handlers.get(SELECT_SHOWCASE)(player, { showcase: "guild" });
     assert.equal(player.sent.at(-1).payload.showcase, "guild");
 });
 
-test("a showcase that is neither guild nor faction is ignored without a word", () => {
+test("a showcase that is neither guild nor citizenship (the old faction page too) is ignored without a word", () => {
     const { handlers, chat, files } = load();
     const player = makePlayer("76561198000000016");
 
     handlers.get(SELECT_SHOWCASE)(player, { showcase: "both" });
-    handlers.get(SELECT_SHOWCASE)(player, "faction");
+    handlers.get(SELECT_SHOWCASE)(player, { showcase: "faction" });
+    handlers.get(SELECT_SHOWCASE)(player, "citizenship");
     handlers.get(SELECT_SHOWCASE)(player, null);
-    handlers.get(SELECT_SHOWCASE)(makePlayer(""), { showcase: "faction" });
+    handlers.get(SELECT_SHOWCASE)(makePlayer(""), { showcase: "citizenship" });
     assert.equal(player.sent.length, 0);
     assert.equal(chat.length, 0);
     assert.equal(files.size, 0);
 });
 
-test("a record saved before factions existed still loads, with the new fields at their defaults", () => {
+test("a record saved before a field existed still loads with the defaults; one that shows the old faction page reads as the guild's (2026-11-09)", () => {
     const { handlers, files } = load();
     files.set("playerdata/social.json", JSON.stringify({
         "76561198000000017": { socialStatus: "nobilis", guildId: "venatores", updatedAt: 1 },
+        "76561198000000018": { socialStatus: "plebeius", guildId: null, factionId: "corvo", showcase: "faction", updatedAt: 1 },
     }));
     const player = makePlayer("76561198000000017");
     handlers.get(POLL)(player);
@@ -669,8 +594,11 @@ test("a record saved before factions existed still loads, with the new fields at
     const payload = player.sent[0].payload;
     assert.deepEqual(payload.socialStatus, { label: "Nobilis", gloss: "nobre" });
     assert.equal(payload.guildId, "venatores");
-    assert.equal(payload.factionId, null);
     assert.equal(payload.showcase, "guild");
+
+    const old = makePlayer("76561198000000018");
+    handlers.get(POLL)(old);
+    assert.equal(old.sent[0].payload.showcase, "guild", "the faction page is gone");
 });
 
 const GRANT_KEY = "kcdc-gamemode:status.grantKey";
@@ -848,6 +776,26 @@ test("a lord is sent everything in the lands ceded to them with their own proper
     assert.deepEqual(Array.from(stranger.sent.at(-1).payload.properties), [], "somebody who holds no lands is sent none");
 });
 
+test("a lord is told how long the owner of each house of their lands has been away, and may take back one gone seven days; the page's press reaches the property module (2026-11-02)", () => {
+    const lordId = "76561198000000170";
+    const catalog = [
+        { id: "d3", x: 7, y: 0, name: "Casa 3", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "76561198000000180", ownerName: "Hans", domainOf: lordId },
+        { id: "d5", x: 8, y: 0, name: "Casa 5", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "76561198000000181", ownerName: "Jan", domainOf: lordId },
+        { id: "d4", x: 9, y: 0, name: "Casa do Ferreiro", region: "Suchdol", kind: "house", doors: [], keys: 0, locked: false, parentId: "", ownerSteamId: "", ownerName: "", npc: "Ferreiro", domainOf: lordId },
+    ];
+    const now = Date.now();
+    const { handlers, edits } = load({}, catalog, {}, {}, {}, { seen: { "76561198000000180": now - 10 * 86_400_000, "76561198000000181": now - 2 * 86_400_000 } });
+    const lord = makePlayer(lordId, "Senhor");
+    handlers.get(POLL)(lord);
+    const entries = lord.sent.at(-1).payload.properties;
+    const of = (id) => entries.find((entry) => entry.id === id);
+    assert.deepEqual([of("d3").away, of("d3").reclaim, of("d3").reclaimDays], [10, true, 7]);
+    assert.deepEqual([of("d5").away, "reclaim" in of("d5")], [2, false], "Jan came two days ago");
+    assert.ok(!("away" in of("d4")), "a vendor's house has no owner to be away");
+    handlers.get("kcdc-gamemode:status.propReclaim")(lord, { id: "d3" });
+    assert.deepEqual(JSON.parse(JSON.stringify(edits.filter((edit) => edit.kind === "reclaim"))), [{ kind: "reclaim", id: "d3", by: lordId, seen: now - 10 * 86_400_000 }]);
+});
+
 test("a request for a key reaches the property module with the sender's role, which decides who may", () => {
     const { handlers, grants, chat } = load({ "76561198000000022": "admin" });
 
@@ -896,14 +844,13 @@ test("an administrator's list carries everything about each player, a player's p
 
 test("the administrator's list carries what the Jogadores page shows of the one picked", () => {
     const { handlers, files, supporterSummaries } = load({ "76561198000000301": "admin" }, [], { "76561198000000302": { appearance: { gender: "female" } } });
-    files.set("playerdata/social.json", JSON.stringify({ "76561198000000302": { socialStatus: "nobilis", guildId: "venatores", factionId: "corvo", showcase: "guild", updatedAt: 1 } }));
+    files.set("playerdata/social.json", JSON.stringify({ "76561198000000302": { socialStatus: "nobilis", guildId: "venatores", showcase: "guild", updatedAt: 1 } }));
     supporterSummaries["76561198000000302"] = { since: "01/10/2026", last: "14/10/2026", times: 2 };
     const admin = makePlayer("76561198000000301", "Mauro");
     const kat = makePlayer("76561198000000302", "Katerina");
     const entry = rosterOf(handlers, admin).players.find((each) => each.id === kat.id);
     assert.equal(entry.guildId, "venatores");
     assert.equal(entry.guild, "Caçador");
-    assert.equal(entry.factionId, "corvo");
     assert.deepEqual(entry.status, { label: "Nobilis", gloss: "nobre" });
     assert.equal(entry.body, "female", "the saved look, not the body the client reports");
     assert.equal(typeof entry.marital.label, "string");
@@ -985,6 +932,7 @@ test("an admin can hand a key to another player, who is told; a player who left 
 const FAMILY_ADD = "kcdc-gamemode:status.familyAdd";
 const FAMILY_REMOVE = "kcdc-gamemode:status.familyRemove";
 const FAMILY_SURNAME = "kcdc-gamemode:status.familySurname";
+const FAMILY_PROFILE = "kcdc-gamemode:status.familyProfile";
 const NOTICE = "kcdc-gamemode:status.notice";
 
 const ofKind = (player, event) => player.sent.filter((entry) => entry.event === event);
@@ -1571,7 +1519,7 @@ test("a search finds a player by part of the name, without caring for accents or
 
 test("the list can be filtered to administrators, supporters, nobles, and those without a guild", () => {
     const { handlers, files, supporterSummaries } = load({ "76561198000000411": "admin" });
-    files.set("playerdata/social.json", JSON.stringify({ "76561198000000412": { socialStatus: "nobilis", guildId: "venatores", factionId: null, showcase: "guild", updatedAt: 1 } }));
+    files.set("playerdata/social.json", JSON.stringify({ "76561198000000412": { socialStatus: "nobilis", guildId: "venatores", showcase: "guild", updatedAt: 1 } }));
     supporterSummaries["76561198000000413"] = { since: "01/10/2026", last: "14/10/2026", times: 1 };
     const admin = makePlayer("76561198000000411", "Mauro");
     const noble = makePlayer("76561198000000412", "Radovan");
@@ -1698,20 +1646,31 @@ test("rooms: the owner makes one of some doors and chests and gives it; the hold
     assert.deepEqual(JSON.parse(files.get("playerdata/rooms.json")), {});
 });
 
-test("a player cannot change a guild, with the free change or with coins (2026-10-29: the guilds are handed out, not chosen), and the panel's choice never reaches the purse", () => {
+test("a player's change of guild spends the free change first, then costs 100 coins, and a purse too light refuses it (2026-11-09)", () => {
     const sut = load();
-    const player = makePlayer("76561198000000099");
-    sut.api.setGuildId("76561198000000099", "venatores");
-    sut.freeLeft.add("76561198000000099:guild");
-    sut.purse.set("76561198000000099", 500);
+    const id = "76561198000000099";
+    const player = makePlayer(id);
+    const saved = () => JSON.parse(sut.files.get("playerdata/social.json"))[id].guildId;
+    const told = () => player.sent.filter((entry) => entry.event === "kcdc-gamemode:status.notice").at(-1).payload.text;
+    sut.api.setGuildId(id, "venatores");
+
+    sut.freeLeft.add(`${id}:guild`);
     sut.handlers.get(SELECT)(player, { guildId: "alchemistae" });
-    assert.equal(JSON.parse(sut.files.get("playerdata/social.json"))["76561198000000099"].guildId, "venatores");
-    assert.equal(sut.purse.get("76561198000000099"), 500, "nothing is taken");
-    assert.equal(sut.freeLeft.has("76561198000000099:guild"), true, "and the free change is not spent");
-    assert.deepEqual(sut.kitCalls, []);
+    assert.equal(saved(), "alchemistae");
+    assert.equal(sut.freeLeft.has(`${id}:guild`), false, "the free change is spent");
+    assert.match(told(), /Esta era a sua troca gratuita: as próximas custam 100 moedas/);
+    assert.deepEqual(sut.kitCalls, [{ steamId: id, guildId: "alchemistae" }]);
+
+    sut.handlers.get(SELECT)(player, { guildId: "venatores" });
+    assert.equal(saved(), "alchemistae", "no coins, no change");
+    assert.match(told(), /Trocar custa 100 moedas/);
+
+    sut.purse.set(id, 250);
+    sut.handlers.get(SELECT)(player, { guildId: "venatores" });
+    assert.equal(saved(), "venatores");
+    assert.equal(sut.purse.get(id), 150, "a hundred coins taken");
+    assert.match(told(), /por 100 moedas/);
 });
-
-
 
 test("only an administrator takes the supporter benefits back, from the same page; a player who is gone or a bad target is told or ignored (2026-10-25)", () => {
     const GRANT = "kcdc-gamemode:status.supporterGrant";
@@ -1757,6 +1716,21 @@ function offlineWorld() {
     const kat = makePlayer(OFFLINE.kat, "Katerina");
     return { ...sut, admin, kat };
 }
+
+test("the letter's picker (mail) offers every character of the server, here or not, by name, but oneself, the banned and an account with no character; its numbers are the accounts' (2026-11-02)", () => {
+    const { handlers, admin, kat, banned, api } = offlineWorld();
+    const names = (who, query = {}) => Array.from(rosterOf(handlers, who, { tag: "mail", ...query }).players, (entry) => entry.nickname);
+    assert.deepEqual(names(kat), ["Elisabeth", "Urik"], "Mauro has no character; Katerina is the one asking");
+    assert.deepEqual(names(admin), ["Elisabeth", "Katerina", "Urik"]);
+    assert.deepEqual(names(kat, { q: "uri" }), ["Urik"]);
+    const urik = rosterOf(handlers, kat, { tag: "mail" }).players.find((entry) => entry.nickname === "Urik");
+    assert.ok(urik.id < 0, "an account's number, the same whether its owner is in the game or not");
+    assert.equal(api.accountIdOf(OFFLINE.urik), urik.id);
+    assert.equal(api.accountOfTarget(urik.id).steamId, OFFLINE.urik);
+    assert.equal(api.accountIdOf(OFFLINE.kat), rosterOf(handlers, admin, { tag: "mail" }).players.find((entry) => entry.nickname === "Katerina").id, "one here is named by the account too");
+    banned.set(OFFLINE.urik, { steamId: OFFLINE.urik, name: "Urik", by: "Mauro" });
+    assert.deepEqual(names(kat), ["Elisabeth"], "the banned are not written to");
+});
 
 test("the Jogadores list carries the accounts that are not in the game, after the bodies that are, by name; a search finds them (2026-10-27)", () => {
     const { handlers, admin, kat, seenAt } = offlineWorld();
@@ -1976,4 +1950,158 @@ test("whoever has access locks and unlocks the property, its doors and its chest
     handlers.get(DOOR_LOCK)(katerina, { id: "casa-03", index: 0, locked: 0 });
     assert.deepEqual(edits, []);
     assert.equal(ofKind(katerina, NOTICE).at(-1).payload.text, "Só o dono, ou quem tem acesso, pode trancar ou destrancar.");
+});
+
+// ---------------------------------------------------------------------------------------------
+// One section at a time (2026-10-31, user: "ao apertar f2 carregar as seções de forma individual; ao entrar em cada seção saindo de outra mata a informação da antiga e carrega a da nova").
+
+const SECTION = "kcdc-gamemode:status.section";
+const KEYS_OF_FAMILY = ["family", "familyInvites", "familyRows", "familyRelations", "familyLimits"];
+const KEYS_OF_PROPERTIES = ["properties", "propertyRegions", "domainRegions", "regionHints", "propertyPick", "propertyLimits"];
+
+/** A player on no section yet (a fresh connection): the harness puts the others on the one that needs everything. */
+function freshPlayer(sut, steamId) {
+    const player = makePlayer(steamId);
+    sut.api.setSection(player, "intro");
+    sut.api.setSection(player, undefined);
+    // `setSection` refuses what is no name, so the player is still on "intro": a section that needs nothing. A new connection has none at all.
+    sut.handlers.get("local:playerDisconnect")(player);
+    return player;
+}
+
+const lastSocial = (player) => player.sent.filter((entry) => entry.event === SOCIAL).at(-1).payload;
+
+test("a panel that has opened no section carries the small core and the data of the first section only: the towns, and none of the family, the properties or the nominations", () => {
+    const sut = load();
+    const player = freshPlayer(sut, "76561198000000301");
+    sut.handlers.get(POLL)(player);
+    const payload = lastSocial(player);
+    assert.deepEqual(payload.sets, ["citizenship"]);
+    for (const key of [...KEYS_OF_FAMILY, ...KEYS_OF_PROPERTIES]) assert.ok(!(key in payload), `${key} stays at the server`);
+    for (const key of ["role", "guilds", "socialStatus", "titles", "freeChanges", "changePrice", "surname", "maritalStatus", "supporter"]) assert.ok(key in payload, `${key} is in the core`);
+});
+
+test("opening a section brings its data and takes the last one's away: the family, then the properties, then a section that needs nothing", () => {
+    const sut = load({}, [{ id: "casa-03", x: 1, y: 1, name: "Casa 03", region: "Suchdol", kind: "house", doors: ["d1"], doorGuid: "d1", keys: 0, locked: false, parentId: "", ownerSteamId: "76561198000000302", ownerName: "Hans" }]);
+    const player = freshPlayer(sut, "76561198000000302");
+
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    let payload = lastSocial(player);
+    assert.deepEqual(payload.sets, ["family"]);
+    for (const key of KEYS_OF_FAMILY) assert.ok(key in payload, key);
+    for (const key of KEYS_OF_PROPERTIES) assert.ok(!(key in payload), `${key} is not carried with the family`);
+    assert.equal(payload.familyRows.length > 0, true);
+
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "properties" }));
+    payload = lastSocial(player);
+    assert.deepEqual(payload.sets, ["properties"]);
+    assert.deepEqual(Array.from(payload.properties, (entry) => entry.id), ["casa-03"]);
+    for (const key of KEYS_OF_FAMILY) assert.ok(!(key in payload), `${key} left with the family`);
+
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "guilds" }));
+    payload = lastSocial(player);
+    assert.deepEqual(payload.sets, [], "the guilds read nothing of the sets");
+    for (const key of [...KEYS_OF_FAMILY, ...KEYS_OF_PROPERTIES, "citizenship"]) assert.ok(!(key in payload), key);
+    assert.equal(payload.guilds.length, 8, "the core is always there");
+});
+
+test("the administrator's key page and the player's properties page carry the same set; the hierarchy carries the nobility and the towns", () => {
+    const sut = load({ "76561198000000303": "admin" });
+    const needs = sut.api.SECTION_NEEDS;
+    assert.deepEqual(Array.from(needs.keys), ["properties"]);
+    assert.deepEqual(Array.from(needs.properties), ["properties"]);
+    assert.deepEqual(Array.from(needs.nomination), ["nobility", "citizenship"]);
+    assert.deepEqual(Array.from(needs.character), ["citizenship"]);
+    assert.equal(needs.guilds, undefined);
+    assert.equal(needs.options, undefined);
+});
+
+test("a lazy contributor is worked out only while the player is on a section that needs its set; the core contributors always are", () => {
+    const sut = load();
+    const worked = [];
+    sut.api.addPayload(() => { worked.push("core"); return { nav: true }; });
+    sut.api.addLazyPayload("family", () => { worked.push("family"); return { lazyFamily: 1 }; });
+    sut.api.addLazyPayload("properties", () => { worked.push("properties"); return { lazyProperties: 1 }; });
+    const player = freshPlayer(sut, "76561198000000304");
+
+    sut.handlers.get(POLL)(player);
+    assert.deepEqual(worked, ["core"]);
+    assert.equal(lastSocial(player).nav, true);
+    assert.ok(!("lazyFamily" in lastSocial(player)));
+
+    worked.length = 0;
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    assert.deepEqual(worked, ["core", "family"], "the properties' contributor did not run");
+    assert.equal(lastSocial(player).lazyFamily, 1);
+    assert.ok(!("lazyProperties" in lastSocial(player)));
+});
+
+test("the page names its section with a word of lower-case letters; a name that is not one, or the section it is on already, changes and sends nothing", () => {
+    const sut = load();
+    const player = freshPlayer(sut, "76561198000000305");
+    const before = player.sent.length;
+    for (const bad of [JSON.stringify({ tab: "Família" }), JSON.stringify({ tab: "../../x" }), JSON.stringify({ tab: 7 }), JSON.stringify({}), "not json", JSON.stringify({ tab: "a".repeat(40) })]) {
+        sut.handlers.get(SECTION)(player, bad);
+    }
+    assert.equal(player.sent.length, before, "nothing was sent for a name that is no name");
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    assert.equal(player.sent.length, before + 1);
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    assert.equal(player.sent.length, before + 1, "the same section again is not sent again");
+    // An object payload is read as well as its JSON text.
+    sut.handlers.get(SECTION)(player, { tab: "properties" });
+    assert.equal(player.sent.length, before + 2);
+    assert.deepEqual(lastSocial(player).sets, ["properties"]);
+});
+
+test("what an action answers with is the section the player is on: a change made on the family page sends the family back, not the properties", () => {
+    const sut = load();
+    const player = freshPlayer(sut, "76561198000000306");
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    sut.api.sendSocial(player);
+    assert.deepEqual(lastSocial(player).sets, ["family"]);
+    // A player who leaves is forgotten: coming back they are on the first section again.
+    sut.handlers.get("local:playerDisconnect")(player);
+    sut.api.sendSocial(player);
+    assert.deepEqual(lastSocial(player).sets, ["citizenship"]);
+});
+
+test("a panel put away is a section of nothing: what is sent to the player while it is closed is the small core, and nothing is sent when it closes (2026-10-31)", () => {
+    const sut = load();
+    const player = freshPlayer(sut, "76561198000000307");
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "family" }));
+    assert.deepEqual(lastSocial(player).sets, ["family"]);
+    const before = player.sent.length;
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "closed" }));
+    assert.equal(player.sent.length, before, "nothing is sent to a panel that has just been closed");
+    sut.api.sendSocial(player);
+    const core = lastSocial(player);
+    assert.deepEqual(core.sets, [], "an action done for the player while the panel is closed sends the core only");
+    for (const key of [...KEYS_OF_FAMILY, ...KEYS_OF_PROPERTIES, "citizenship"]) assert.ok(!(key in core), key);
+    assert.equal(core.guilds.length, 8, "the core is there");
+    // The next panel names its section as it opens, and is sent that.
+    sut.handlers.get(SECTION)(player, JSON.stringify({ tab: "properties" }));
+    assert.deepEqual(lastSocial(player).sets, ["properties"]);
+    assert.equal(sut.api.CLOSED_SECTION, "closed");
+});
+
+test("the family's description and crest link come with the section, are saved from the page and answered with it; a link that is none is refused on the panel (2026-11-09)", () => {
+    const { handlers, files } = load();
+    const player = makePlayer("76561198000000034");
+    handlers.get(POLL)(player);
+    assert.deepEqual(player.sent[0].payload.familyProfile, { description: "", crest: "" });
+
+    handlers.get(FAMILY_PROFILE)(player, { description: "  A casa   dos Capon ", crest: "https://example.com/capon.png" });
+    const payload = ofKind(player, SOCIAL).at(-1).payload;
+    assert.deepEqual(payload.familyProfile, { description: "A casa dos Capon", crest: "https://example.com/capon.png" });
+    assert.equal(JSON.parse(files.get("playerdata/family.json"))["76561198000000034"].crest, "https://example.com/capon.png");
+
+    const before = ofKind(player, SOCIAL).length;
+    handlers.get(FAMILY_PROFILE)(player, { description: "x", crest: "http://example.com/a.png" });
+    handlers.get(FAMILY_PROFILE)(player, { description: 7, crest: 7 });
+    handlers.get(FAMILY_PROFILE)(player, null);
+    assert.equal(ofKind(player, SOCIAL).length, before, "nothing was saved, nothing redrawn");
+    const notices = ofKind(player, NOTICE);
+    assert.ok(notices.length >= 2);
+    assert.match(notices[0].payload.text, /https:\/\//);
 });

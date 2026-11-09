@@ -18,6 +18,9 @@ test("a request that is missing fields or has the wrong ones is the default one,
     assert.equal(roster.parseQuery({ page: 1.5 }).page, 0, "a page is a whole number");
     assert.equal(roster.parseQuery({ q: "x".repeat(500) }).q.length, roster.SEARCH_MAX);
     assert.equal(roster.parseQuery({ tag: "nom" }).tag, "nom");
+    // The letter's "Para quem" (2026-11-02).
+    assert.equal(roster.parseQuery({ tag: "mail" }).tag, "mail");
+    assert.equal(roster.PAGE_SIZE.mail, 8);
 });
 
 test("folding takes the accents and the case off", () => {

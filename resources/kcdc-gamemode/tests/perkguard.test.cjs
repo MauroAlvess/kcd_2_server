@@ -12,7 +12,7 @@ const vm = require("node:vm");
 const GUID = "ca293053-bcd4-49cc-9432-68d651b2b114";
 const perk = (name, extra = {}) => ({ name, id: `id-${name}`, uiName: "", track: "alchemy", level: 0, parent: null, visibility: "visible", kinds: ["param"], autolearnable: false, ...extra });
 
-function load({ findPerk, perks, keepDefault = false, already = [] } = {}) {
+function load({ findPerk, perks, keepDefault = false, already = [], strong = false } = {}) {
     const logs = [];
     const blocked = [];
     const sandbox = {
@@ -30,6 +30,8 @@ function load({ findPerk, perks, keepDefault = false, already = [] } = {}) {
     // test whatever the default is.
     if (!keepDefault) {
         sandbox.exports.perkGuard.enabled = true;
+        // The passives too strong for the server (2026-11-01) are blocked by the same call: the tests of the alchemy family leave them out unless asked.
+        sandbox.exports.strongGuard.enabled = strong;
     }
     return { api: sandbox.exports, logs, blocked };
 }
@@ -102,7 +104,7 @@ test("on as the server starts (user, 2026-10-21: \"vamos desativar a alquimia de
     const sut = load({ keepDefault: true });
     assert.equal(sut.api.perkGuard.enabled, true);
     sut.api.installPerkGuard();
-    assert.deepEqual(sut.blocked, names(sut.api.UNSUPPORTED_PERKS));
+    assert.deepEqual(sut.blocked, [...names(sut.api.UNSUPPORTED_PERKS), ...names(sut.api.STRONG_PERKS)], "the family, and the passives too strong for the server");
     for (const name of BY_NAME) {
         assert.ok(sut.blocked.includes(name), name);
     }
@@ -138,10 +140,79 @@ test("switched off (as it was from 2026-10-19 to 2026-10-21, \"ative de volta as
     assert.deepEqual(Array.from(cleaned.removed), []);
 });
 
-test("what the server already blocks (the Esgrima's combos) is kept when the guard blocks its own, and nothing is blocked twice (2026-10-26)", () => {
+test("what the server already blocks is kept when the guard blocks its own, and nothing is blocked twice (2026-10-26)", () => {
     const sut = load({ already: ["C01 (longsword)", "Secrets of matter I"] });
     sut.api.installPerkGuard();
     assert.ok(sut.blocked.includes("C01 (longsword)"), "the combo stays blocked");
     assert.equal(new Set(sut.blocked).size, sut.blocked.length, "each name once");
     for (const name of BY_NAME) assert.ok(sut.blocked.includes(name), name);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The passives too strong for the server (2026-11-01, user: "desativa essas passivas roubadas, deixe apenas Marbon com elas; os jogadores que a tinham, retire e devolve os pontos").
+
+const MARBON = "76561198906140019";
+const NINE = ["Hard to kill", "Revenant II", "Runaway boy", "Clean cut", "Sundering blow II", "Painkiller", "Ringenmeister", "Master thief", "Zaklady bohoslovectvi meta"];
+
+test("the nine are the ones the review of the passives calls too strong, each with its tree and its Portuguese name", () => {
+    const sut = load({ strong: true });
+    assert.deepEqual(names(sut.api.STRONG_PERKS), NINE);
+    const verdicts = fs.readFileSync(path.join(__dirname, "../tools/perks-verdicts.py"), "utf8");
+    const strong = [...verdicts.matchAll(/^\s+"([^"]+)": v\("forte",/gm)].map((match) => match[1]);
+    assert.deepEqual(strong.slice().sort(), NINE.slice().sort(), "the same list as tools/perks-verdicts.py");
+    assert.deepEqual(Array.from(sut.api.STRONG_PERKS, (one) => one.track), ["vitality", "vitality", "vitality", "weapon_sword", "heavy_weapons", "heavy_weapons", "weapon_unarmed", "thievery", "scholarship"]);
+    assert.equal(sut.api.strongName("Hard to kill"), "Duro de Matar");
+    assert.equal(sut.api.strongName("Zaklady bohoslovectvi meta"), "Teologia");
+    assert.equal(sut.api.strongName("Ascetic"), "Ascetic");
+});
+
+test("at start the nine are blocked for everybody, with what the server already blocked kept", () => {
+    const sut = load({ strong: true, already: ["C01 (longsword)"] });
+    sut.api.installPerkGuard();
+    for (const name of NINE) assert.ok(sut.blocked.includes(name), name);
+    assert.ok(sut.blocked.includes("C01 (longsword)"), "what was blocked before stays blocked");
+    assert.ok(sut.logs.some((line) => /passivas fortes demais bloqueadas para todos \(Duro de Matar, Ressuscitado II/.test(line)), sut.logs.join("|"));
+});
+
+test("a player who had them loses them and gets a point back for each in its tree; the alchemy ones are told apart", () => {
+    const sut = load({ strong: true });
+    const snapshot = { tracks: {}, perks: ["Ascetic", "Hard to kill", "Revenant II", "Clean cut", "Master thief", "Secrets of matter I"], perkPoints: { vitality: 1, main: 2 } };
+    const cleaned = sut.api.cleanSnapshot(snapshot, "76561198000000005");
+    assert.deepEqual(Array.from(cleaned.snapshot.perks), ["Ascetic"]);
+    assert.deepEqual(Array.from(cleaned.strong), ["Hard to kill", "Revenant II", "Clean cut", "Master thief"]);
+    assert.deepEqual(Array.from(cleaned.removed), ["Secrets of matter I", "Hard to kill", "Revenant II", "Clean cut", "Master thief"]);
+    assert.deepEqual(Array.from(cleaned.kept), []);
+    assert.deepEqual(JSON.parse(JSON.stringify(cleaned.snapshot.perkPoints)), { vitality: 3, main: 2, weapon_sword: 1, thievery: 1, alchemy: 1 });
+    const none = { tracks: {}, perks: ["Ascetic"], perkPoints: {} };
+    assert.equal(sut.api.cleanSnapshot(none, "x").snapshot, none, "the same object when it had none");
+});
+
+test("Marbon keeps them: left out of what is restored, with no point back, and handed over again by addPerk, the ones he lacks", () => {
+    const sut = load({ strong: true });
+    const snapshot = { tracks: {}, perks: ["Ascetic", "Hard to kill", "Master thief"], perkPoints: { vitality: 0 } };
+    const cleaned = sut.api.cleanSnapshot(snapshot, MARBON);
+    assert.deepEqual(Array.from(cleaned.snapshot.perks), ["Ascetic"]);
+    assert.deepEqual(Array.from(cleaned.kept), ["Hard to kill", "Master thief"]);
+    assert.deepEqual(Array.from(cleaned.removed), []);
+    assert.equal(cleaned.snapshot.perkPoints.vitality, 0, "no point back");
+    assert.equal(sut.api.isStrongKeeper(MARBON), true);
+    assert.equal(sut.api.isStrongKeeper("76561198000000005"), false);
+
+    const added = [];
+    const marbon = { steamId: MARBON, nickname: "Player", perks: ["Ascetic", "Hard to kill"], addPerk(name) { added.push(name); return name !== "Painkiller"; } };
+    assert.equal(sut.api.giveStrongPerks(marbon), 7, "eight asked for, the game took seven");
+    assert.deepEqual(added, NINE.filter((name) => name !== "Hard to kill"));
+    assert.ok(sut.logs.some((line) => /o jogo não aceitou Painkiller para Player/.test(line)));
+    const other = { steamId: "76561198000000005", nickname: "Kath", perks: [], addPerk() { throw new Error("must not be asked"); } };
+    assert.equal(sut.api.giveStrongPerks(other), 0, "nobody else is given any");
+});
+
+test("switched off, the strong passives are neither blocked nor taken from anybody", () => {
+    const sut = load({ strong: false });
+    sut.api.perkGuard.enabled = false;
+    sut.api.installPerkGuard();
+    assert.deepEqual(sut.blocked, []);
+    const snapshot = { tracks: {}, perks: ["Hard to kill"], perkPoints: {} };
+    assert.equal(sut.api.cleanSnapshot(snapshot, "x").snapshot, snapshot);
+    assert.equal(sut.api.isStrongKeeper(MARBON), false);
 });

@@ -1,17 +1,17 @@
 import type { Command, CommandContext } from "../command.js";
 import { BARBERS } from "../barbers.js";
-import { POSTS, SKILL_LABELS } from "../teachers.js";
+import { POSTS, SKILL_LABELS, teacherSettings } from "../teachers.js";
 import { TEACHERS } from "../teachers-data.js";
 
-/** The barbers and the skill teachers: where each stands, and what a teacher teaches. */
+/** The barbers and the skill teachers: where each stands, and what a teacher teaches. The teachers are out of the world while `teacherSettings.enabled` is off (2026-10-29). */
 const ALL = [
     ...BARBERS.map((post) => ({ post, what: "corta cabelo e barba" })),
-    ...POSTS.map((post) => ({ post, what: (TEACHERS.find((teacher) => teacher.id === post.id)?.lessons ?? []).map(([track, cap]) => `${SKILL_LABELS[track]?.replace(/ \(.*\)/, "") ?? track} até ${cap}`).join(", ") })),
+    ...(!teacherSettings.enabled ? [] : POSTS).map((post) => ({ post, what: (TEACHERS.find((teacher) => teacher.id === post.id)?.lessons ?? []).map(([track, cap]) => `${SKILL_LABELS[track]?.replace(/ \(.*\)/, "") ?? track} até ${cap}`).join(", ") })),
 ];
 
 export const mestresCommand: Command = {
     name: "mestres",
-    summary: "Lista os barbeiros e os mestres que ensinam habilidades (esgrima, caça e outras) e leva você até um deles.",
+    summary: "Lista os barbeiros (os mestres que ensinavam habilidades foram removidos do mundo) e leva você até um deles.",
     usage: ["/mestres [texto]  -- cada barbeiro e mestre, onde fica e o que ensina; o texto filtra pelo nome, pelo id ou pela habilidade", "/mestres ir <id>  -- leva você até ele"],
 
     run({ player, args, reply, usage }: CommandContext): void {

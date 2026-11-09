@@ -36,7 +36,8 @@ function load({ smith = true, near = true, rows } = {}) {
         console: { log() {} },
         Chat: { sendToPlayer: (player, text) => state.chat.push(text) },
         Inventory: {
-            get: () => ({ ready: true, revision: state.revision, items: bag }),
+            // `ready` is false from each change until the player's game shows it (`state.shown`), as the server's own is.
+            get: () => ({ ready: (state.shown ?? state.revision) === state.revision, revision: state.revision, items: bag }),
             setProperties: (player, request) => {
                 if (state.failProperties) return { ok: false, code: "revisionMismatch" };
                 state.properties.push(request);
@@ -75,6 +76,13 @@ test("the bench lists the swords, daggers, maces, axes and halberds in the bag, 
     assert.deepEqual(JSON.parse(JSON.stringify(sword.ing)), []);
     assert.deepEqual(JSON.parse(JSON.stringify(view.items["reparo:r1"])), ["Espada militar", "icon-1"], "the name and the game's icon of the item");
     assert.equal(view.level, 9);
+});
+
+test("the list after a repair has the weapons, though the player's game has not caught up yet (2026-11-03, as the extraction's list)", () => {
+    const sut = load();
+    sut.state.shown = sut.state.revision - 1;
+    assert.deepEqual(sut.api.repairView(sut.player).recipes.map((row) => row.id), ["reparo:r1", "reparo:r2"], "the bag is the server's, and it is right at once");
+    assert.equal(sut.api.repair(sut.player, "reparo:r1").ok, true, "and a weapon may be repaired at once");
 });
 
 test("a repair brings the condition to the full, keeps what else the row had, and writes the count on the weapon with a description (2026-10-27)", () => {

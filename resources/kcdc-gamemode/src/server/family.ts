@@ -47,7 +47,7 @@ const fs = require("node:fs") as NodeFs;
 const DIR = "playerdata";
 const FILE = `${DIR}/family.json`;
 
-export const LIMITS = { maxPersons: 80, nameMin: 2, nameMax: 40, maxCousinDegree: 4, surnameMax: 30 } as const;
+export const LIMITS = { maxPersons: 80, nameMin: 2, nameMax: 40, maxCousinDegree: 4, surnameMax: 30, descriptionMax: 300, crestMax: 400 } as const;
 
 export type RowId = "bisavos" | "avos" | "pais" | "geracao" | "filhos" | "netos" | "bisnetos";
 
@@ -208,6 +208,10 @@ interface FamilyRecord {
     persons: StoredPerson[];
     /** The family's name, which the Personagem page shows once there is one. */
     surname?: string | null;
+    /** A few lines about the family, which its page shows (2026-11-09). */
+    description?: string | null;
+    /** The link of the family's crest, an image the pages draw (2026-11-09): a town takes its lord's, a property its owner's. */
+    crest?: string | null;
     updatedAt: number;
 }
 
@@ -821,6 +825,75 @@ export function setSurname(steamId: string, raw: unknown): SurnameResult {
     store[steamId] = record;
     persist(store);
     return { ok: true, surname: record.surname };
+}
+
+export interface FamilyProfile {
+    readonly description: string;
+    readonly crest: string;
+}
+
+export function getFamilyProfile(steamId: string): FamilyProfile {
+    const record = load()[steamId];
+    return { description: record?.description ?? "", crest: record?.crest ?? "" };
+}
+
+/** The link of the family's crest, or "" when it has none: what a town or a property draws for the family of its lord or owner. */
+export function crestOf(steamId: string): string {
+    return steamId === "" ? "" : (load()[steamId]?.crest ?? "");
+}
+
+const LOCAL_HOST = /(^|\.)(localhost|local|internal|lan|home|corp|intranet|localdomain)$/;
+
+/**
+ * A crest link the pages may draw (user, 2026-11-09: "aceitar qualquer link que seja imagem, você só vai renderizar"): the pages put it in an image and run nothing, but a link is still something every
+ * player's game fetches, so it is `https`, with a named host (no address, no name of a machine of a network), no user part and no spaces, and not longer than `LIMITS.crestMax`. Null for one that is none.
+ */
+export function cleanCrestLink(raw: string): string | null {
+    const link = raw.trim();
+    if (link.length === 0 || link.length > LIMITS.crestMax) {
+        return null;
+    }
+    const match = /^https:\/\/([^\/?#:@\s]+)(?::(\d{1,5}))?(?:[\/?#][^\s<>"'`\\]*)?$/i.exec(link);
+    if (match === null) {
+        return null;
+    }
+    const host = (match[1] ?? "").toLowerCase();
+    if (!host.includes(".") || !/^[a-z0-9.-]+$/.test(host) || host.startsWith(".") || host.endsWith(".") || host.includes("..") || /^[0-9.]+$/.test(host) || LOCAL_HOST.test(host)) {
+        return null;
+    }
+    return link;
+}
+
+export type ProfileResult = { readonly ok: true; readonly profile: FamilyProfile } | { readonly ok: false; readonly reason: string };
+
+/**
+ * What the family says about itself: a description of up to `LIMITS.descriptionMax` letters and the link of its crest, each cleared by an empty text. A text that does not fit, or a link that is
+ * not one, changes nothing at all.
+ */
+export function setFamilyProfile(steamId: string, rawDescription: unknown, rawCrest: unknown): ProfileResult {
+    if (!steamId) {
+        return { ok: false, reason: "Sua conta não tem identificação Steam, então a família não poderia ser salva." };
+    }
+    if (typeof rawDescription !== "string" || typeof rawCrest !== "string") {
+        return { ok: false, reason: "Isso não é uma descrição nem um link." };
+    }
+    const description = cleanName(rawDescription);
+    if (description.length > LIMITS.descriptionMax) {
+        return { ok: false, reason: `A descrição da família pode ter até ${LIMITS.descriptionMax} letras.` };
+    }
+    const link = rawCrest.trim();
+    const crest = link === "" ? "" : cleanCrestLink(link);
+    if (crest === null) {
+        return { ok: false, reason: "O link do brasão precisa ser o endereço de uma imagem, começando com https:// (um endereço de site, não de um computador da sua casa)." };
+    }
+    const store = load();
+    const record = store[steamId] ?? { persons: [], updatedAt: 0 };
+    record.description = description === "" ? null : description;
+    record.crest = crest === "" ? null : crest;
+    record.updatedAt = Date.now();
+    store[steamId] = record;
+    persist(store);
+    return { ok: true, profile: { description, crest } };
 }
 
 /**

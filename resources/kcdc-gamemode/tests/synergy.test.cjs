@@ -37,7 +37,7 @@ test("every ingredient of every recipe is made, grown, found, hunted or put in t
     assert.deepEqual([...stranded].map(([name, ids]) => `${name} (${ids.length}: ${ids.slice(0, 2).join(", ")})`), [], "an ingredient with no source: make it, plant it, or say where it is found");
 });
 
-test("the Artesão's thread and linen come from the Agricultor: flax is sown at level 0, spun at the garden, and the thread is not in the Artesão's own recipes' outputs", () => {
+test("the Artesão's linen comes from the Agricultor, who sows it at level 0 and spins it at the garden; the Artesão (with water), the Taberneiro and the Alquimista (with their own water) spin it too (2026-10-30)", () => {
     const flax = FARM_CROPS.find((crop) => crop.id === "linho");
     assert.equal(nameOf(flax.harvest), "Linho");
     assert.equal(flax.level, 0);
@@ -45,7 +45,23 @@ test("the Artesão's thread and linen come from the Agricultor: flax is sown at 
     assert.equal(nameOf(spin.output), "Linha de costura");
     assert.deepEqual(Array.from(spin.ingredients, ([item, n]) => [item, n]), [[flax.harvest, 1]]);
     assert.equal(spin.amount, 3);
-    assert.ok(!CRAFT_RECIPES.some((recipe) => recipe.station === "costura" && recipe.output === spin.output), "no recipe of the needle makes thread");
+    // 2026-10-30 (user: "adiciona a receita de linha que o artesão precisa para ele mesmo poder fabricar com linho e água potável; o taverneiro e alquimista podem fazer usando a própria
+    // água do corpo, quanto mais ele faz mais sede ele fica"): the needle makes thread of a flax and a flask of water, the fire and the rack make it of a flax and the body's own water.
+    const made = CRAFT_RECIPES.filter((recipe) => recipe.output === spin.output);
+    assert.deepEqual(Array.from(made, (recipe) => recipe.id).sort(), ["costura:linha", "fogo:linha", "secador:linha"]);
+    const names = (recipe) => Array.from(recipe.ingredients, ([item, n]) => `${n} ${nameOf(item)}`);
+    const needle = made.find((recipe) => recipe.station === "costura");
+    assert.deepEqual(names(needle), ["1 Linho", "1 Água potável"], "the Artesão pays with a flask of potable water");
+    assert.equal(needle.thirst, undefined, "and nothing of his body");
+    assert.equal(needle.amount, 3);
+    for (const station of ["fogo", "secador"]) {
+        const wet = made.find((recipe) => recipe.station === station);
+        assert.deepEqual(names(wet), ["1 Linho"], `${station}: no flask`);
+        assert.ok(wet.thirst > 0, `${station}: the body's own water is what it pays`);
+        assert.equal(wet.amount, 3);
+        assert.equal(wet.level, 0);
+    }
+    assert.ok(made.every((recipe) => recipe.category === "Fios" && recipe.seconds > 0), "worked for a time, under their own heading");
 });
 
 test("the mushrooms, the rare root, the pearl and the leached charcoal are the alchemists' recipes, made on the page like the bandages, of what the other guilds bring (2026-10-27)", () => {
@@ -63,24 +79,27 @@ test("the half-eaten apple of the game is no ingredient: the dried and cooked ap
     assert.ok(apples.every((recipe) => recipe.ingredients.filter(([item]) => nameOf(item) === "Maçã").every(([item]) => grown.has(item))), "every apple a recipe takes is the garden's");
 });
 
-test("the Cuman clothes are the tailor's, every dye of the four in a category of their own, at the level their name had (2026-10-27)", () => {
+test("the Cuman clothes are the tailor's: the four of them, each with its dyes in a picker, in a category of their own, at the level their name had (2026-10-27; a picker since 2026-10-31)", () => {
     const cuman = CRAFT_RECIPES.filter((recipe) => recipe.station === "costura" && recipe.category === "Roupas cumanas");
     const names = Array.from(cuman, (recipe) => nameOf(recipe.output));
-    assert.equal(new Set(names).size, names.length, "no two with the same name: the dye tells them apart");
-    const of = (start) => cuman.filter((recipe) => nameOf(recipe.output).startsWith(start));
-    assert.equal(of("Chapéu cumano alto (").length, 10);
-    assert.equal(of("Chapéu de couro cumano (").length, 10);
-    assert.equal(of("Botas cumanas (").length, 9, "the game has nine dyes of the boots");
-    assert.equal(of("Cafetã cumano (").length, 10);
-    assert.equal(cuman.length, 39);
-    assert.deepEqual(Array.from(new Set(of("Chapéu de couro cumano (").map((recipe) => recipe.level))), [3]);
-    assert.deepEqual(Array.from(new Set(of("Chapéu cumano alto (").map((recipe) => recipe.level))), [4]);
-    assert.deepEqual(Array.from(new Set(of("Botas cumanas (").map((recipe) => recipe.level))), [10]);
-    assert.deepEqual(Array.from(new Set(of("Cafetã cumano (").map((recipe) => recipe.level))), [18]);
+    assert.deepEqual(names.slice().sort(), ["Botas cumanas", "Cafetã cumano", "Chapéu cumano alto", "Chapéu de couro cumano"], "one recipe for each, the dye is picked");
+    const of = (name) => cuman.find((recipe) => nameOf(recipe.output) === name);
+    assert.equal(of("Chapéu cumano alto").variants.length, 10);
+    assert.equal(of("Chapéu de couro cumano").variants.length, 10);
+    assert.equal(of("Botas cumanas").variants.length, 9, "the game has nine dyes of the boots");
+    assert.equal(of("Cafetã cumano").variants.length, 10);
+    assert.equal(of("Chapéu de couro cumano").level, 4, "a level over what it had: the quest and test hats left the ladder (2026-11-01)");
+    assert.equal(of("Chapéu cumano alto").level, 5);
+    assert.equal(of("Botas cumanas").level, 10);
+    assert.equal(of("Cafetã cumano").level, 18);
     assert.ok(cuman.every((recipe) => recipe.amount === 1 && recipe.ingredients.some(([item]) => nameOf(item) === "Linha de costura")), "sewn with thread, like the rest of the needle's work");
-    // And not once more among the hats, the boots and the coats: the dearest dye of each used to be there alone.
+    // And not once more among the hats, the boots and the coats.
     const elsewhere = CRAFT_RECIPES.filter((recipe) => recipe.station === "costura" && recipe.category !== "Roupas cumanas" && /cuman/i.test(nameOf(recipe.output)));
     assert.equal(elsewhere.length, 0);
     // A colour is a word where the icon gave one, and a number of the dye where not.
-    assert.ok(names.every((name) => /\([a-zçãõáéíóúâêô -]+( \d+)?\)$/i.test(name)), names.find((name) => !/\([a-zçãõáéíóúâêô -]+( \d+)?\)$/i.test(name)));
+    for (const recipe of cuman) {
+        for (const [, label] of recipe.variants) {
+            assert.match(label, /^[a-zçãõáéíóúâêô -]+( \d+)?$/i, label);
+        }
+    }
 });

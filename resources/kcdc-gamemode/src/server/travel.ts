@@ -670,6 +670,15 @@ export class Coaches {
         this.handle = handle;
     }
 
+    /** The coachmen for the administrator's NPCs section (2026-11-02): each stop's, where he stands, whether the place was an administrator's, and whether his body is up. */
+    coachListing(): Array<{ readonly id: string; readonly name: string; readonly x: number; readonly y: number; readonly z: number; readonly chosen: boolean; readonly up: boolean }> {
+        const standing = this.handle?.standing();
+        return [...this.stops.values()].map((stop) => {
+            const coach = stop.place?.coach ?? { x: stop.anchor.x, y: stop.anchor.y, z: stop.anchor.z };
+            return { id: stop.id, name: stop.name, x: coach.x, y: coach.y, z: coach.z, chosen: stop.place?.by === "admin", up: standing?.has(postIdOf(stop)) === true };
+        });
+    }
+
     // -----------------------------------------------------------------------------------------
     // What is kept.
 

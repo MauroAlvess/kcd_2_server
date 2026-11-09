@@ -548,3 +548,33 @@ test("the names of the seats and of the models are the player's words", () => {
     assert.equal(sut.api.cartName("wagon_x"), "wagon_x");
     for (const seat of WAGON_SEATS) assert.ok(sut.api.SEAT_NAMES[seat], seat);
 });
+
+test("the E a player's own game sends for the cart it sees beside them is believed within 25 m of the server's sight of it, and the gap is logged; a cart further, or a coach, is not (2026-11-02)", () => {
+    const sut = load();
+    const hans = sut.player(HANS, "Hans", 2, { x: 0, y: 0, z: 0 });
+    // The server thinks the wagon stands 20 m off, its tail 12 m from Hans (its sight lagged behind a drive); Hans's game sees it beside him.
+    const cart = sut.makeCart("wagon_a_cloth_carpets", { x: 0, y: 20, z: 0 }, 0);
+    sut.api.useCart(hans);
+    assert.equal(sut.dialogues.opened.length, 0, "by the server's sight alone: nothing near");
+    sut.api.useCart(hans, JSON.stringify({ id: cart.id, x: 0.5, y: 4 }));
+    assert.equal(sut.dialogues.opened.length, 1, "the seats");
+    assert.ok(sut.logs.some((line) => /subiu pela vista do próprio jogo na carroça \d+ \(Carroça de tapetes\), a 12\.0 m do corpo pelo servidor; o jogo dele a vê a 16\.0 m de onde o servidor acha/.test(line)), sut.logs.join("\n"));
+    // A seat chosen from there is taken (the menu was opened for the cart the player's game saw).
+    sut.fire("dialogueChoice", sut.dialogues.opened.at(-1).session, hans, "seat:bench");
+    assert.equal(cart.seatOf(hans), "bench");
+
+    const far = sut.makeCart("wagon_b_covered", { x: 0, y: -60, z: 0 }, 0);
+    const jan = sut.player(MAURO, "Jan", 3, { x: 0, y: 0, z: 0 });
+    sut.api.useCart(jan, { id: far.id });
+    assert.equal(sut.dialogues.opened.length, 1, "60 m off by the server: not believed");
+    sut.api.useCart(jan, { id: "x" });
+    sut.api.useCart(jan, "not json");
+    assert.equal(sut.dialogues.opened.length, 1);
+
+    // The carts round a player are named to their client with how far each one's body runs behind its axle: 8 m for the carpet wagon.
+    const near = sut.intervals.find((interval) => interval.ms === 1_000);
+    near.fn();
+    const told = sut.emitted.filter((entry) => entry.to === 3 && entry.event === "kcdc-gamemode:cart.near").at(-1);
+    assert.deepEqual(plain(told.payload.around), [[cart.id, 8]]);
+    assert.equal(sut.api.bodyBackOf("wagon_b_covered"), 5.5);
+});

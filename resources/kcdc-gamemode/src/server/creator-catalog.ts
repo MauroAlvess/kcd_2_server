@@ -6,6 +6,11 @@
  * ones made to be worn: the generic faces, the generic and the barber's hairstyles (each in its colours), a handful of
  * skins, and the beards a face can actually grow. Women have far fewer, so all their hairstyles are offered.
  *
+ * Since 2026-11-02 (user: "vamos disponibilizar mais opções de rosto, cabelo e etc, se tiver como e não quebrar") the faces of the game's grown-up
+ * people as they stand (never one hurt, dead, a child, the devil or a head cut off), the old skins and the heavier woman's, the tonsure in its
+ * colours, the named men's hairstyles that are hair alone (not the rabbi's, Musa's, Samuel's nor Sigismund's, which may carry a hat or a crown, nor
+ * the devil's), and every beard a face can grow. They come after the ones offered before, which keep their numbers.
+ *
  * The page never sees a name of the game's: it holds numbers (the nth face, the nth style in its nth colour) and the
  * server turns them into names. An out-of-range number is refused, which is also all the checking a look needs.
  */
@@ -54,10 +59,29 @@ export interface AppearancesLike {
 }
 
 const HEAD = { male: /^m_head_\d{3}$/, female: /^f_head_\d{3}$/ } as const;
+/** The game's people's faces as they stand (2026-11-02): after the generic ones. */
+const NAMED_HEAD = {
+    male: /^(henry|m_head_(albik|arne|aulitz|bergov|bocek|busek|capon|cellarius|chamberlain|cherthan|damian|drabant|erik|fabrizio|father|father_young|godwin|hanush|istvan|jobst|komar|kozina|kubenka|lichtenstejn|morticius|musa|oderin|olbram|painter|pisek|rabbi|radzig|ruthard|samuel|semin|suk|uher|vavak|zachary|zikmund|zizka))$/,
+    female: /^f_head_(bohuse|bozena|butcherswife|katherine|magdalena|marketa|miriam|mother|rose)$/,
+} as const;
 const SKIN = { male: /^m_body_(pale|tan|roma)_\d{2}$/, female: /^(f_body_(pale|tan)_\d{2}|f_roma_\d{2})$/ } as const;
+/** The old skins, the African one and the heavier woman's (2026-11-02): after the others. */
+const MORE_SKIN = { male: /^(m_body_(pale|tan)_old_\d{2}|african)$/, female: /^(f_body_old_(pale|tan)_\d{2}|f_body_old_roma|f_body_heavy|f_heavy_old)$/ } as const;
 /** The styles made to be worn: x_hair_NN (men's generic), the monk's tonsures and the barber's; women's generic ones and four named ones. */
 const HAIR_GROUP = { male: /^(x_hair_\d{2}|x_hair_monk_\d{2}|m_hair_barber_\d{2})$/, female: /^(f_hair_\d{3}|f_hair_(katherine|miriam|mother|rose))$/ } as const;
-const BEARD = /^(m_beard_\d{2}|UC_beard_barber_\d{2})$/;
+/** The tonsure in its colours and the named men's styles that are hair alone (2026-11-02): after the others. */
+const MORE_HAIR_GROUP = {
+    male: /^m_hair_(tonsure|aulitz|bergov|capon|drabant|erik|father|godwin|hanush|henry|istvan|jobst|komar|lichtenstein|pisek|radzig|ruthard|suk|uher|zizka)$/,
+    female: /^$/,
+} as const;
+/** Every beard of the catalog: the generic ones, the barber's and the named ones; a face is offered only those it can grow (`beards`). */
+const BEARD = /^(m_beard_\d{2}|UC_beard_[A-Za-z]+(_[A-Za-z]+)*(_\d{2})?)$/;
+
+/** Names sorted, the first set before the second (what was offered before keeps its numbers). */
+function inTwoTiers(names: readonly string[], first: RegExp, second: RegExp): string[] {
+    const sorted = [...names].sort();
+    return [...sorted.filter((name) => first.test(name)), ...sorted.filter((name) => !first.test(name) && second.test(name))];
+}
 
 function toneOf(name: string): Tone | null {
     for (const tone of TONES) {
@@ -73,26 +97,27 @@ function byName(a: { readonly name: string }, b: { readonly name: string }): num
 }
 
 function buildGender(api: AppearancesLike, gender: Gender): GenderCatalog {
-    const heads = api
-        .options("head", gender)
-        .map((option) => option.name)
-        .filter((name) => HEAD[gender].test(name))
-        .sort();
-    const skins = api
-        .options("body", gender)
-        .map((option) => option.name)
-        .filter((name) => SKIN[gender].test(name))
-        .sort();
+    const heads = inTwoTiers(
+        api.options("head", gender).map((option) => option.name),
+        HEAD[gender],
+        NAMED_HEAD[gender],
+    );
+    const skins = inTwoTiers(
+        api.options("body", gender).map((option) => option.name),
+        SKIN[gender],
+        MORE_SKIN[gender],
+    );
 
     const groups = new Map<string, { name: string; group: string | null }[]>();
     for (const option of api.options("hair", gender)) {
         const id = option.group ?? option.name;
-        if (HAIR_GROUP[gender].test(id)) {
+        if (HAIR_GROUP[gender].test(id) || MORE_HAIR_GROUP[gender].test(id)) {
             groups.set(id, [...(groups.get(id) ?? []), { name: option.name, group: option.group }]);
         }
     }
-    const hairs: HairStyle[] = [...groups.entries()]
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    const order = inTwoTiers([...groups.keys()], HAIR_GROUP[gender], MORE_HAIR_GROUP[gender]);
+    const hairs: HairStyle[] = order
+        .map((id) => [id, groups.get(id) ?? []] as const)
         .map(([id, options]) => {
             const coloured = options
                 .map((option) => ({ name: option.name, tone: toneOf(option.name) }))

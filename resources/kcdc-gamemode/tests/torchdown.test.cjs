@@ -25,9 +25,17 @@ function load({ inventoryOk = true, bagThrows = false } = {}) {
     const sets = [];
     const gets = { count: 0 };
     const bags = new Map();
+    const timers = [];
+    const bodies = new Map();
     const context = {
         exports: {},
         console: { log: (line) => logs.push(line) },
+        setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+        clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].fn = () => undefined; },
+        setInterval: () => 0,
+        clearInterval: () => undefined,
+        Player: { getById: (id) => bodies.get(id) ?? null },
+        Date,
         Chat: { sendToPlayer: (player, text) => chat.push([player.nickname, text]) },
         Inventory: {
             get: (player) => {
@@ -46,9 +54,11 @@ function load({ inventoryOk = true, bagThrows = false } = {}) {
     const body = (nickname, { right = "", left = "", rows = [], ready = true, bagReady = true } = {}) => {
         const player = { id: nextId++, nickname, ready, rightHandItem: right, leftHandItem: left };
         bags.set(player.id, { ready: bagReady, revision: 3, items: rows, quickslots: { a: "row-1" } });
+        bodies.set(player.id, player);
         return player;
     };
-    return { api: context.exports, logs, chat, sets, gets, body };
+    const runTimers = () => timers.splice(0, timers.length).forEach((timer) => timer.fn());
+    return { api: context.exports, logs, chat, sets, gets, body, bags, timers, runTimers };
 }
 
 const row = (id, item, name, equipped = 1, extra = {}) => ({ id, item, name, amount: 1, equipped, metadata: { quality: 1 }, ...extra });
@@ -72,7 +82,7 @@ test("a torch drawn in a hand is put away: its row un-equipped, every other row 
     assert.deepEqual(request.items.map((one) => [one.id, one.equipped, one.amount]), [["row-1", 1, 1], ["row-2", 0, 1], ["row-3", 0, 3]], "only the torch comes off: the sword in the other hand stays");
     assert.deepEqual(request.quickslots, { a: "row-1" });
     assert.deepEqual(request.items[1].metadata, { quality: 1 });
-    assert.deepEqual(sut.chat, [["Jan", "Você abaixou a tocha para fazer isso. Empunhe-a de novo quando terminar."]]);
+    assert.deepEqual(sut.chat, [["Jan", "Você baixou a tocha para fazer isso: ela volta ao lugar dela quando você terminar."]]);
 });
 
 test("both torches of the game's tables are torches, and a torch in each hand comes off both; a torch equipped but not in a hand, empty hands and a drawn sword leave the bag alone", () => {
@@ -132,4 +142,58 @@ test("a hand that reads wrong is no torch and no error", () => {
     jan.rightHandItem = undefined;
     assert.equal(sut.api.lowerTorch(jan), false);
     assert.equal(sut.logs.length, 0);
+});
+
+test("lowered, not taken off: when the animation is over the torch goes back to its place, equipped as it was; one replaced by the next waits for that one (2026-11-02)", () => {
+    const sut = load();
+    const jan = sut.body("Jan", { left: engineClass(TORCH), rows: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon"), row("a", "99999999-0000-0000-0000-000000000000", "apple", 0, { amount: 3 })] });
+    assert.equal(sut.api.lowerTorch(jan), true);
+    // The bag as the game has it now: the torch off.
+    sut.bags.set(jan.id, { ready: true, revision: 4, items: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon", 0), row("a", "99999999-0000-0000-0000-000000000000", "apple", 0, { amount: 3 })], quickslots: { a: "row-1" } });
+
+    sut.api.animationOver(jan, "replaced");
+    assert.equal(sut.timers.length, 0, "the work goes on: the torch stays down");
+    sut.api.animationOver(jan, "finished");
+    assert.equal(sut.timers.length, 1);
+    assert.equal(sut.timers[0].ms, sut.api.BACK_AFTER_MS);
+    sut.runTimers();
+    assert.equal(sut.sets.length, 2);
+    const [, request] = sut.sets[1];
+    assert.deepEqual(request.items.map((one) => [one.id, one.equipped]), [["t", 1], ["a", 0]], "the torch on again, the rest as it was");
+    assert.equal(request.revision, 4, "refused should the bag have changed in between");
+    assert.deepEqual(request.quickslots, { a: "row-1" });
+    assert.equal(sut.api.torchBack(jan), false, "once");
+});
+
+test("a torch the player took up again by hand, or that left the bag, is not touched; a new animation before the putting back keeps it down (2026-11-02)", () => {
+    const sut = load();
+    const jan = sut.body("Jan", { left: engineClass(TORCH), rows: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon")] });
+    assert.equal(sut.api.lowerTorch(jan), true);
+    sut.bags.set(jan.id, { ready: true, revision: 5, items: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon", 1)], quickslots: null });
+    assert.equal(sut.api.torchBack(jan), false, "equipped again by hand");
+    assert.equal(sut.sets.length, 1);
+
+    const ana = sut.body("Ana", { left: engineClass(TORCH), rows: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon")] });
+    assert.equal(sut.api.lowerTorch(ana), true);
+    sut.bags.set(ana.id, { ready: true, revision: 5, items: [], quickslots: null });
+    assert.equal(sut.api.torchBack(ana), false, "gone from the bag");
+
+    const zeca = sut.body("Zeca", { left: engineClass(TORCH), rows: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon")] });
+    assert.equal(sut.api.lowerTorch(zeca), true);
+    sut.api.animationOver(zeca, "stopped");
+    // The next animation comes before the torch went back: it stays down for that one too.
+    sut.bags.set(zeca.id, { ready: true, revision: 6, items: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon", 0)], quickslots: null });
+    zeca.leftHandItem = "";
+    sut.api.lowerTorch(zeca);
+    sut.runTimers();
+    assert.equal(sut.sets.filter(([who]) => who === "Zeca").length, 1, "only the lowering");
+});
+
+test("a torch lowered for an animation that never told its end is let go after half an hour, and stays off as before (2026-11-02)", () => {
+    const sut = load();
+    const jan = sut.body("Jan", { left: engineClass(TORCH), rows: [row("t", TORCH, "rutinaAVypad_trackview_torch_weapon")] });
+    assert.equal(sut.api.lowerTorch(jan, 1_000), true);
+    assert.equal(sut.api.forgetLowered(1_000 + sut.api.FORGET_AFTER_MS - 1), 0);
+    assert.equal(sut.api.forgetLowered(1_000 + sut.api.FORGET_AFTER_MS + 1), 1);
+    assert.equal(sut.api.torchBack(jan), false);
 });

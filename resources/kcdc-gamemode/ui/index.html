@@ -401,6 +401,10 @@ function drawRoster() {
         return;
     }
 
+    /* The nearest forty and the one who looks (the server's), and how many are left out. */
+    if (typeof realm.total === "number" && realm.total > realm.players.length) {
+        roster.appendChild(el("p", "empty", realm.players.length + " nearest of " + realm.total + " players."));
+    }
     realm.players.forEach((player) => {
         const mine = body !== null && player.slot === body.slot;
         const row = el("div");

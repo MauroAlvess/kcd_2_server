@@ -49,29 +49,29 @@ function load({ tiers = [3, 15, 25], throws = false } = {}) {
     return { api: context.exports, clients, state, player, saved, files };
 }
 
-test("somebody who never chose is told the microphone is open at a middle sensitivity, and how far each voice carries", () => {
+test("somebody who never chose is told the microphone is held (on H), at a middle sensitivity, and how far each voice carries", () => {
     const sut = load();
     const hans = sut.player("76561198000000001");
     sut.clients.get(GET)(hans);
-    assert.deepEqual(hans.sent, [{ name: STATE, payload: { mic: "aberto", sensitivity: "media", ranges: [3, 15, 25] } }]);
+    assert.deepEqual(hans.sent, [{ name: STATE, payload: { mic: "apertar", sensitivity: "media", ranges: [3, 15, 25] } }]);
 });
 
 test("a choice is kept by Steam id, answered with the whole of what is kept, and wrong or missing fields leave what was there", () => {
     const sut = load();
     const hans = sut.player("76561198000000001");
-    sut.clients.get(SET)(hans, JSON.stringify({ mic: "apertar", sensitivity: "alta" }));
-    assert.deepEqual(hans.sent.at(-1).payload, { mic: "apertar", sensitivity: "alta", ranges: [3, 15, 25] });
-    assert.deepEqual(sut.saved()["76561198000000001"], { thirdPerson: false, view: "normal", mic: "apertar", sensitivity: "alta", ui: "100" });
+    sut.clients.get(SET)(hans, JSON.stringify({ mic: "aberto", sensitivity: "alta" }));
+    assert.deepEqual(hans.sent.at(-1).payload, { mic: "aberto", sensitivity: "alta", ranges: [3, 15, 25] });
+    assert.deepEqual(sut.saved()["76561198000000001"], { thirdPerson: false, view: "normal", mic: "aberto", sensitivity: "alta", ui: "100" });
 
     sut.clients.get(SET)(hans, { mic: "gritando", sensitivity: "baixa" });
-    assert.deepEqual(hans.sent.at(-1).payload, { mic: "apertar", sensitivity: "baixa", ranges: [3, 15, 25] }, "the sensitivity changed, the mode nobody knows did not");
+    assert.deepEqual(hans.sent.at(-1).payload, { mic: "aberto", sensitivity: "baixa", ranges: [3, 15, 25] }, "the sensitivity changed, the mode nobody knows did not");
     sut.clients.get(SET)(hans, "not json");
     sut.clients.get(SET)(hans, "x".repeat(400));
-    assert.deepEqual(hans.sent.at(-1).payload, { mic: "apertar", sensitivity: "baixa", ranges: [3, 15, 25] });
+    assert.deepEqual(hans.sent.at(-1).payload, { mic: "aberto", sensitivity: "baixa", ranges: [3, 15, 25] });
 
     const other = sut.player("76561198000000002");
     sut.clients.get(GET)(other);
-    assert.equal(other.sent[0].payload.mic, "aberto", "one player's choice is theirs alone");
+    assert.equal(other.sent[0].payload.mic, "apertar", "one player's choice is theirs alone");
 });
 
 test("the radii are the server's own, rounded; one that is not a distance, or a server that cannot say, gives the framework's", () => {
@@ -92,9 +92,9 @@ test("the radii are the server's own, rounded; one that is not a distance, or a 
 test("somebody with no Steam id keeps nothing but is told what they chose, for as long as they are here", () => {
     const sut = load();
     const nobody = sut.player("");
-    sut.clients.get(SET)(nobody, { mic: "apertar", sensitivity: "alta" });
-    assert.deepEqual(nobody.sent.at(-1).payload, { mic: "apertar", sensitivity: "alta", ranges: [3, 15, 25] });
+    sut.clients.get(SET)(nobody, { mic: "aberto", sensitivity: "alta" });
+    assert.deepEqual(nobody.sent.at(-1).payload, { mic: "aberto", sensitivity: "alta", ranges: [3, 15, 25] });
     assert.equal(sut.files.has("playerdata/options.json"), false);
     sut.clients.get(SET)(nobody, { mic: "turbo" });
-    assert.equal(nobody.sent.at(-1).payload.mic, "aberto", "a wrong mode is the default for them");
+    assert.equal(nobody.sent.at(-1).payload.mic, "apertar", "a wrong mode is the default for them");
 });

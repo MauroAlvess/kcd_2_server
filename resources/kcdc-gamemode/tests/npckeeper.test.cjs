@@ -74,3 +74,19 @@ test("a body brought back is left alone for a while, its rescues are counted, an
         "npc-keeper: vendors: Boticário (Raborsch) caiu (no rio, num barranco ou para baixo do chão), a 5 m do lugar (104, 103, 30): feito de novo no lugar (2a vez neste início)",
     );
 });
+
+test("a body set on what the players' games have under it is off the mesh by design: only its falls and strays count, from where it was set (2026-11-01)", () => {
+    const { NpcKeeper, keeperSettings } = load();
+    const probe = ground({ off: () => true, shut: () => true });
+    const keeper = new NpcKeeper(probe);
+    const SET = { x: 100, y: 100, z: 48.4 };
+    for (let look = 0; look < 4; look += 1) {
+        assert.equal(keeper.look("set", { x: 104, y: 100, z: 48.4 }, SET, 0, look * keeperSettings.lookEveryMs * 4, false, true), null, `look ${look}`);
+    }
+    assert.deepEqual({ ...probe.asked }, { onGround: 0, canWalk: 0 }, "the mesh is not asked about it");
+    assert.equal(keeper.look("set2", { x: 100, y: 100, z: 40 }, SET, 0, 0, false, true), "caiu", "eight metres under where it was set: fallen");
+    assert.equal(keeper.look("set3", { x: 100 + keeperSettings.strayM + 1, y: 100, z: 48.4 }, SET, 0, 0, false, true), "longe");
+    // The same body not set is asked, and found off the ground.
+    keeper.look("plain", { x: 104, y: 100, z: 48.4 }, SET, 0, 0);
+    assert.equal(keeper.look("plain", { x: 104, y: 100, z: 48.4 }, SET, 0, keeperSettings.lookEveryMs), "fora do chão");
+});

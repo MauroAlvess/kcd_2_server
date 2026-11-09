@@ -1,0 +1,3535 @@
+{
+  "areas": [],
+  "doors": [],
+  "effects": [],
+  "format": "kcdc.world",
+  "items": [],
+  "level": "trosecko",
+  "lights": [],
+  "objects": [
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1492.01708984375,
+        1569.862060546875,
+        71.18498992919922
+      ],
+      "rotation": [
+        -0.4232478439807892,
+        -0.5707689523696899,
+        -0.464522123336792,
+        0.5284915566444397
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1491.9306640625,
+        1569.8466796875,
+        71.52198791503906
+      ],
+      "rotation": [
+        -0.4232477843761444,
+        -0.570769190788269,
+        -0.4645220935344696,
+        0.5284912586212158
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1491.9605712890625,
+        1569.8565673828125,
+        71.86891174316406
+      ],
+      "rotation": [
+        -0.4232478439807892,
+        -0.5707689523696899,
+        -0.464522123336792,
+        0.5284915566444397
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1491.873046875,
+        1569.84130859375,
+        72.2059326171875
+      ],
+      "rotation": [
+        -0.4232478439807892,
+        -0.5707689523696899,
+        -0.464522123336792,
+        0.5284915566444397
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1491.14013671875,
+        1569.6070556640625,
+        69.6240005493164
+      ],
+      "rotation": [
+        0.02918543852865696,
+        -0.029895007610321045,
+        -0.6277480721473694,
+        0.7772945761680603
+      ],
+      "scale": [
+        2.147462844848633,
+        2.147462844848633,
+        2.147462844848633
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1493.271240234375,
+        1570.0670166015625,
+        69.80538177490234
+      ],
+      "rotation": [
+        0.029185447841882706,
+        -0.029895009472966194,
+        -0.6277481913566589,
+        0.7772944569587708
+      ],
+      "scale": [
+        2.147462844848633,
+        2.147462844848633,
+        2.147462844848633
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1491.8624267578125,
+        1569.85693359375,
+        72.65115356445313
+      ],
+      "rotation": [
+        0.029185447841882706,
+        -0.029895009472966194,
+        -0.6277481913566589,
+        0.7772944569587708
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1491.2979736328125,
+        1569.7030029296875,
+        72.07276916503906
+      ],
+      "rotation": [
+        0.7033177018165588,
+        0.02070011757314205,
+        0.12878014147281647,
+        0.6988071799278259
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1491.7135009765625,
+        1569.7933349609375,
+        72.14900207519531
+      ],
+      "rotation": [
+        0.700741708278656,
+        0.06359811127185822,
+        0.08587859570980072,
+        0.7053660154342651
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1492.16943359375,
+        1569.890869140625,
+        72.11761474609375
+      ],
+      "rotation": [
+        0.7035713195800781,
+        0.008422387763857841,
+        0.1409563422203064,
+        0.6964536905288696
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1492.5482177734375,
+        1569.972412109375,
+        72.150634765625
+      ],
+      "rotation": [
+        0.6995252370834351,
+        0.0758180320262909,
+        0.07355516403913498,
+        0.706757128238678
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1491.419189453125,
+        1569.723876953125,
+        71.55195617675781
+      ],
+      "rotation": [
+        0.7001600861549377,
+        0.06971090286970139,
+        0.07971972227096558,
+        0.7060885429382324
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1491.9266357421875,
+        1569.833740234375,
+        71.59452819824219
+      ],
+      "rotation": [
+        0.7031101584434509,
+        0.02683691866695881,
+        0.12267689406871796,
+        0.6999045014381409
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1492.4466552734375,
+        1569.945068359375,
+        71.57919311523438
+      ],
+      "rotation": [
+        0.6988370418548584,
+        0.08191955089569092,
+        0.06738477200269699,
+        0.7073720693588257
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1491.7115478515625,
+        1569.783447265625,
+        71.24557495117188
+      ],
+      "rotation": [
+        0.7034712433815002,
+        0.014561870135366917,
+        0.13487324118614197,
+        0.69765704870224
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1492.2366943359375,
+        1569.2076416015625,
+        69.90155029296875
+      ],
+      "rotation": [
+        0.029185447841882706,
+        -0.029895009472966194,
+        -0.6277481913566589,
+        0.7772944569587708
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1946.436767578125,
+        1158.96337890625,
+        54.23617935180664
+      ],
+      "rotation": [
+        0.5809136629104614,
+        -0.40315911173820496,
+        0.5809149146080017,
+        0.4031623899936676
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1946.4923095703125,
+        1158.9854736328125,
+        54.579349517822266
+      ],
+      "rotation": [
+        0.5809136033058167,
+        -0.40315917134284973,
+        0.5809151530265808,
+        0.4031621515750885
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1946.436767578125,
+        1158.96337890625,
+        54.92251968383789
+      ],
+      "rotation": [
+        0.5809136629104614,
+        -0.40315911173820496,
+        0.5809149146080017,
+        0.4031623899936676
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1946.4923095703125,
+        1158.9854736328125,
+        55.265689849853516
+      ],
+      "rotation": [
+        0.5809136629104614,
+        -0.40315911173820496,
+        0.5809149146080017,
+        0.4031623899936676
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1947.39013671875,
+        1159.3746337890625,
+        52.72857666015625
+      ],
+      "rotation": [
+        -1.8408870801067678e-06,
+        2.4171913537429646e-06,
+        0.8215372562408447,
+        0.5701548457145691
+      ],
+      "scale": [
+        2.167174816131592,
+        2.167174816131592,
+        2.167174816131592
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1945.3411865234375,
+        1158.6090087890625,
+        52.72857666015625
+      ],
+      "rotation": [
+        -1.8408870801067678e-06,
+        2.4171913537429646e-06,
+        0.8215372562408447,
+        0.5701548457145691
+      ],
+      "scale": [
+        2.167174816131592,
+        2.167174816131592,
+        2.167174816131592
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1946.470458984375,
+        1158.9617919921875,
+        55.710105895996094
+      ],
+      "rotation": [
+        -1.8408870801067678e-06,
+        2.4171913537429646e-06,
+        0.8215372562408447,
+        0.5701548457145691
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1947.05078125,
+        1159.20751953125,
+        55.1818962097168
+      ],
+      "rotation": [
+        -0.10132940113544464,
+        0.6998103260993958,
+        0.6910339593887329,
+        -0.14989952743053436
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1946.646728515625,
+        1159.057373046875,
+        55.22261428833008
+      ],
+      "rotation": [
+        -0.1438627392053604,
+        0.6923187971115112,
+        0.6988964676856995,
+        -0.10743312537670135
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1946.21435546875,
+        1158.8963623046875,
+        55.152687072753906
+      ],
+      "rotation": [
+        -0.08910101652145386,
+        0.7014726400375366,
+        0.6883121728897095,
+        -0.16193683445453644
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1945.851806640625,
+        1158.759033203125,
+        55.15345764160156
+      ],
+      "rotation": [
+        -0.15592384338378906,
+        0.6897038221359253,
+        0.700663685798645,
+        -0.09521956741809845
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1946.9761962890625,
+        1159.180419921875,
+        54.65264129638672
+      ],
+      "rotation": [
+        -0.1498989462852478,
+        0.6910378336906433,
+        0.6998066306114197,
+        -0.10132986307144165
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1946.48779296875,
+        1158.998291015625,
+        54.652076721191406
+      ],
+      "rotation": [
+        -0.10743243247270584,
+        0.6989002227783203,
+        0.6923150420188904,
+        -0.1438634991645813
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1945.993408203125,
+        1158.813232421875,
+        54.592689514160156
+      ],
+      "rotation": [
+        -0.16193687915802002,
+        0.6883162260055542,
+        0.7014685869216919,
+        -0.08910132199525833
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1946.7216796875,
+        1159.0843505859375,
+        54.32262420654297
+      ],
+      "rotation": [
+        -0.09521880000829697,
+        0.7006678581237793,
+        0.6896997690200806,
+        -0.15592384338378906
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1946.2294921875,
+        1159.6053466796875,
+        52.72911071777344
+      ],
+      "rotation": [
+        -1.8408870801067678e-06,
+        2.4171913537429646e-06,
+        0.8215372562408447,
+        0.5701548457145691
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.3408203125,
+        2631.936279296875,
+        181.99330139160156
+      ],
+      "rotation": [
+        0.6680035591125488,
+        0.2318863421678543,
+        0.6680035591125488,
+        -0.2318863421678543
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.3017578125,
+        2631.98291015625,
+        182.3364715576172
+      ],
+      "rotation": [
+        0.6680035591125488,
+        0.2318863421678543,
+        0.6680035591125488,
+        -0.2318863421678543
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.3408203125,
+        2631.936279296875,
+        182.6796417236328
+      ],
+      "rotation": [
+        0.6680035591125488,
+        0.2318863421678543,
+        0.6680035591125488,
+        -0.2318863421678543
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.3017578125,
+        2631.98291015625,
+        183.02281188964844
+      ],
+      "rotation": [
+        0.6680035591125488,
+        0.2318863421678543,
+        0.6680035591125488,
+        -0.2318863421678543
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.65966796875,
+        2632.730712890625,
+        180.72608947753906
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9446995854377747,
+        -0.32793694734573364
+      ],
+      "scale": [
+        1.9916960000991821,
+        1.9916960000991821,
+        1.9916960000991821
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2519.015625,
+        2631.013427734375,
+        180.72608947753906
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9446996450424194,
+        -0.3279367983341217
+      ],
+      "scale": [
+        1.9916960000991821,
+        1.9916960000991821,
+        1.9916960000991821
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.33203125,
+        2631.968994140625,
+        183.46722412109375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9446995854377747,
+        -0.32793697714805603
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2517.919677734375,
+        2632.447998046875,
+        182.9390106201172
+      ],
+      "rotation": [
+        -0.6251683235168457,
+        0.33040061593055725,
+        0.2859860360622406,
+        -0.6466931104660034
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2518.188232421875,
+        2632.109130859375,
+        182.97972106933594
+      ],
+      "rotation": [
+        -0.6441725492477417,
+        0.2916187345981598,
+        0.3249324858188629,
+        -0.6280279159545898
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2518.474609375,
+        2631.746337890625,
+        182.90980529785156
+      ],
+      "rotation": [
+        -0.6193070411682129,
+        0.34126099944114685,
+        0.2746562063694,
+        -0.6515855193138123
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2518.713134765625,
+        2631.442138671875,
+        182.9105682373047
+      ],
+      "rotation": [
+        -0.6491637825965881,
+        0.2803320586681366,
+        0.3358437716960907,
+        -0.6222614645957947
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2517.970947265625,
+        2632.385498046875,
+        182.40975952148438
+      ],
+      "rotation": [
+        -0.6466931104660034,
+        0.2859860360622406,
+        0.33040061593055725,
+        -0.6251683235168457
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2518.293212890625,
+        2631.976318359375,
+        182.40919494628906
+      ],
+      "rotation": [
+        -0.6280279159545898,
+        0.3249324858188629,
+        0.2916187345981598,
+        -0.6441725492477417
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        2518.621337890625,
+        2631.562744140625,
+        182.3498077392578
+      ],
+      "rotation": [
+        -0.6515855193138123,
+        0.2746562063694,
+        0.34126099944114685,
+        -0.6193070411682129
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2518.138671875,
+        2632.172119140625,
+        182.07974243164063
+      ],
+      "rotation": [
+        -0.6222614645957947,
+        0.3358437716960907,
+        0.2803320586681366,
+        -0.6491637825965881
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        2517.794189453125,
+        2631.544189453125,
+        180.65618896484375
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.9446996450424194,
+        -0.3279367983341217
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.00537109375,
+        1926.49365234375,
+        30.48067855834961
+      ],
+      "rotation": [
+        0.668347954750061,
+        -0.23089110851287842,
+        0.6683483719825745,
+        0.23089122772216797
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.041748046875,
+        1926.5400390625,
+        30.823848724365234
+      ],
+      "rotation": [
+        0.668347954750061,
+        -0.23089110851287842,
+        0.6683483719825745,
+        0.23089122772216797
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.00537109375,
+        1926.49365234375,
+        31.16701889038086
+      ],
+      "rotation": [
+        0.6683478355407715,
+        -0.23089107871055603,
+        0.6683485507965088,
+        0.2308911234140396
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.041748046875,
+        1926.5400390625,
+        31.51017189025879
+      ],
+      "rotation": [
+        0.668347954750061,
+        -0.23089110851287842,
+        0.6683483719825745,
+        0.23089122772216797
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.6162109375,
+        1927.3414306640625,
+        29.21968650817871
+      ],
+      "rotation": [
+        -4.916367402074684e-07,
+        -2.1505210057171098e-08,
+        0.9451870918273926,
+        0.326529324054718
+      ],
+      "scale": [
+        1.9871653318405151,
+        1.9871653318405151,
+        1.9871653318405151
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1079.26611328125,
+        1925.6199951171875,
+        29.21968650817871
+      ],
+      "rotation": [
+        -4.916366833640495e-07,
+        -2.150523492616685e-08,
+        0.9451871514320374,
+        0.3265291750431061
+      ],
+      "scale": [
+        1.9871653318405151,
+        1.9871653318405151,
+        1.9871653318405151
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1080.034423828125,
+        1926.509521484375,
+        31.954565048217773
+      ],
+      "rotation": [
+        -4.916366833640495e-07,
+        -2.150523492616685e-08,
+        0.9451871514320374,
+        0.3265291750431061
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1080.4031982421875,
+        1927.020263671875,
+        31.426393508911133
+      ],
+      "rotation": [
+        0.2869498133659363,
+        -0.6462664604187012,
+        -0.6246751546859741,
+        0.3313312232494354
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1080.13720703125,
+        1926.6826171875,
+        31.467100143432617
+      ],
+      "rotation": [
+        -0.3258681297302246,
+        0.627543568611145,
+        0.6437366604804993,
+        -0.2925783097743988
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1079.8515625,
+        1926.3187255859375,
+        31.397180557250977
+      ],
+      "rotation": [
+        0.27562716603279114,
+        -0.6511761546134949,
+        -0.6187973618507385,
+        0.34218278527259827
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1079.61279296875,
+        1926.01318359375,
+        31.397951126098633
+      ],
+      "rotation": [
+        -0.3367707133293152,
+        0.6217601895332336,
+        0.6487454771995544,
+        -0.28129884600639343
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1080.353515625,
+        1926.9588623046875,
+        30.897138595581055
+      ],
+      "rotation": [
+        -0.3313320279121399,
+        0.6246757507324219,
+        0.6462658047676086,
+        -0.2869492173194885
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1080.0322265625,
+        1926.5491943359375,
+        30.896574020385742
+      ],
+      "rotation": [
+        0.2925785481929779,
+        -0.6437375545501709,
+        -0.6275429129600525,
+        0.3258674442768097
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1079.706298828125,
+        1926.1326904296875,
+        30.83718490600586
+      ],
+      "rotation": [
+        -0.3421834707260132,
+        0.6187978982925415,
+        0.6511754989624023,
+        -0.27562686800956726
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1080.1861572265625,
+        1926.7454833984375,
+        30.567121505737305
+      ],
+      "rotation": [
+        0.28129908442497253,
+        -0.648746132850647,
+        -0.6217596530914307,
+        0.336770236492157
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1079.494140625,
+        1926.931884765625,
+        29.15480613708496
+      ],
+      "rotation": [
+        -4.916366833640495e-07,
+        -2.150523492616685e-08,
+        0.9451871514320374,
+        0.3265291750431061
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.62109375,
+        1979.3240966796875,
+        42.594871520996094
+      ],
+      "rotation": [
+        -0.048265013843774796,
+        -0.7054585814476013,
+        -0.0482628270983696,
+        0.7054569125175476
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.613037109375,
+        1979.26513671875,
+        42.93804168701172
+      ],
+      "rotation": [
+        -0.04826509952545166,
+        -0.7054586410522461,
+        -0.048262737691402435,
+        0.7054568529129028
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.62109375,
+        1979.3240966796875,
+        43.281211853027344
+      ],
+      "rotation": [
+        -0.04826382175087929,
+        -0.7054585814476013,
+        -0.048262402415275574,
+        0.7054569125175476
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.613037109375,
+        1979.26513671875,
+        43.62438201904297
+      ],
+      "rotation": [
+        -0.048265013843774796,
+        -0.7054585814476013,
+        -0.0482628270983696,
+        0.7054569125175476
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.5150146484375,
+        1978.279541015625,
+        41.491512298583984
+      ],
+      "rotation": [
+        -1.4276379260991234e-06,
+        -1.2686731452049571e-06,
+        -0.06825468689203262,
+        0.9976679086685181
+      ],
+      "scale": [
+        1.8721052408218384,
+        1.8721052408218384,
+        1.8721052408218384
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.8131103515625,
+        1980.4483642578125,
+        41.491512298583984
+      ],
+      "rotation": [
+        -1.4276379260991234e-06,
+        -1.2686731452049571e-06,
+        -0.06825468689203262,
+        0.9976679086685181
+      ],
+      "scale": [
+        1.8721052408218384,
+        1.8721052408218384,
+        1.8721052408218384
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1761.6041259765625,
+        1979.2962646484375,
+        44.06879806518555
+      ],
+      "rotation": [
+        -1.4276379260991234e-06,
+        -1.2686731452049571e-06,
+        -0.06825468689203262,
+        0.9976679086685181
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1761.54443359375,
+        1978.6690673828125,
+        43.54058837890625
+      ],
+      "rotation": [
+        0.5488532781600952,
+        0.4458235204219818,
+        0.48302388191223145,
+        0.5164198279380798
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1761.6033935546875,
+        1979.0943603515625,
+        43.58130645751953
+      ],
+      "rotation": [
+        0.5206127166748047,
+        0.47849857807159424,
+        0.450596421957016,
+        0.5449444055557251
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1761.666015625,
+        1979.5523681640625,
+        43.51137924194336
+      ],
+      "rotation": [
+        0.5565504431724548,
+        0.43617668747901917,
+        0.49196308851242065,
+        0.5079112648963928
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1761.7181396484375,
+        1979.9376220703125,
+        43.512149810791016
+      ],
+      "rotation": [
+        0.512182354927063,
+        0.48751163482666016,
+        0.44101718068122864,
+        0.5527255535125732
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1761.5552978515625,
+        1978.7469482421875,
+        43.01133346557617
+      ],
+      "rotation": [
+        0.5164171457290649,
+        0.48302358388900757,
+        0.44582363963127136,
+        0.5488559603691101
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1761.62646484375,
+        1979.2626953125,
+        43.01076889038086
+      ],
+      "rotation": [
+        0.5449420809745789,
+        0.4505959749221802,
+        0.4784989655017853,
+        0.5206151008605957
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1761.697509765625,
+        1979.7869873046875,
+        42.95138168334961
+      ],
+      "rotation": [
+        0.5079089403152466,
+        0.49196264147758484,
+        0.4361768960952759,
+        0.5565527677536011
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1761.5926513671875,
+        1979.0164794921875,
+        42.68131637573242
+      ],
+      "rotation": [
+        0.5527227520942688,
+        0.441017210483551,
+        0.4875122010707855,
+        0.5121847987174988
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1762.28369140625,
+        1979.2027587890625,
+        41.40778732299805
+      ],
+      "rotation": [
+        -1.4276379260991234e-06,
+        -1.2686731452049571e-06,
+        -0.06825468689203262,
+        0.9976679086685181
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2324.09228515625,
+        2040.4970703125,
+        107.74188232421875
+      ],
+      "rotation": [
+        0.4772240221500397,
+        -0.5217833518981934,
+        0.47722381353378296,
+        0.5217822790145874
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2324.15185546875,
+        2040.491943359375,
+        108.08505249023438
+      ],
+      "rotation": [
+        0.47722405195236206,
+        -0.5217833518981934,
+        0.47722384333610535,
+        0.5217822790145874
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2324.09228515625,
+        2040.4970703125,
+        108.42822265625
+      ],
+      "rotation": [
+        0.47722384333610535,
+        -0.5217833518981934,
+        0.47722381353378296,
+        0.5217824578285217
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2324.15185546875,
+        2040.491943359375,
+        108.7713851928711
+      ],
+      "rotation": [
+        0.47722405195236206,
+        -0.5217833518981934,
+        0.47722384333610535,
+        0.5217822790145874
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2325.140380859375,
+        2040.441162109375,
+        106.61370849609375
+      ],
+      "rotation": [
+        3.7576501910052684e-08,
+        -6.203867997101042e-07,
+        0.6748962998390198,
+        0.7379125952720642
+      ],
+      "scale": [
+        1.8902195692062378,
+        1.8902195692062378,
+        1.8902195692062378
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2322.960693359375,
+        2040.636474609375,
+        106.61370849609375
+      ],
+      "rotation": [
+        3.7576501910052684e-08,
+        -6.203867997101042e-07,
+        0.6748962998390198,
+        0.7379125952720642
+      ],
+      "scale": [
+        1.8902195692062378,
+        1.8902195692062378,
+        1.8902195692062378
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2324.12109375,
+        2040.4814453125,
+        109.21581268310547
+      ],
+      "rotation": [
+        3.757637045964657e-08,
+        -6.203867997101042e-07,
+        0.6748965382575989,
+        0.7379124164581299
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2324.751220703125,
+        2040.45166015625,
+        108.6875991821289
+      ],
+      "rotation": [
+        0.05614091455936432,
+        0.7048742771148682,
+        0.7070740461349487,
+        0.006834713742136955
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2324.3232421875,
+        2040.489990234375,
+        108.72831726074219
+      ],
+      "rotation": [
+        0.01300436444580555,
+        0.7069870233535767,
+        0.7053378224372864,
+        0.04998810961842537
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2323.863037109375,
+        2040.5306396484375,
+        108.65839385986328
+      ],
+      "rotation": [
+        0.0684339627623558,
+        0.7037872672080994,
+        0.7070855498313904,
+        -0.005506356246769428
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2323.47509765625,
+        2040.5654296875,
+        108.65916442871094
+      ],
+      "rotation": [
+        0.0006636681500822306,
+        0.7071062922477722,
+        0.7043579816818237,
+        0.062290336936712265
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2324.671875,
+        2040.45849609375,
+        108.1583480834961
+      ],
+      "rotation": [
+        0.006834155879914761,
+        0.7070736885070801,
+        0.7048746347427368,
+        0.05614151433110237
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2324.153564453125,
+        2040.505126953125,
+        108.15777587890625
+      ],
+      "rotation": [
+        0.049987491220235825,
+        0.7053374648094177,
+        0.7069873809814453,
+        0.013004929758608341
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        2323.62744140625,
+        2040.5518798828125,
+        108.098388671875
+      ],
+      "rotation": [
+        -0.005506897810846567,
+        0.707085132598877,
+        0.7037875652313232,
+        0.06843458861112595
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2324.401123046875,
+        2040.4827880859375,
+        107.82833099365234
+      ],
+      "rotation": [
+        0.06228988617658615,
+        0.7043576240539551,
+        0.7071066498756409,
+        0.0006642247899435461
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        2324.182373046875,
+        2041.164794921875,
+        106.55480194091797
+      ],
+      "rotation": [
+        3.7576501910052684e-08,
+        -6.203867997101042e-07,
+        0.6748962998390198,
+        0.7379125952720642
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1992.018798828125,
+        2507.134033203125,
+        115.85191345214844
+      ],
+      "rotation": [
+        0.47665804624557495,
+        -0.5222998261451721,
+        0.47665804624557495,
+        0.5222998261451721
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1992.0802001953125,
+        2507.128173828125,
+        116.19508361816406
+      ],
+      "rotation": [
+        0.47665804624557495,
+        -0.5222998261451721,
+        0.47665804624557495,
+        0.5222998261451721
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1992.018798828125,
+        2507.134033203125,
+        116.53825378417969
+      ],
+      "rotation": [
+        0.47665804624557495,
+        -0.5222998261451721,
+        0.47665804624557495,
+        0.5222998261451721
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1992.0802001953125,
+        2507.128173828125,
+        116.88142395019531
+      ],
+      "rotation": [
+        0.47665804624557495,
+        -0.5222998261451721,
+        0.47665804624557495,
+        0.5222998261451721
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1993.0572509765625,
+        2507.0888671875,
+        114.34645080566406
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6740965247154236,
+        0.738643229007721
+      ],
+      "scale": [
+        2.1656129360198975,
+        2.1656129360198975,
+        2.1656129360198975
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1990.8780517578125,
+        2507.288330078125,
+        114.34645080566406
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6740961670875549,
+        0.7386435866355896
+      ],
+      "scale": [
+        2.1656129360198975,
+        2.1656129360198975,
+        2.1656129360198975
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1992.0479736328125,
+        2507.1171875,
+        117.32584381103516
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6740965247154236,
+        0.738643229007721
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1992.6785888671875,
+        2507.085693359375,
+        116.7976303100586
+      ],
+      "rotation": [
+        -0.056905921548604965,
+        -0.7048137187957764,
+        -0.7070654630661011,
+        -0.007601654157042503
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1992.2493896484375,
+        2507.124267578125,
+        116.83834838867188
+      ],
+      "rotation": [
+        0.013771681115031242,
+        0.7069724798202515,
+        0.7052832245826721,
+        0.05075320973992348
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1991.7906494140625,
+        2507.167724609375,
+        116.76842498779297
+      ],
+      "rotation": [
+        -0.06919793784618378,
+        -0.7037128806114197,
+        -0.7070907950401306,
+        0.004739308264106512
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1991.40283203125,
+        2507.20361328125,
+        116.76919555664063
+      ],
+      "rotation": [
+        0.0014314232394099236,
+        0.7071053385734558,
+        0.7042897939682007,
+        0.06305431574583054
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1992.5987548828125,
+        2507.09375,
+        116.26837921142578
+      ],
+      "rotation": [
+        0.007601654157042503,
+        0.7070654630661011,
+        0.7048137187957764,
+        0.056905921548604965
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1992.0802001953125,
+        2507.14013671875,
+        116.26780700683594
+      ],
+      "rotation": [
+        -0.05075320973992348,
+        -0.7052832245826721,
+        -0.7069724798202515,
+        -0.013771681115031242
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1991.5533447265625,
+        2507.189697265625,
+        116.20841979980469
+      ],
+      "rotation": [
+        -0.004739308264106512,
+        0.7070907950401306,
+        0.7037128806114197,
+        0.06919793784618378
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1992.329345703125,
+        2507.11865234375,
+        115.93836212158203
+      ],
+      "rotation": [
+        -0.06305431574583054,
+        -0.7042897939682007,
+        -0.7071053385734558,
+        -0.0014314232394099236
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1992.11083984375,
+        2507.800537109375,
+        114.43482971191406
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.6740965247154236,
+        0.738643229007721
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.75634765625,
+        2450.95947265625,
+        95.23594665527344
+      ],
+      "rotation": [
+        0.7017050981521606,
+        -0.08723479509353638,
+        0.7017050981521606,
+        0.08723483979701996
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.770751953125,
+        2451.0166015625,
+        95.57911682128906
+      ],
+      "rotation": [
+        0.7017050981521606,
+        -0.08723479509353638,
+        0.7017050981521606,
+        0.08723483979701996
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.75634765625,
+        2450.95947265625,
+        95.92228698730469
+      ],
+      "rotation": [
+        0.7017050981521606,
+        -0.08723478019237518,
+        0.7017051577568054,
+        0.08723479509353638
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.770751953125,
+        2451.0166015625,
+        96.26545715332031
+      ],
+      "rotation": [
+        0.7017050981521606,
+        -0.08723479509353638,
+        0.7017050981521606,
+        0.08723483979701996
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.919189453125,
+        2451.95458984375,
+        92.63835144042969
+      ],
+      "rotation": [
+        -3.08402938742347e-08,
+        2.3871495002936172e-08,
+        0.9923608899116516,
+        0.12336862087249756
+      ],
+      "scale": [
+        2.9627907276153564,
+        2.9627907276153564,
+        2.9627907276153564
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.3837890625,
+        2449.833984375,
+        92.63835144042969
+      ],
+      "rotation": [
+        -3.08402938742347e-08,
+        2.3871495002936172e-08,
+        0.9923608899116516,
+        0.12336862087249756
+      ],
+      "scale": [
+        2.9627907276153564,
+        2.9627907276153564,
+        2.9627907276153564
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2830.7763671875,
+        2450.984619140625,
+        96.70987701416016
+      ],
+      "rotation": [
+        -3.08402938742347e-08,
+        2.3871495002936172e-08,
+        0.9923608899116516,
+        0.12336862087249756
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2830.905029296875,
+        2451.6025390625,
+        96.1816635131836
+      ],
+      "rotation": [
+        0.41476231813430786,
+        -0.572688639163971,
+        -0.542361319065094,
+        0.45370054244995117
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2830.80029296875,
+        2451.18505859375,
+        96.22238159179688
+      ],
+      "rotation": [
+        -0.4489504396915436,
+        0.5462996363639832,
+        0.5690476894378662,
+        -0.41974395513534546
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2830.686767578125,
+        2450.7373046875,
+        96.15245819091797
+      ],
+      "rotation": [
+        0.4047044515609741,
+        -0.5798398852348328,
+        -0.5343604683876038,
+        0.46309712529182434
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2830.591064453125,
+        2450.360107421875,
+        96.15322875976563
+      ],
+      "rotation": [
+        -0.4584164619445801,
+        0.5383811593055725,
+        0.5762863755226135,
+        -0.4097488224506378
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2830.885498046875,
+        2451.525146484375,
+        95.65241241455078
+      ],
+      "rotation": [
+        -0.45370060205459595,
+        0.5423611998558044,
+        0.5726886987686157,
+        -0.4147622883319855
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2830.7578125,
+        2451.0205078125,
+        95.65184020996094
+      ],
+      "rotation": [
+        0.419744074344635,
+        -0.5690475106239319,
+        -0.5462996959686279,
+        0.44895049929618835
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        2830.629150390625,
+        2450.508056640625,
+        95.59245300292969
+      ],
+      "rotation": [
+        -0.4630971848964691,
+        0.534360408782959,
+        0.5798399448394775,
+        -0.40470439195632935
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2830.820068359375,
+        2451.261962890625,
+        95.32239532470703
+      ],
+      "rotation": [
+        0.409748911857605,
+        -0.576286256313324,
+        -0.5383812785148621,
+        0.4584164321422577
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        2830.11083984375,
+        2451.152099609375,
+        93.33879089355469
+      ],
+      "rotation": [
+        -3.08402938742347e-08,
+        2.3871495002936172e-08,
+        0.9923608899116516,
+        0.12336862087249756
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.873046875,
+        1550.7457275390625,
+        87.50225830078125
+      ],
+      "rotation": [
+        0.09338739514350891,
+        -0.7009108662605286,
+        0.0933845266699791,
+        0.7009152173995972
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.888671875,
+        1550.6884765625,
+        87.84542846679688
+      ],
+      "rotation": [
+        0.09338739514350891,
+        -0.7009108662605286,
+        0.0933845266699791,
+        0.7009152173995972
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.873046875,
+        1550.7457275390625,
+        88.1885986328125
+      ],
+      "rotation": [
+        0.09338739514350891,
+        -0.7009108662605286,
+        0.0933845266699791,
+        0.7009152173995972
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.888671875,
+        1550.6884765625,
+        88.53176879882813
+      ],
+      "rotation": [
+        0.09338739514350891,
+        -0.7009108662605286,
+        0.0933845266699791,
+        0.7009152173995972
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2518.18505859375,
+        1549.7464599609375,
+        86.30956268310547
+      ],
+      "rotation": [
+        1.530535882920958e-06,
+        3.835559709841618e-06,
+        0.13206733763217926,
+        0.9912407398223877
+      ],
+      "scale": [
+        1.9373172521591187,
+        1.9373172521591187,
+        1.9373172521591187
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.611572265625,
+        1551.8575439453125,
+        86.30956268310547
+      ],
+      "rotation": [
+        1.530535882920958e-06,
+        3.835559709841618e-06,
+        0.13206733763217926,
+        0.9912407398223877
+      ],
+      "scale": [
+        1.9373172521591187,
+        1.9373172521591187,
+        1.9373172521591187
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2517.86572265625,
+        1550.713623046875,
+        88.97618865966797
+      ],
+      "rotation": [
+        1.530535882920958e-06,
+        3.835559709841618e-06,
+        0.13206733763217926,
+        0.9912407398223877
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2518.0576171875,
+        1550.1123046875,
+        88.4479751586914
+      ],
+      "rotation": [
+        0.44892749190330505,
+        0.5463219285011292,
+        0.57630455493927,
+        0.4097188413143158
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2517.945068359375,
+        1550.5272216796875,
+        88.48869323730469
+      ],
+      "rotation": [
+        0.41473785042762756,
+        0.572709321975708,
+        0.5502169728279114,
+        0.4441371262073517
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2517.823486328125,
+        1550.972900390625,
+        88.41876983642578
+      ],
+      "rotation": [
+        0.45839443802833557,
+        0.5384038090705872,
+        0.5833665132522583,
+        0.39959901571273804
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2517.72216796875,
+        1551.3477783203125,
+        88.41954040527344
+      ],
+      "rotation": [
+        0.40467989444732666,
+        0.5798603892326355,
+        0.542381227016449,
+        0.4536724388599396
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2518.036865234375,
+        1550.188720703125,
+        87.9187240600586
+      ],
+      "rotation": [
+        0.4097241759300232,
+        0.5763072371482849,
+        0.5463196635246277,
+        0.4489218592643738
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2517.901123046875,
+        1550.6904296875,
+        87.91815185546875
+      ],
+      "rotation": [
+        0.44414281845092773,
+        0.5502188801765442,
+        0.5727069973945618,
+        0.4147324562072754
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        2517.7626953125,
+        1551.202392578125,
+        87.8587646484375
+      ],
+      "rotation": [
+        0.3996042013168335,
+        0.5833696722984314,
+        0.5384018421173096,
+        0.45838820934295654
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2517.9638671875,
+        1550.4493408203125,
+        87.58870697021484
+      ],
+      "rotation": [
+        0.4536777436733246,
+        0.5423837304115295,
+        0.5798577666282654,
+        0.40467438101768494
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        2518.5283203125,
+        1550.892333984375,
+        86.14019012451172
+      ],
+      "rotation": [
+        1.530535882920958e-06,
+        3.835559709841618e-06,
+        0.13206733763217926,
+        0.9912407398223877
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.0234375,
+        1514.5135498046875,
+        70.70557403564453
+      ],
+      "rotation": [
+        0.7050142288208008,
+        0.05436159670352936,
+        0.7050138711929321,
+        -0.0543617308139801
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.0142822265625,
+        1514.5731201171875,
+        71.04874420166016
+      ],
+      "rotation": [
+        0.7050142288208008,
+        0.05436159670352936,
+        0.7050138711929321,
+        -0.0543617308139801
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.0234375,
+        1514.5135498046875,
+        71.39191436767578
+      ],
+      "rotation": [
+        0.7050142288208008,
+        0.05436159670352936,
+        0.7050138711929321,
+        -0.0543617308139801
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.0142822265625,
+        1514.5731201171875,
+        71.7350845336914
+      ],
+      "rotation": [
+        0.705014169216156,
+        0.05436159297823906,
+        0.7050139307975769,
+        -0.0543617308139801
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2033.8267822265625,
+        1515.5460205078125,
+        69.63200378417969
+      ],
+      "rotation": [
+        2.3790063607975753e-07,
+        -9.697878056158515e-08,
+        0.9970404505729675,
+        -0.07687899470329285
+      ],
+      "scale": [
+        1.8503642082214355,
+        1.8503642082214355,
+        1.8503642082214355
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.1624755859375,
+        1513.3836669921875,
+        69.63200378417969
+      ],
+      "rotation": [
+        2.3790063607975753e-07,
+        -9.697878056158515e-08,
+        0.9970404505729675,
+        -0.07687899470329285
+      ],
+      "scale": [
+        1.8503642082214355,
+        1.8503642082214355,
+        1.8503642082214355
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        2034.0318603515625,
+        1514.5457763671875,
+        72.17950439453125
+      ],
+      "rotation": [
+        2.3790063607975753e-07,
+        -9.697878056158515e-08,
+        0.9970404505729675,
+        -0.07687899470329285
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2033.909423828125,
+        1515.16455078125,
+        71.65129089355469
+      ],
+      "rotation": [
+        0.520576000213623,
+        -0.47853997349739075,
+        -0.4410611391067505,
+        0.5526890754699707
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2033.9755859375,
+        1514.7396240234375,
+        71.69200897216797
+      ],
+      "rotation": [
+        -0.5488193035125732,
+        0.44586679339408875,
+        0.47397929430007935,
+        -0.5247321128845215
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2034.046142578125,
+        1514.28271484375,
+        71.62208557128906
+      ],
+      "rotation": [
+        0.5121450424194336,
+        -0.48755231499671936,
+        -0.43134814500808716,
+        0.5603025555610657
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2034.105712890625,
+        1513.8985595703125,
+        71.62285614013672
+      ],
+      "rotation": [
+        -0.5565171241760254,
+        0.4362207055091858,
+        0.4830648601055145,
+        -0.5163801908493042
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        2033.921630859375,
+        1515.0858154296875,
+        71.12203979492188
+      ],
+      "rotation": [
+        -0.5526891350746155,
+        0.44106075167655945,
+        0.4785403907299042,
+        -0.5205758213996887
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        2034.0013427734375,
+        1514.5714111328125,
+        71.12146759033203
+      ],
+      "rotation": [
+        0.524732232093811,
+        -0.47397878766059875,
+        -0.44586724042892456,
+        0.5488192439079285
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        2034.082763671875,
+        1514.0491943359375,
+        71.06208038330078
+      ],
+      "rotation": [
+        -0.5603026151657104,
+        0.43134763836860657,
+        0.48755282163619995,
+        -0.512144923210144
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        2033.9632568359375,
+        1514.817626953125,
+        70.79202270507813
+      ],
+      "rotation": [
+        0.5163803696632385,
+        -0.48306429386138916,
+        -0.4362212121486664,
+        0.5565170645713806
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        2033.35400390625,
+        1514.4403076171875,
+        69.50349426269531
+      ],
+      "rotation": [
+        2.3790063607975753e-07,
+        -9.697878056158515e-08,
+        0.9970404505729675,
+        -0.07687899470329285
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1227.6142578125,
+        2693.4130859375,
+        20.154773712158203
+      ],
+      "rotation": [
+        0.6740096211433411,
+        -0.21380001306533813,
+        0.6740089654922485,
+        0.21380484104156494
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1227.649658203125,
+        2693.460693359375,
+        20.497943878173828
+      ],
+      "rotation": [
+        0.6740096211433411,
+        -0.21380001306533813,
+        0.6740089654922485,
+        0.21380484104156494
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1227.6142578125,
+        2693.4130859375,
+        20.841114044189453
+      ],
+      "rotation": [
+        0.6740096211433411,
+        -0.21380001306533813,
+        0.6740089654922485,
+        0.21380484104156494
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1227.649658203125,
+        2693.460693359375,
+        21.184284210205078
+      ],
+      "rotation": [
+        0.6740096211433411,
+        -0.21380001306533813,
+        0.6740089654922485,
+        0.21380484104156494
+      ],
+      "scale": [
+        0.8999999761581421,
+        0.8999999761581421,
+        0.8999999761581421
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1228.183837890625,
+        2694.291259765625,
+        18.922338485717773
+      ],
+      "rotation": [
+        -8.707640404281847e-07,
+        4.085274213139201e-06,
+        0.9531931281089783,
+        0.3023620843887329
+      ],
+      "scale": [
+        1.966321349143982,
+        1.966321349143982,
+        1.966321349143982
+      ]
+    },
+    {
+      "model": "objects/manmade/structures/logistical/fences/fence_rural_post_a.cgf",
+      "physics": "static",
+      "position": [
+        1226.921142578125,
+        2692.503662109375,
+        18.922338485717773
+      ],
+      "rotation": [
+        -8.707640404281847e-07,
+        4.085274213139201e-06,
+        0.9531931281089783,
+        0.3023620843887329
+      ],
+      "scale": [
+        1.966321349143982,
+        1.966321349143982,
+        1.966321349143982
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/construction/plank_rough_a.cgf",
+      "physics": "static",
+      "position": [
+        1227.6414794921875,
+        2693.429931640625,
+        21.628698348999023
+      ],
+      "rotation": [
+        -8.707640404281847e-07,
+        4.085274213139201e-06,
+        0.9531931281089783,
+        0.3023620843887329
+      ],
+      "scale": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1227.9854736328125,
+        2693.9599609375,
+        21.100488662719727
+      ],
+      "rotation": [
+        -0.30330774188041687,
+        0.6387526392936707,
+        0.6160378456115723,
+        -0.34712666273117065
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1227.7373046875,
+        2693.6083984375,
+        21.141204833984375
+      ],
+      "rotation": [
+        -0.341736763715744,
+        0.619044303894043,
+        0.6360808610916138,
+        -0.3088710308074951
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1227.470458984375,
+        2693.230712890625,
+        21.07128143310547
+      ],
+      "rotation": [
+        -0.292113721370697,
+        0.6439487934112549,
+        0.6098856329917908,
+        -0.3578253388404846
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1227.2464599609375,
+        2692.913330078125,
+        21.072050094604492
+      ],
+      "rotation": [
+        -0.35248836874961853,
+        0.6129859089851379,
+        0.641374409198761,
+        -0.29772326350212097
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/letter.cgf",
+      "physics": "none",
+      "position": [
+        1227.938720703125,
+        2693.895751953125,
+        20.57123565673828
+      ],
+      "rotation": [
+        -0.34712573885917664,
+        0.6160385608673096,
+        0.6387519836425781,
+        -0.30330875515937805
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/parchment.cgf",
+      "physics": "none",
+      "position": [
+        1227.6390380859375,
+        2693.469482421875,
+        20.570667266845703
+      ],
+      "rotation": [
+        -0.3088701665401459,
+        0.6360809803009033,
+        0.6190439462661743,
+        -0.34173789620399475
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_b.cgf",
+      "physics": "none",
+      "position": [
+        1227.333984375,
+        2693.036865234375,
+        20.511280059814453
+      ],
+      "rotation": [
+        -0.35782426595687866,
+        0.6098867058753967,
+        0.6439478993415833,
+        -0.29211485385894775
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/paper_a.cgf",
+      "physics": "none",
+      "position": [
+        1227.78271484375,
+        2693.672119140625,
+        20.2412166595459
+      ],
+      "rotation": [
+        -0.2977220118045807,
+        0.6413750052452087,
+        0.6129851937294006,
+        -0.35248950123786926
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "model": "objects/manmade/task_specific_props/read_and_write/scrolls/scroll_c.cgf",
+      "physics": "none",
+      "position": [
+        1227.082275390625,
+        2693.82421875,
+        18.897680282592773
+      ],
+      "rotation": [
+        -8.707640404281847e-07,
+        4.085274213139201e-06,
+        0.9531931281089783,
+        0.3023620843887329
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ],
+  "patrolRoutes": [],
+  "smartObjects": [],
+  "version": 2,
+  "world": []
+}

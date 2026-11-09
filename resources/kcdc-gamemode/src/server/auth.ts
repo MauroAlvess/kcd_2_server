@@ -52,7 +52,7 @@ export type Role = "player" | "admin";
  * (user, 2026-10-20: "/creator é só admin que pode usar"): a player makes their character once, at their first entry, and what
  * they may change afterwards is changed at the barber's and the tailor's, not by a command.
  */
-export const COMMON_COMMANDS: ReadonlySet<string> = new Set(["help", "aceitar", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "sede", "cansaco", "sujeira", "cachorro", "leitura", "cozinhar", "me", "do", "try", "preso", "acordar", "paz", "alforje", "carroca", "carroça", "idioma", "language", "levantar", "horta", "mural"]);
+export const COMMON_COMMANDS: ReadonlySet<string> = new Set(["help", "camera", "mute", "unmute", "mutes", "dice", "anim", "face", "chave", "admin", "cavalo", "fome", "sede", "cansaco", "sujeira", "cachorro", "leitura", "cozinhar", "me", "do", "try", "preso", "acordar", "paz", "carroca", "carroça", "idioma", "language", "levantar", "horta", "mural"]);
 
 const FILE = "secrets/auth.json";
 

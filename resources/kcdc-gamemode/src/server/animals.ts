@@ -212,6 +212,10 @@ export const animalPopulationSettings = {
     // has been held where it stands.
     ledgerHealth: 1000,
     finishDelayMs: 300,
+    // The last blow's death is looked at again this long after it was asked for (2026-11-06, the user: "alguns dos animais e caça bugam às vezes ficando imortais"): a body still alive then
+    // is killed again, `finishTries` times in all, and past that it is taken out of the world and the case is written to the log.
+    finishCheckMs: 2_500,
+    finishTries: 3,
     roamRadius: 20,
     // A bigger herd needs a little more room around its point.
     spawnRadius: 12,
@@ -221,6 +225,9 @@ export const animalPopulationSettings = {
     spawnsPerTick: 4,
     // A spot to wander to is one query of the mesh; with hundreds of bodies, a dozen a second left most of them standing.
     queriesPerTick: 40,
+    // How long the sites of one round may take (2026-10-31, the user's "lag no combate": perf-watch caught this round at 113 ms in a second, the server's one thread held that long for everybody).
+    // When the time is up the round stops where it is and the next one goes on from there: a herd is looked at a little later, never skipped.
+    budgetMs: 30,
     // Besides the herd at each of the level's wild points, this many smaller ones graze on ground of their own around it,
     // so the woods between the level's points are not bare.
     satellites: 1,
@@ -270,6 +277,8 @@ export class AnimalPopulation {
     private readonly cells = new Map<number, AnimalSite[]>();
     private running = true;
     private cursor = 0;
+    /** How many rounds stopped for want of time (`budgetMs`), for the report of perf-watch and the tests. */
+    budgeted = 0;
     /** The bodies that are not ours near each player, counted now and then: they take room in the same game. */
     private others = new Map<number, number>();
     private othersAt = Number.NEGATIVE_INFINITY;
@@ -350,13 +359,15 @@ export class AnimalPopulation {
 
     /**
      * The living animals of a kind within `radius` of a point (flat, and within three metres up or down), nearest first: the Agricultores' cows for the milking
-     * (`cows.ts`, 2026-10-27). The squares round the point say which herds can be there, the place each body was last read at (`slot.at`, a few metres off at
-     * most: see the round) says which could be, and only those are asked of the engine, so that a farmer among a herd costs a handful of reads.
+     * (`cows.ts`, 2026-10-27), and the sheep, ewe or ram, for the shearing (`sheep.ts`, 2026-10-31: `kind` may be a list of kinds). The squares round the point say which herds can be
+     * there, the place each body was last read at (`slot.at`, a few metres off at most: see the round) says which could be, and only those are asked of the engine, so that a farmer
+     * among a herd costs a handful of reads.
      */
-    near(kind: string, from: { readonly x: number; readonly y: number; readonly z: number }, world: number, radius: number): Array<{ id: number; x: number; y: number; z: number; distance: number }> {
+    near(kind: string | readonly string[], from: { readonly x: number; readonly y: number; readonly z: number }, world: number, radius: number): Array<{ id: number; x: number; y: number; z: number; distance: number }> {
         const found: Array<{ id: number; x: number; y: number; z: number; distance: number }> = [];
+        const kinds = typeof kind === "string" ? [kind] : kind;
         for (const site of this.sitesAround(from.x, from.y, radius + this.settings.leashRadius)) {
-            if (kindOf(site.point.actorClass) !== kind || !worldsOverlap(world, site.world)) continue;
+            if (!kinds.includes(kindOf(site.point.actorClass)) || !worldsOverlap(world, site.world)) continue;
             for (const slot of site.slots) {
                 if (slot.id === null || slot.state !== "alive") continue;
                 const was = slot.at ?? site.home ?? site.point.position;
@@ -481,7 +492,15 @@ export class AnimalPopulation {
         let queries = this.settings.queriesPerTick;
         mark("animals.preparo", began);
         const sitesBegan = stamp();
+        const sitesStart = clock();
         for (let i = 0; i < sites.length; ++i) {
+            // Out of time: the rest of the sites wait for the next round, which begins with the first of them.
+            if (i > 0 && clock() - sitesStart > this.settings.budgetMs) {
+                this.cursor = (this.cursor + i) % sites.length;
+                mark("animals.sitios", sitesBegan);
+                this.budgeted += 1;
+                return;
+            }
             const [key, site] = sites[(this.cursor + i) % sites.length]!;
             const near = nearSites.has(site);
             // A site no player is near and nobody stands at has nothing to do (a vacant place of it is tried again when a player comes near).
@@ -714,6 +733,9 @@ export class AnimalPopulation {
     /** What each game animal that was hurt has left of its own health (`healthOf`); the ledger stays full. */
     private readonly wounds = new Map<number, number>();
 
+    /** The animals whose death was asked for and has not come yet, with how many times it was asked (`finish`). */
+    private readonly finishing = new Map<number, number>();
+
     /** What a game animal that took a blow looked like, in the log (at most thirty lines a minute): who runs it, what it was doing. */
     private describe(npc: Npc, amount: number, left: number): void {
         const now = this.now();
@@ -741,20 +763,60 @@ export class AnimalPopulation {
             return;
         }
         this.wounds.delete(npc.id);
+        // Its death is already being seen to: the blow the kill itself raises is not another lethal one to start over with.
+        if (this.finishing.has(npc.id)) return;
         const by = attacker !== null && typeof (attacker as Player).steamId === "string" ? (attacker as Player) : undefined;
         try {
             npc.hold();
         } catch {
             // It is gone.
         }
-        this.later(() => {
-            if (npc.alive && this.ours().has(npc.id)) npc.kill(by);
-        }, this.settings.finishDelayMs);
+        this.finishing.set(npc.id, 0);
+        this.later(() => this.finish(npc, by), this.settings.finishDelayMs);
+    }
+
+    /**
+     * Kills an animal whose last blow came, then looks again: a body that is still alive a moment later was not killed (the kill went nowhere), and is killed again; after `finishTries` it is taken out of
+     * the world, so that no animal stays in it that cannot die. Written to the log, so that the cause can be found.
+     */
+    private finish(npc: Npc, by: Player | undefined): void {
+        let alive = false;
+        try {
+            alive = npc.alive && this.ours().has(npc.id);
+        } catch {
+            alive = false;
+        }
+        if (!alive) {
+            this.finishing.delete(npc.id);
+            return;
+        }
+        const tries = (this.finishing.get(npc.id) ?? 0) + 1;
+        if (tries > this.settings.finishTries) {
+            this.finishing.delete(npc.id);
+            console.log(`animals: ${npc.actorClass} ${npc.id} não morreu depois de ${this.settings.finishTries} mortes pedidas (${npc.status}, ${npc.simulator === null || npc.simulator === undefined ? "nenhum jogo o roda" : `rodado por ${npc.simulator.nickname}`}): tirado do mundo`);
+            try {
+                npc.remove();
+            } catch {
+                // It is gone.
+            }
+            return;
+        }
+        this.finishing.set(npc.id, tries);
+        if (tries > 1) {
+            console.log(`animals: ${npc.actorClass} ${npc.id} ainda vivo depois do golpe final (${npc.status}, ${npc.simulator === null || npc.simulator === undefined ? "nenhum jogo o roda" : `rodado por ${npc.simulator.nickname}`}): morte pedida de novo (${tries} de ${this.settings.finishTries})`);
+        }
+        try {
+            npc.kill(by);
+        } catch {
+            // It is gone.
+        }
+        this.later(() => this.finish(npc, by), this.settings.finishCheckMs);
     }
 
     /** Forgets what a body that died or went had left of its health. */
     forgetWounds(id: number): void {
         this.wounds.delete(id);
+        this.finishing.delete(id);
     }
 
     clear(): void {

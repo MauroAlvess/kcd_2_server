@@ -8,6 +8,10 @@
  * already (an administrator) or they left; then nothing is moved. The network id can pass to whoever joins next, so the
  * Steam id is checked again at each step.
  *
+ * The wait is a screen of its own (2026-10-31, user: "ao morrer vamos add a câmera rodando em volta do corpo devagar, um texto, alguma reza da bíblia, e embaixo um contador de 10 s até voltar
+ * à vida"): the server tells the client when the body falls (`death.begin`: the verse, the reference, the line over the counter and the seconds) and when the player is up again
+ * (`death.end`); the client turns the camera slowly round the body and counts the ten seconds down (`src/client/death-screen.ts`, `ui/death.html`).
+ *
  * The churches are where the game's DLC 2 donation boxes stand (layer `religiousPlaces` of the level), and the player
  * wakes on the floor next to the box when the navigation mesh can say where that floor is.
  *
@@ -20,11 +24,17 @@
  * the doors within reach and what they are: that is how the real ones are found.
  */
 
+import { screenFor } from "./death-verses.js";
 import { cure } from "./heal.js";
+import { languageOf } from "./language.js";
+import { onKuttenberg } from "./level.js";
 
 const RESOURCE = "kcdc-gamemode";
 
-export const RESPAWN_DELAY_MS = 8_000;
+/** The wait before the body is raised, and the counter of the death screen: ten seconds (2026-10-31; it was eight). */
+export const RESPAWN_DELAY_MS = 10_000;
+export const DEATH_BEGIN = `${RESOURCE}:death.begin`;
+export const DEATH_END = `${RESOURCE}:death.end`;
 const MOVE_AFTER_REVIVE_MS = 600;
 
 /**
@@ -50,7 +60,7 @@ export interface Church {
 }
 
 /** The donation box of each church in the level. */
-export const CHURCHES: readonly Church[] = [
+const KUTTENBERG_CHURCHES: readonly Church[] = [
     { id: "suchdol", place: "Suchdol", x: 747.97, y: 3246.3, z: 139.49 },
     { id: "wysoka", place: "Wysoka", x: 440.04, y: 2497.2, z: 218.5 },
     { id: "raborsch", place: "Raborsch", x: 1595.67, y: 3846.16, z: 112.94 },
@@ -61,11 +71,17 @@ export const CHURCHES: readonly Church[] = [
     { id: "grunta", place: "Minas", x: 3197.21, y: 2183.47, z: 95.94 },
 ];
 
-/** The church nearest a point, on the map (height left out: a church on a hill is no farther for it). */
-export function nearestChurch(position: { readonly x: number; readonly y: number }): Church {
-    let best = CHURCHES[0]!;
+/**
+ * The churches of the level: the eight of Kuttenberg's, and none on any other level (2026-11-09: the coordinates above are Kuttenberg's, and a body woken there on another map would stand in the air).
+ * With none, whoever dies wakes where they fell.
+ */
+export const CHURCHES: readonly Church[] = onKuttenberg() ? KUTTENBERG_CHURCHES : [];
+
+/** The church nearest a point, on the map (height left out: a church on a hill is no farther for it). Null when the level has none. */
+export function nearestChurch(position: { readonly x: number; readonly y: number }): Church | null {
+    let best: Church | null = null;
     for (const church of CHURCHES) {
-        if (Math.hypot(church.x - position.x, church.y - position.y) < Math.hypot(best.x - position.x, best.y - position.y)) {
+        if (best === null || Math.hypot(church.x - position.x, church.y - position.y) < Math.hypot(best.x - position.x, best.y - position.y)) {
             best = church;
         }
     }
@@ -86,6 +102,15 @@ export function wakePoint(church: Church): { x: number; y: number; z: number } {
 function tell(player: Player, text: string): void {
     Chat.sendToPlayer(player, text);
     player.emit(`${RESOURCE}:notify`, JSON.stringify({ text }));
+}
+
+/** The death screen is asked of the client, or taken off it: a word to the player's own machine, never a reason to stop the rest. */
+function screen(player: Player, name: string, payload: unknown): void {
+    try {
+        player.emit(name, JSON.stringify(payload));
+    } catch {
+        // Leaving meanwhile.
+    }
 }
 
 const pending = new Map<number, ReturnType<typeof setTimeout>>();
@@ -124,22 +149,34 @@ export function onDeath(player: Player): void {
     const church = nearestChurch(player.position);
     const home = homeOf(steamId);
     forget(id);
-    tell(player, `Você caiu gravemente ferido. Em ${Math.round(RESPAWN_DELAY_MS / 1000)} segundos você é levado ${home !== null ? `para ${home.text}` : `para a igreja de ${church.place}`}.`);
+    tell(player, `Você caiu gravemente ferido. Em ${Math.round(RESPAWN_DELAY_MS / 1000)} segundos ${home !== null ? `você é levado para ${home.text}` : church !== null ? `você é levado para a igreja de ${church.place}` : "você se levanta onde caiu"}.`);
+    screen(player, DEATH_BEGIN, screenFor(languageOf(player), Math.round(RESPAWN_DELAY_MS / 1000)));
     pending.set(
         id,
         setTimeout(() => {
             pending.delete(id);
             const target = stillThere(id, steamId);
             if (target === null || !target.revive()) {
+                // Somebody got them up already (an administrator): the screen goes too.
+                if (target !== null) {
+                    screen(target, DEATH_END, {});
+                }
                 return;
             }
-            const point = (homeOf(steamId) ?? { point: wakePoint(church) }).point;
-            const where = home !== null ? home.text : `igreja de ${church.place}`;
+            const resting = homeOf(steamId);
+            // No church on this level and no town: the body gets up where it fell (`revive` leaves it there).
+            const point = resting !== null ? resting.point : church !== null ? wakePoint(church) : null;
+            const where = home !== null ? home.text : church !== null ? `igreja de ${church.place}` : "o lugar onde caiu";
             setTimeout(() => {
                 const woken = stillThere(id, steamId);
-                if (woken !== null && woken.spawn(point)) {
-                    tell(woken, `Você foi ferido e sobreviveu: foi arrastado até ${home !== null ? "" : "a "}${where}. Procure um médico alquimista o mais rápido possível para curar as suas feridas.`);
-                    console.log(`respawn: ${woken.nickname} acordou ${home !== null ? "em " : "na "}${where}`);
+                const moved = woken !== null && (point === null || woken.spawn(point));
+                // The screen goes once the body is where it wakes (or could not be taken there): the camera glides back to the eyes of whoever stands up.
+                if (woken !== null) {
+                    screen(woken, DEATH_END, {});
+                }
+                if (woken !== null && moved) {
+                    tell(woken, point === null ? "Você foi ferido e sobreviveu: levantou-se onde caiu. Procure um médico alquimista o mais rápido possível para curar as suas feridas." : `Você foi ferido e sobreviveu: foi arrastado até ${home !== null ? "" : "a "}${where}. Procure um médico alquimista o mais rápido possível para curar as suas feridas.`);
+                    console.log(`respawn: ${woken.nickname} acordou ${point === null ? "onde caiu" : home !== null ? "em " + where : "na " + where}`);
                     setTimeout(() => wound(id, steamId), WOUND_AFTER_SPAWN_MS);
                 }
             }, MOVE_AFTER_REVIVE_MS);

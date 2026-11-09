@@ -408,3 +408,61 @@ test("the level of a measure: thirsty under 30, parched under 10, sticky up to 4
     assert.match(api.feeling(90), /saciada/);
     assert.match(api.feeling(5), /desidratado/);
 });
+
+test("work paid with the body's own water (2026-10-30): spend takes points, tells the panel and puts the buffs right; pieces says how many the body can pay, never to under 10; thirst off costs nothing", () => {
+    const sut = load();
+    const pace = sut.make();
+    const player = body();
+    // A hundred points, eight a piece: eleven pieces, the batch of ten is paid in full.
+    assert.equal(pace.pieces(player, 8, 10), 10);
+    assert.equal(pace.pieces(player, 8, 3), 3, "never more than were asked for");
+    assert.equal(pace.spend(player, 8), 92);
+    assert.equal(pace.value(player), 92);
+    assert.deepEqual(player.sent.at(-1), ["kcdc-gamemode:thirst.value", { v: 92 }], "the panel's bar follows");
+    assert.equal(pace.kept.get(player.steamId), 92, "and it is kept");
+
+    pace.set(player, 30);
+    assert.equal(pace.pieces(player, 8, 10), 2, "(30 - 10) / 8: two");
+    pace.spend(player, 8);
+    assert.equal(pace.value(player), 22);
+    assert.match(sut.said.at(-1)[1], /Você sente sede/, "under 30 the step down shows at once, not at the next look");
+    assert.equal(pace.pieces(player, 8, 10), 1);
+    pace.set(player, 12);
+    assert.equal(pace.pieces(player, 8, 10), 0, "a body about to be parched has no water to give");
+    assert.equal(pace.pieces(player, 0, 10), 10, "nothing asked of it, nothing refused");
+
+    // Never below nothing, and spending nothing or less changes nothing.
+    pace.set(player, 3);
+    assert.equal(pace.spend(player, 8), 0);
+    assert.equal(pace.spend(player, 0), 0);
+    assert.equal(pace.spend(player, -5), 0, "a negative is no payment (and no drink)");
+
+    // Thirst off: the body is always full, nothing is spent, every piece is paid.
+    pace.set(player, 50);
+    pace.enabled = false;
+    assert.equal(pace.pieces(player, 8, 10), 10);
+    assert.equal(pace.spend(player, 8), 100, "off, the measure reads full whatever was set");
+    pace.enabled = true;
+    assert.equal(pace.value(player), 50, "and nothing was taken while it was off");
+});
+
+test("a body the duels hold is neither dressed in the thirst's effects nor hurt by it, and gets them back at the first look after (2026-11-01)", () => {
+    const sut = load();
+    const pace = sut.make();
+    pace.buffs = { thirsty: "B1", parched: "B2" };
+    const player = body();
+    let held = true;
+    pace.suspended = () => held;
+    pace.tick([player]);
+    pace.set(player, 0);
+    pace.tick([player]);
+    pace.tick([player]);
+    assert.deepEqual([...player.buffs], [], "no effect on a body in a duel");
+    assert.equal(player.health, 100, "and no loss of health");
+    assert.equal(pace.value(player), 0, "the water it lacks is still counted");
+
+    held = false;
+    pace.tick([player]);
+    assert.deepEqual([...player.buffs], ["B2"], "the duel is over: the effect of its step is put back");
+    assert.equal(player.health, 98, "and the failing begins again");
+});

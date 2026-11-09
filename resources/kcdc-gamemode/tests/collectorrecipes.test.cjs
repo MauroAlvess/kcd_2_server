@@ -65,10 +65,29 @@ test("everything the rocks and trees give is an item the server knows", () => {
     for (const item of ours) assert.ok(CUSTOM_ITEMS[item], item);
 });
 
-test("the artisan makes the game's tailor's and cobbler's repair kits, for clothes and for shoes (2026-10-21)", () => {
+test("the artisan makes the game's tailor's and cobbler's repair kits, for clothes and for shoes (2026-10-21), and the armourer's, for the brigandines and the other armour he makes (2026-11-04)", () => {
     const kits = CRAFT_RECIPES.filter((recipe) => recipe.station === "costura" && recipe.category === "Kits de reparo");
-    assert.deepEqual(plain(kits.map((recipe) => nameOf(recipe.output)).sort()), ["Kit de alfaiate", "Kit de sapateiro"]);
-    assert.ok(kits.every((recipe) => recipe.level <= 3 && recipe.ingredients.some(([item]) => item === "kcdc-craft:linha")), "early, and sewn with thread");
+    assert.deepEqual(plain(kits.map((recipe) => nameOf(recipe.output)).sort()), ["Kit de alfaiate", "Kit de armeiro (armadura)", "Kit de sapateiro"]);
+    assert.ok(kits.every((recipe) => recipe.level <= 5 && recipe.ingredients.some(([item]) => item === "kcdc-craft:linha")), "early, and sewn with thread");
+    // The same piece the forge makes, at the same level.
+    const armourer = kits.find((recipe) => nameOf(recipe.output) === "Kit de armeiro (armadura)");
+    const forged = CRAFT_RECIPES.find((recipe) => recipe.station === "forja" && recipe.output === armourer.output);
+    assert.equal(armourer.level, forged.level);
+});
+
+test("a piece takes the same time at the needle as at the forge: twelve seconds at the first level to twenty-four at the last (2026-11-04)", () => {
+    const wearable = (recipe) => recipe.category !== "Kits de reparo" && recipe.category !== "Fios" && recipe.amount === 1;
+    const seconds = (station) => CRAFT_RECIPES.filter((recipe) => recipe.station === station && wearable(recipe) && recipe.category !== "Fundição" && recipe.category !== "Peças de espada" && recipe.category !== "Prata" && recipe.category !== "Carvão" && recipe.category !== "Ferramentas" && recipe.category !== "Armas de madeira");
+    const sewing = seconds("costura");
+    assert.ok(sewing.length > 250, `${sewing.length} pieces of sewing`);
+    for (const recipe of sewing) {
+        assert.equal(recipe.seconds, 12 + Math.floor(recipe.level / 2), `${recipe.id}: level ${recipe.level}`);
+    }
+    const forging = seconds("forja").filter((recipe) => !/Ferraduras|Flechas|Virotes/.test(recipe.category));
+    assert.ok(forging.length > 150);
+    for (const recipe of forging) {
+        assert.equal(recipe.seconds, 12 + Math.floor(recipe.level / 2), `${recipe.id}: level ${recipe.level}`);
+    }
 });
 
 test("the artisan makes the game's rings, necklaces and brooches of silver, copper, jasper, enamel and thread; nothing of gold, garnets or pearls (2026-10-22)", () => {

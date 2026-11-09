@@ -11,6 +11,10 @@
  * so may an administrator. It carries the name of the character that wrote it or none ("Anônimo"); the account behind it is kept so that the
  * letter can be taken down, and is never sent to the page: a player sees only whether a letter is their own.
  *
+ * The information of the region (2026-11-04) is gone (2026-11-09, user: "deletar o anúncio de cada cidade no quadro de aviso ... tem um sistema que permite criar anúncios fixos, isso vamos deletar"):
+ * the boards keep their posters, and have a second tab, Cidadania (user, the same night: "lá o jogador vê o brasão, quem controla a cidade, população, se está em guerra e etc, e o jogador pode pegar a
+ * cidadania"): the town the board stands in, as the F2 panel's section showed it before it left, and the button that makes the player its citizen (`citizenBlock`, `becomeCitizen`).
+ *
  * The letters are kept in `playerdata/mural.json` (through `store.ts`: a copy of the last good file is kept), and a board that is open on a screen is
  * sent the new list as soon as somebody puts up or takes down a letter on it.
  */
@@ -20,11 +24,21 @@ import { isAdmin } from "./auth.js";
 import { emitLarge } from "./big-emit.js";
 import { getCharacter } from "./characters.js";
 import { craftTitle } from "./craft-titles.js";
+import { choose, isClosed, mayDepose, townById, townOf, townView } from "./citizenship.js";
+import type { Town } from "./citizenship.js";
+import { CHANGE_PRICE_COINS, freeChangeLeft } from "./free-changes.js";
 import { languageOf, translate } from "./language.js";
 import { giveMoney, MONEY_UNIT, moneyOf, takeMoney } from "./money.js";
 import { boardById, boardNear, muralBoards } from "./mural-places.js";
 import type { Board } from "./mural-places.js";
+import { sendSocial } from "./status.js";
 import { ensureDir, read, write } from "./store.js";
+import { cleanLine, cleanStyle, cleanText, DEFAULT_STYLE, stripUnwanted } from "./text-style.js";
+import type { TextStyle } from "./text-style.js";
+import { opponentsOf } from "./wars.js";
+
+// The text rules are shared with the letters (`text-style.ts`, 2026-11-02); what other modules and the tests took from here still is.
+export { cleanStyle, DEFAULT_STYLE, stripUnwanted };
 
 const RESOURCE = "kcdc-gamemode";
 /** Server to client (pieces, if too big: `emitLarge`). */
@@ -36,6 +50,7 @@ export const MURAL_RESULT = `${RESOURCE}:mural.result`;
 const PUBLISH = `${RESOURCE}:mural.publish`;
 const REMOVE = `${RESOURCE}:mural.remove`;
 const CLOSED = `${RESOURCE}:mural.closed`;
+const CITIZEN = `${RESOURCE}:mural.citizen`;
 
 /** The kind number of the client's prompt (`cook-hint.ts`, after the fire, the rack, the smokehouse, the forge, the table, the chair and the bed). */
 export const MURAL_KIND = 7;
@@ -72,15 +87,7 @@ export const CATEGORIES: ReadonlyArray<{ readonly id: Category; readonly label: 
     { id: "avisos", label: "Aviso", fallback: "Aviso", art: "cartaz-avisos" },
 ];
 
-export interface PosterStyle {
-    /** "normal" is the page's own text face; "bohemia" a gothic one. */
-    readonly font: "normal" | "bohemia";
-    readonly bold: boolean;
-    readonly spacing: "tight" | "normal" | "wide";
-    readonly align: "left" | "center";
-}
-
-export const DEFAULT_STYLE: PosterStyle = { font: "normal", bold: false, spacing: "normal", align: "left" };
+export type PosterStyle = TextStyle;
 
 export interface Poster {
     readonly id: string;
@@ -127,71 +134,14 @@ function persist(): boolean {
 
 const categoryOf = (value: unknown): Category | null => (CATEGORIES.find((category) => category.id === value)?.id ?? null);
 
-/** The style a request asks for: each field is one of its own values or the default's, so nothing else ever reaches a page's classes. */
-export function cleanStyle(value: unknown): PosterStyle {
-    const fields = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-    return {
-        font: fields["font"] === "bohemia" ? "bohemia" : "normal",
-        bold: fields["bold"] === true,
-        spacing: fields["spacing"] === "tight" || fields["spacing"] === "wide" ? fields["spacing"] : "normal",
-        align: fields["align"] === "center" ? "center" : "left",
-    };
-}
-
-// What no letter may carry: control characters (but the line break), the invisible ones that turn a line around or hide a word, and a lone
-// surrogate. Listed as ranges of code points and walked, not as a pattern, so that none of them has to be written into this file.
-const UNWANTED: ReadonlyArray<readonly [number, number]> = [
-    [0x00, 0x09],
-    [0x0b, 0x1f],
-    [0x7f, 0x9f],
-    [0xad, 0xad],
-    [0x200b, 0x200f],
-    [0x2028, 0x202e],
-    [0x2060, 0x2064],
-    [0xd800, 0xdfff],
-    [0xfeff, 0xfeff],
-    [0xfff9, 0xfffb],
-];
-
-/** The text without them. */
-export function stripUnwanted(text: string): string {
-    let out = "";
-    for (const character of text) {
-        const code = character.codePointAt(0) ?? 0;
-        if (!UNWANTED.some(([from, to]) => code >= from && code <= to)) {
-            out += character;
-        }
-    }
-    return out;
-}
-
 /** A heading: one line, no strange characters, spaces in runs made one, no longer than `titleMax`. */
 export function cleanTitle(value: unknown): string {
-    if (typeof value !== "string") {
-        return "";
-    }
-    return stripUnwanted(value.replace(/[\r\n\t]+/g, " ")).replace(/\s{2,}/g, " ").trim().slice(0, muralSettings.titleMax).trim();
+    return cleanLine(value, muralSettings.titleMax);
 }
 
 /** A text: lines kept, no strange characters, at most one empty line in a row, at most `maxLines` lines and `bodyMax` characters. */
 export function cleanBody(value: unknown): string {
-    if (typeof value !== "string") {
-        return "";
-    }
-    const lines = stripUnwanted(value.replace(/\r\n?/g, "\n"))
-        .split("\n")
-        .map((line) => line.replace(/[ \t]+/g, " ").trim());
-    const kept: string[] = [];
-    for (const line of lines) {
-        if (line === "" && (kept.length === 0 || kept[kept.length - 1] === "")) {
-            continue;
-        }
-        kept.push(line);
-    }
-    while (kept.length > 0 && kept[kept.length - 1] === "") {
-        kept.pop();
-    }
-    return kept.slice(0, muralSettings.maxLines).join("\n").slice(0, muralSettings.bodyMax).trim();
+    return cleanText(value, muralSettings.bodyMax, muralSettings.maxLines);
 }
 
 function validPoster(value: unknown): Poster | null {
@@ -199,6 +149,7 @@ function validPoster(value: unknown): Poster | null {
         return null;
     }
     const f = value as Record<string, unknown>;
+    // The information of the region (kind "decreto", until 2026-11-09) is not one of the three kinds any more: a file that still has some drops them.
     const category = categoryOf(f["category"]);
     if (category === null || typeof f["id"] !== "string" || typeof f["board"] !== "string" || typeof f["owner"] !== "string" || typeof f["at"] !== "number" || typeof f["until"] !== "number") {
         return null;
@@ -272,10 +223,67 @@ function posterView(poster: Poster, steamId: string): Record<string, unknown> {
     };
 }
 
+/** The boards whose id is not their town's. */
+const TOWN_OF_BOARD: Readonly<Record<string, string>> = { grunta: "minas" };
+
+/** The town a board stands in (the id of a board is its place's, which is its town's id), or null for a board in a place that is no town of the server (a camp, a farm, a hamlet). */
+export function townOfBoard(boardId: string): Town | null {
+    return townById(TOWN_OF_BOARD[boardId] ?? boardId);
+}
+
+/** How the player's own citizenship stands against this town: what the button of the tab says and costs. */
+export type CitizenKind = "here" | "closed" | "first" | "free" | "paid" | "admin";
+
+/**
+ * What the Cidadania tab shows of the board's town (the page is told nothing of any other): the card of the town as the F2 panel's section drew it (its crest, its lord, the lord's family, the Lady, how many
+ * citizens, whether the lord has closed the citizenship, who it is at war with, how many NPCs live there), and what the player may do about it. Null for a board in no town.
+ */
+export function citizenBlock(player: Player, board: Board): Record<string, unknown> | null {
+    const town = townOfBoard(board.id);
+    if (town === null) {
+        return null;
+    }
+    const view = townView(town);
+    const current = townOf(player.steamId);
+    const admin = isAdmin(player);
+    let kind: CitizenKind;
+    if (current !== null && current.id === town.id) {
+        kind = "here";
+    } else if (isClosed(town) && !mayDepose(player, town)) {
+        kind = "closed";
+    } else if (current === null) {
+        kind = "first";
+    } else if (admin) {
+        kind = "admin";
+    } else {
+        kind = freeChangeLeft(player.steamId, "citizenship") ? "free" : "paid";
+    }
+    return {
+        id: view.id,
+        name: view.name,
+        crest: view.crest,
+        crestUrl: view.crestUrl,
+        lord: view.lord,
+        family: view.family,
+        consort: view.consort,
+        seatName: view.seatName,
+        lands: view.lands,
+        citizens: view.citizens,
+        closed: view.closed,
+        npcs: view.npcs,
+        wars: opponentsOf(town.id).map((id) => townById(id)?.name ?? id),
+        mine: current === null ? null : current.name,
+        kind,
+        price: CHANGE_PRICE_COINS,
+    };
+}
+
 /** What the page is sent when it opens a board, or when the board changes under it. */
 export function viewOf(player: Player, board: Board, now = Date.now()): string {
     const mine = player.steamId;
-    const list = allPosters(board.id)
+    const language = languageOf(player);
+    const here = allPosters(board.id);
+    const list = here
         .filter((poster) => poster.until > now)
         .sort((a, b) => b.at - a.at)
         .map((poster) => posterView(poster, mine));
@@ -286,9 +294,10 @@ export function viewOf(player: Player, board: Board, now = Date.now()): string {
         coins: moneyOf(player) / MONEY_UNIT,
         admin: isAdmin(player),
         limits: { title: muralSettings.titleMax, body: muralSettings.bodyMax, lines: muralSettings.maxLines },
-        lang: languageOf(player),
+        lang: language,
         now,
         posters: list,
+        town: citizenBlock(player, board),
     });
 }
 
@@ -507,6 +516,27 @@ function answer(player: Player, what: string, outcome: Outcome): void {
     }
 }
 
+/**
+ * A player at a board makes themselves a citizen of the board's town (or changes to it: the first change is free, the rest cost, an administrator pays nothing; `citizenship.ts`'s `choose` says all
+ * that). Only from the board, and only of its town: the page has no other to ask for.
+ */
+export function becomeCitizen(player: Player, request: unknown): Outcome {
+    const fields = typeof request === "object" && request !== null ? (request as Record<string, unknown>) : {};
+    const board = boardNear(player.position);
+    if (board === null || board.id !== fields["board"]) {
+        return fail("Você se afastou do quadro de avisos.");
+    }
+    const town = townOfBoard(board.id);
+    if (town === null) {
+        return fail("Este lugar não é uma cidade: não há cidadania aqui.");
+    }
+    const outcome = choose(player, town.id);
+    if (outcome.ok) {
+        sendSocial(player);
+    }
+    return outcome;
+}
+
 export function installMural(): void {
     loadMural();
     purge();
@@ -517,6 +547,20 @@ export function installMural(): void {
     Events.onClient(REMOVE, (sender, payload) => {
         const player = sender as Player;
         answer(player, "remove", removePoster(player, parse(payload)["id"]));
+    });
+    Events.onClient(CITIZEN, (sender, payload) => {
+        const player = sender as Player;
+        const outcome = becomeCitizen(player, parse(payload));
+        answer(player, "citizen", outcome);
+        // The card is drawn again, with the new standing: the button of a citizen is not the one of a newcomer.
+        const board = boardNear(player.position);
+        if (board !== null && viewers.get(player.id) === board.id) {
+            try {
+                emitLarge(player, VIEW, viewOf(player, board));
+            } catch {
+                viewers.delete(player.id);
+            }
+        }
     });
     Events.onClient(CLOSED, (sender) => {
         viewers.delete((sender as Player).id);

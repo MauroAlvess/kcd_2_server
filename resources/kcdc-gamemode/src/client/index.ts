@@ -10,10 +10,11 @@
 import { installBook } from "./book.js";
 import { installBuild } from "./build.js";
 import { installCamera } from "./camera.js";
-import { installBigEvents } from "./big-events.js";
+import { installBigEvents, onLarge } from "./big-events.js";
 import { installChatCard } from "./chat-card.js";
 import { installCraftPage } from "./craft-page.js";
 import { installCarts } from "./carts.js";
+import { installLamps } from "./lamps.js";
 import { installCreator } from "./creator.js";
 import { installCreatorPage } from "./creator-page.js";
 import { installCookHint } from "./cook-hint.js";
@@ -36,18 +37,22 @@ import { installItemUses } from "./item-uses.js";
 import { installSkillBooks } from "./skill-books.js";
 import { installStatus } from "./status.js";
 import { installVoice } from "./voice.js";
-import { installWelcome } from "./welcome.js";
+import { installEntry } from "./entry.js";
 import { installMural } from "./mural.js";
 import { installArrest } from "./arrest.js";
 import { installWhistle } from "./whistle.js";
+import { installBanditShouts } from "./bandit-shouts.js";
 import { installWorkQuiet } from "./work-quiet.js";
 import { installMountQuiet } from "./mount-quiet.js";
 import { installEmotes } from "./emotes.js";
 import { installGather } from "./gather.js";
 import { installFarm } from "./farm.js";
 import { installCowMilk } from "./cow-milk.js";
+import { installSheepShear } from "./sheep-shear.js";
+import { installDeathScreen } from "./death-screen.js";
 import { installTradeRights } from "./trade-rights.js";
 import { installUiScale } from "./ui-scale.js";
+import { installHeadLabels } from "./head-labels.js";
 import * as panel from "./panel.js";
 import { readSelf } from "./snapshot.js";
 import { describeAll, flip } from "./switches.js";
@@ -168,7 +173,8 @@ Events.on(`${RESOURCE}:panel.open`, () => {
     askServer();
 });
 
-Events.on(`${RESOURCE}:panel.realm`, (realm) => {
+// In pieces when it is too big for one message (the commands' list alone is over the ~29 KB a message holds).
+onLarge("panel.realm", (realm) => {
     panel.push("panel:realm", realm);
 });
 
@@ -222,6 +228,8 @@ installBigEvents();
 // The guilds' trades: the recipes page (the server puts it up).
 installCraftPage();
 installCarts();
+// The lanterns carried in the gestures: a light of this client's own on each, breathing like a flame (lamps.ts).
+installLamps();
 
 // The `/book` demo books.
 installBook();
@@ -252,7 +260,7 @@ installMountQuiet();
 // "Cozinhar" beside the game's own prompt at a fire, a rack or a smoker: the server answers with its cooking menu.
 installCookHint();
 installFurniture();
-// E at one of the player's horses asks the server for its menu before the game's own climb gets anywhere.
+// E at a wild horse asks the server for the Domador's taming menu before the game's own climb gets anywhere.
 installHorseMenu();
 // The same at the player's dog: Fazer carinho, Mandar ficar or Mandar seguir, Sair.
 installDogMenu();
@@ -265,8 +273,7 @@ installStatus();
 // The open microphone and the voice indicator at the bottom of the screen (voice.ts).
 installVoice();
 
-// The welcome form: whoever has made a character agrees to the rules and the lore before going on (welcome.ts).
-installWelcome();
+installEntry();
 
 // The notice boards of the villages, towns and castles: the page of their letters (mural.ts; the prompt is cook-hint.ts's).
 installMural();
@@ -284,17 +291,24 @@ installSkillBooks();
 
 // X, the game's horse whistle, calls the player's own horse.
 installWhistle();
+// The bandits' shouts in a fight, played where the man stands (2026-11-01).
+installBanditShouts();
 // G: our gestures, chosen with a click.
 installEmotes();
 // What the player's guild lets their own game do: butchering is the hunters' (the game's F is switched off for anybody else), and the
 // Coletores' blows with the axe at a tree and the pick at a rock, told to the server on the left click.
 installTradeRights();
 installUiScale();
+installHeadLabels();
 installGather();
 // The Agricultores' gardens: E at the soil of a bed of a village's garden sows it, or harvests it (farm.ts).
 installFarm();
 // The Agricultores' milking: E at a cow within reach (cow-milk.ts, 2026-10-27).
 installCowMilk();
+// The Agricultores' shearing: E at a sheep within reach (sheep-shear.ts, 2026-10-31).
+installSheepShear();
+// The death screen: the camera round the body, a verse and the counter to the waking (death-screen.ts, 2026-10-31).
+installDeathScreen();
 
 Events.on("resourceStop", (resourceName) => {
     if (resourceName === RESOURCE) {

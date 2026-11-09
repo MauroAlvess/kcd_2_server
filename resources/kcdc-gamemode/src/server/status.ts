@@ -1,6 +1,6 @@
 /**
- * The status panel's server half: the guild and faction catalogs, and each
- * player's social status, guild, faction and the one the panel shows first,
+ * The status panel's server half: the guild catalog, and each
+ * player's social status, guild and the one the panel shows first,
  * kept on disk by Steam id so they survive a restart and a reconnect (see
  * `characters.ts`, the same pattern for a chosen look). Also the family tree's
  * events (`family.ts` keeps the data), the properties pages (an administrator's "Chaves" and an owner's
@@ -12,10 +12,12 @@ import { fullName } from "./character-name.js";
 import { isAdmin, roleOf } from "./auth.js";
 import { allCharacters, getCharacter } from "./characters.js";
 import { bans, kickBanned } from "./bans.js";
+import { sentences } from "./sentences.js";
 import { getSavedPlace } from "./position.js";
-import { addPerson, answerInvite, backfillMirrors, editPerson, familyHeirs, getSurname, invitesFor, LIMITS, listFamily, maritalStatus, RELATIONS, removePersonDetailed, ROWS, setSurname } from "./family.js";
+import { addPerson, answerInvite, backfillMirrors, editPerson, crestOf, familyHeirs, getFamilyProfile, getSurname, invitesFor, LIMITS, listFamily, maritalStatus, RELATIONS, removePersonDetailed, ROWS, setFamilyProfile, setSurname } from "./family.js";
 import type { MirrorOutcome, Mirroring } from "./family.js";
-import { grantFactionColours, grantGuildKit, guildKitHint } from "./kits.js";
+import { grantGuildKit, guildKitHint } from "./kits.js";
+import { lastSeenAt } from "./character-state.js";
 import { thirstPace } from "./thirst.js";
 import { chargeForChange } from "./change-fee.js";
 import { CHANGE_PRICE_COINS, freeChangesOf } from "./free-changes.js";
@@ -23,6 +25,7 @@ import {
     assignOwner,
     cedeRegion,
     clearOwner,
+    daysAway,
     DESCRIPTION_MAX,
     describeProperty,
     displayName,
@@ -45,6 +48,7 @@ import {
     labelFor,
     listProperties,
     lockState,
+    LORD_RECLAIM_DAYS,
     npcOf,
     NAME_MAX,
     NAME_MIN,
@@ -54,6 +58,7 @@ import {
     previewRelease,
     propertiesOwnedBy,
     propertyOfGuid,
+    reclaimHouse,
     REGION_MAX,
     REGION_MIN,
     regionLordOf,
@@ -100,14 +105,7 @@ export type SocialStatus = "plebeius" | "minor" | "nobilis";
 export const SOCIAL_STATUS_IDS: readonly SocialStatus[] = ["plebeius", "minor", "nobilis"];
 
 /** Which of the two the character page shows on its right-hand side. */
-export type Showcase = "guild" | "faction" | "citizenship";
-
-export interface FactionInfo {
-    readonly id: string;
-    readonly name: string;
-    readonly motto: string;
-    readonly crest: string;
-}
+export type Showcase = "guild" | "citizenship";
 
 export interface GuildInfo {
     readonly id: string;
@@ -203,35 +201,18 @@ export const GUILDS: readonly GuildInfo[] = [
         crest: "guild-domador.webp",
         description:
             "Amansam os cavalos selvagens dos campos abertos, de comida na mão e paciência, até que confiem, e ficam com eles: " +
-            "montam, mandam seguir, e o cavalo manso aparece entre os animais de quem o ganhou.",
-    },
-];
-
-/** The two great houses. A player swears to one; the panel splits its faction page between them. */
-export const FACTIONS: readonly FactionInfo[] = [
-    {
-        id: "leao-dourado",
-        name: "Casa do Leão Dourado",
-        motto: "Pela honra, a lei e o sangue, manteremos a ordem.",
-        crest: "faction-leao.webp",
-    },
-    {
-        id: "corvo",
-        name: "Casa do Corvo",
-        motto: "Nas sombras da guerra, a astúcia conquista o que a força não pode.",
-        crest: "faction-corvo.webp",
+            "montam, e o cavalo manso aparece entre os animais de quem o ganhou.",
     },
 ];
 
 interface SocialRecord {
     socialStatus: SocialStatus;
     guildId: string | null;
-    factionId: string | null;
     showcase: Showcase;
     updatedAt: number;
 }
 
-const NEW_RECORD: Omit<SocialRecord, "updatedAt"> = { socialStatus: "plebeius", guildId: null, factionId: null, showcase: "guild" };
+const NEW_RECORD: Omit<SocialRecord, "updatedAt"> = { socialStatus: "plebeius", guildId: null, showcase: "guild" };
 
 let cache: Record<string, SocialRecord> | null = null;
 
@@ -253,8 +234,8 @@ function persist(store: Record<string, SocialRecord>): void {
 }
 
 /**
- * A record for this Steam id, defaulting a new one to Plebeius with no guild or faction. A record saved
- * before factions existed has no such fields, so every field a stored record lacks takes its default.
+ * A record for this Steam id, defaulting a new one to Plebeius with no guild. A record saved
+ * before a field existed lacks it, so every field a stored record lacks takes its default.
  * Never written for an empty id.
  */
 function recordFor(steamId: string): SocialRecord {
@@ -264,6 +245,10 @@ function recordFor(steamId: string): SocialRecord {
     // none, so the panel never points at a card that is not there. The stored value is left alone until the next write.
     if (record.guildId !== null && !GUILDS.some((guild) => guild.id === record.guildId)) {
         record.guildId = null;
+    }
+    // The factions' page, which an old record may still show, is gone: it reads as the guild's.
+    if (record.showcase !== "citizenship") {
+        record.showcase = "guild";
     }
     return record;
 }
@@ -309,7 +294,7 @@ export function setSocialStatus(steamId: string, socialStatus: SocialStatus): vo
     }
 }
 
-/** A player starts again (`character-reset.ts`): a commoner with no guild, no faction, and the page back to its first look. */
+/** A player starts again (`character-reset.ts`): a commoner with no guild, and the page back to its first look. */
 export function resetRecord(steamId: string): void {
     const record = steamId === "" ? undefined : load()[steamId];
     if (record === undefined) {
@@ -388,37 +373,13 @@ function guildChanged(steamId: string): void {
     }
 }
 
-export function getFactionId(steamId: string): string | null {
-    return recordFor(steamId).factionId;
-}
-
-/** Takes a player out of their faction, so they may swear again (an administrator's remedy: the oath is for good otherwise). */
-export function clearFactionId(steamId: string): boolean {
-    const record = steamId === "" ? undefined : load()[steamId];
-    if (record === undefined || record.factionId === null) {
-        return false;
-    }
-    write(steamId, { ...record, factionId: null, updatedAt: Date.now() });
-    return true;
-}
-
-/** False for a faction id the catalog does not have. */
-export function setFactionId(steamId: string, factionId: string): boolean {
-    if (!FACTIONS.some((faction) => faction.id === factionId)) {
-        return false;
-    }
-    const record = recordFor(steamId);
-    write(steamId, { ...record, factionId, updatedAt: Date.now() });
-    return true;
-}
-
 export function getShowcase(steamId: string): Showcase {
     return recordFor(steamId).showcase;
 }
 
-/** False for anything but "guild", "faction" or "citizenship". */
+/** False for anything but "guild" or "citizenship". */
 export function setShowcase(steamId: string, showcase: unknown): boolean {
-    if (showcase !== "guild" && showcase !== "faction" && showcase !== "citizenship") {
+    if (showcase !== "guild" && showcase !== "citizenship") {
         return false;
     }
     const record = recordFor(steamId);
@@ -481,9 +442,18 @@ function propertyEntry(property: PropertyInfo, viewer: Player, domain = false): 
             entry["entrance"] = entrance;
         }
     }
-    // Part of a region ceded to the viewer that is not theirs: shown to be read, never touched.
+    // Part of a region ceded to the viewer that is not theirs: shown to be read, never touched -- but a house of an owner who stopped coming may be taken back (2026-11-02, `reclaimHouse`):
+    // how many days since they were here, and whether that is long enough.
     if (domain) {
         entry["domain"] = true;
+        if (owner !== null && property.parentId === "" && npcOf(property) === null) {
+            const away = daysAway(lastSeenAt(owner.steamId));
+            entry["away"] = away;
+            entry["reclaimDays"] = LORD_RECLAIM_DAYS;
+            if (away >= LORD_RECLAIM_DAYS) {
+                entry["reclaim"] = true;
+            }
+        }
     }
     if (property.keys > 0) {
         entry["keys"] = property.keys;
@@ -495,6 +465,13 @@ function propertyEntry(property: PropertyInfo, viewer: Player, domain = false): 
         entry["owner"] = owner.name;
         if (viewer.steamId !== "" && owner.steamId === viewer.steamId) {
             entry["mine"] = true;
+        }
+        // The crest of a place is its owner's family's, when the family put one (2026-11-09: "nenhum deles deve ter brasão"); a chest in a house has the house's.
+        if (property.parentId === "") {
+            const crest = crestOf(owner.steamId);
+            if (crest !== "") {
+                entry["crestUrl"] = crest;
+            }
         }
     }
     // Access (2026-10-28): who the owner gave it to, for the owner and an administrator to see and take back; and, for one who was given it, that it is theirs to work.
@@ -726,7 +703,6 @@ function playerEntry(viewer: Player, other: Player, label: string): Record<strin
         role: roleOf(other),
         guild: GUILDS.find((guild) => guild.id === guildId)?.profession ?? null,
         guildId,
-        factionId: getFactionId(other.steamId),
         // The town they are a citizen of (2026-10-18: "ao clicar em jogadores ... aparecer a cidadania").
         town: townOf(other.steamId)?.name ?? null,
         status: SOCIAL_STATUS[getSocialStatus(other.steamId)],
@@ -746,6 +722,8 @@ function playerEntry(viewer: Player, other: Player, label: string): Record<strin
         supporter: supporters.summary(other.steamId),
         offline: false,
         banned: bans.isBanned(other.steamId),
+        // Sentenced to be executed, and not yet (`execution.ts`, 2026-11-04).
+        sentenced: sentences.has(other.steamId),
         ready: other.ready,
         alive: other.alive,
         steamId: other.steamId,
@@ -854,6 +832,11 @@ function knownAccounts(): Array<{ id: number; steamId: string }> {
     });
 }
 
+/** The number below zero a page names an account by (`knownAccounts`), whether its owner is here or not; null for one the server does not know. */
+export function accountIdOf(steamId: string): number | null {
+    return knownAccounts().find((account) => account.steamId === steamId)?.id ?? null;
+}
+
 /** What a character goes by when its owner is not here: the name, the alcunha and the family's surname -- or, for a banned account with no character, the name the ban kept. */
 function nameOfAccount(steamId: string): string {
     const saved = getCharacter(steamId);
@@ -898,7 +881,6 @@ function offlineEntry(steamId: string, id: number, label: string): Record<string
         role: null,
         guild: GUILDS.find((guild) => guild.id === guildId)?.profession ?? null,
         guildId,
-        factionId: getFactionId(steamId),
         town: townOf(steamId)?.name ?? null,
         status: SOCIAL_STATUS[getSocialStatus(steamId)],
         statusId: getSocialStatus(steamId),
@@ -910,6 +892,7 @@ function offlineEntry(steamId: string, id: number, label: string): Record<string
         body: gender === "female" ? "female" : "male",
         supporter: supporters.summary(steamId),
         banned: bans.isBanned(steamId),
+        sentenced: sentences.has(steamId),
         seen: seen === undefined ? null : agoText(seen),
         ready: false,
         alive: false,
@@ -917,12 +900,12 @@ function offlineEntry(steamId: string, id: number, label: string): Record<string
 }
 
 /** What an administrator is told when the player they pointed at cannot be found: gone from the game (an entity id) or never known (the number of an account). */
-function goneText(id: unknown): string {
+export function goneText(id: unknown): string {
     return typeof id === "number" && id > 0 ? "Esse jogador não está mais no servidor." : "Esse jogador não foi encontrado.";
 }
 
 /** The account a page names by `targetId`: the entity id of a body in the game, or the number below zero of an account that is not. Null for anything else. */
-function accountOfTarget(id: unknown): { steamId: string; name: string; player: Player | null } | null {
+export function accountOfTarget(id: unknown): { steamId: string; name: string; player: Player | null } | null {
     if (typeof id !== "number" || !Number.isInteger(id) || id === 0) {
         return null;
     }
@@ -972,6 +955,16 @@ export function rosterAnswer(viewer: Player, wanted: RosterQuery): Record<string
             .sort((a, b) => Number(b.player !== null) - Number(a.player !== null) || byName(a.label, b.label) || a.id - b.id);
         paged = paginate(kept, query.page, size);
         players = paged.rows.map((row) => (row.player !== null ? playerEntry(viewer, row.player, row.label) : offlineEntry(row.steamId, row.id, row.label)));
+    } else if (query.tag === "mail") {
+        // Whom a letter may go to (`letters.ts`): every character of the server, here or not, but oneself and the banned, by the account's number (the same
+        // whether its owner is in the game or not: a letter is sent to the person, not to the body).
+        const rows = knownAccounts()
+            .filter((account) => account.steamId !== viewer.steamId && getCharacter(account.steamId) !== null && !bans.isBanned(account.steamId))
+            .map((account) => ({ id: account.id, label: nameOfAccount(account.steamId) }))
+            .filter((row) => matches(query.q, row.id, row.label))
+            .sort((a, b) => byName(a.label, b.label) || a.id - b.id);
+        paged = paginate(rows, query.page, size);
+        players = paged.rows.map((row) => ({ id: row.id, nickname: row.label }));
     } else if (query.tag === "nom") {
         const rows = nominees(viewer)
             .filter((candidate) => matches(query.q, candidate.id, candidate.name))
@@ -995,8 +988,61 @@ export function rosterAnswer(viewer: Player, wanted: RosterQuery): Record<string
 type Contributor = (player: Player) => Record<string, unknown>;
 const contributors: Contributor[] = [];
 
+/** Added to every answer: the small things the nav and the header of the page need. */
 export function addPayload(contributor: Contributor): void {
     contributors.push(contributor);
+}
+
+/**
+ * The sets of data that only some sections need (2026-10-31, user: "ao apertar f2 carregar as seções de forma individual, ao entrar em cada seção saindo de outra mata a informação da
+ * antiga e carrega a da nova, assim ficando bem rápido"). The answer always has the small core; a set is in it only while the player is on a section that needs it, so what the
+ * other sections hold is neither worked out, nor sent, nor kept by the page.
+ */
+export type DataSet = "citizenship" | "family" | "properties" | "nobility";
+
+/** The sets each section of the panel needs. A section not here needs none (the guilds, the options, the supporter's page...). */
+export const SECTION_NEEDS: Readonly<Record<string, readonly DataSet[]>> = {
+    // The showcase of the citizenship and the header read the towns; the tree of the hierarchy hangs the holders from them.
+    character: ["citizenship"],
+    family: ["family"],
+    properties: ["properties"],
+    keys: ["properties"],
+    nomination: ["nobility", "citizenship"],
+    // The administrator's Títulos form (Jogadores) offers the Crown's whole catalog and the towns a title is of (2026-10-31: it came up empty without them).
+    players: ["nobility", "citizenship"],
+};
+
+/** The section a player has not chosen yet is the first one of the page. */
+export const DEFAULT_SECTION = "character";
+
+/**
+ * The word the client sends when the panel is put away (2026-10-31, "nenhum código rodando por trás referente aos menus do F2"): no section needs anything, so what is sent to a
+ * player whose panel is closed (a notice, an action done for them) is the small core and nothing is worked out for a page nobody has open.
+ */
+export const CLOSED_SECTION = "closed";
+
+const lazyContributors: Array<{ readonly set: DataSet; readonly contributor: Contributor }> = [];
+
+/** Added to the answer only while the player is on a section that needs this set (and it replaces what the core said of the same keys). */
+export function addLazyPayload(set: DataSet, contributor: Contributor): void {
+    lazyContributors.push({ set, contributor });
+}
+
+/** The section each player has open, as the page said (`status.section`). */
+const viewing = new Map<number, string>();
+
+/** The sets the section a player is on needs. */
+export function setsOf(player: { readonly id: number }): ReadonlySet<DataSet> {
+    return new Set(SECTION_NEEDS[viewing.get(player.id) ?? DEFAULT_SECTION] ?? []);
+}
+
+/** The player opened a section: what it needs is sent from now on, and nothing of the others. False for a name that is no section's. */
+export function setSection(player: { readonly id: number }, section: unknown): boolean {
+    if (typeof section !== "string" || !/^[a-z]{1,24}$/.test(section)) {
+        return false;
+    }
+    viewing.set(player.id, section);
+    return true;
 }
 
 /** The administrator's list as each last asked for it (what was typed, the page, the filter), so an action can refresh it. */
@@ -1007,41 +1053,61 @@ export function sendRoster(player: Player): void {
     player.emit(`${RESOURCE}:status.roster`, JSON.stringify(rosterAnswer(player, lastList.get(player.id) ?? DEFAULT_QUERY)));
 }
 
-function payloadFor(player: Player): Record<string, unknown> {
+export function payloadFor(player: Player): Record<string, unknown> {
+    const wanted = setsOf(player);
     const extra: Record<string, unknown> = {};
     for (const contributor of contributors) {
         Object.assign(extra, contributor(player));
     }
-    const regionList = isAdmin(player) ? regionLines(listProperties()) : [];
-    const domainList = domainRegions(player.steamId);
+    for (const { set, contributor } of lazyContributors) {
+        if (wanted.has(set)) {
+            Object.assign(extra, contributor(player));
+        }
+    }
+    const properties: Record<string, unknown> = {};
+    if (wanted.has("properties")) {
+        const regionList = isAdmin(player) ? regionLines(listProperties()) : [];
+        const domainList = domainRegions(player.steamId);
+        Object.assign(properties, {
+            // An administrator is sent the whole catalog, everybody else only what they own, and only a name for each other player.
+            properties: propertiesFor(player),
+            // The regions to choose from, with what each holds (an administrator's Chaves), the regions ceded to a lord (Propriedades), and the one open on each.
+            propertyRegions: regionList,
+            domainRegions: domainList,
+            // Where each of them is on the game's own map, for the dropdown of both pages.
+            regionHints: regionHintsFor([...regionList.map((line) => line.name), ...domainList]),
+            propertyPick: picksOf(player),
+            propertyLimits: PROPERTY_LIMITS,
+        });
+    }
+    const family: Record<string, unknown> = {};
+    if (wanted.has("family")) {
+        Object.assign(family, {
+            family: listFamily(player.steamId),
+            // Who asks this player to be their relative, waiting for a yes or a no in the Família section.
+            familyInvites: invitesFor(player.steamId),
+            familyRows: ROWS,
+            familyRelations: RELATIONS,
+            familyLimits: LIMITS,
+            // The family's description and crest link (2026-11-09), drawn in the family's own section.
+            familyProfile: getFamilyProfile(player.steamId),
+        });
+    }
     return {
         ...extra,
+        ...properties,
+        ...family,
+        // Which sets of data this answer carries, so the page knows what it has (and what it must ask for when the player changes section).
+        sets: [...wanted],
         socialStatus: SOCIAL_STATUS[getSocialStatus(player.steamId)],
         guildId: getGuildId(player.steamId),
         guilds: GUILDS,
-        factionId: getFactionId(player.steamId),
-        factions: FACTIONS,
         showcase: getShowcase(player.steamId),
         // The one free change of guild and of citizenship each player has (2026-10-19), while they still have it, and what every change after it costs (2026-10-26).
         freeChanges: freeChangesOf(player.steamId),
         changePrice: CHANGE_PRICE_COINS,
         // Which nav sections the page may show: the server decides, never the page's own guess.
         role: roleOf(player),
-        // An administrator is sent the whole catalog, everybody else only what they own, and only a name for each other player.
-        properties: propertiesFor(player),
-        // The regions to choose from, with what each holds (an administrator's Chaves), the regions ceded to a lord (Propriedades), and the one open on each.
-        propertyRegions: regionList,
-        domainRegions: domainList,
-        // Where each of them is on the game's own map, for the dropdown of both pages.
-        regionHints: regionHintsFor([...regionList.map((line) => line.name), ...domainList]),
-        propertyPick: picksOf(player),
-        propertyLimits: PROPERTY_LIMITS,
-        family: listFamily(player.steamId),
-        // Who asks this player to be their relative, waiting for a yes or a no in the Família section.
-        familyInvites: invitesFor(player.steamId),
-        familyRows: ROWS,
-        familyRelations: RELATIONS,
-        familyLimits: LIMITS,
         surname: getSurname(player.steamId),
         // What the player called the character in the creator (the first name and the alcunha; the surname is a row of its own): empty for one made before the names.
         characterName: characterNameOf(player),
@@ -1073,6 +1139,26 @@ export function notice(player: Player, text: string): void {
 export function installStatus(): void {
     Events.onClient(`${RESOURCE}:status.poll`, (sender) => {
         sendSocial(sender as Player);
+    });
+
+    // The player opened a section of the panel (2026-10-31): from now on its data is sent, and the data of the others is not.
+    Events.onClient(`${RESOURCE}:status.section`, (sender, payload) => {
+        const player = sender as Player;
+        let section: unknown = payload;
+        if (typeof payload === "string") {
+            try {
+                section = (JSON.parse(payload) as { tab?: unknown }).tab;
+            } catch {
+                return;
+            }
+        } else if (typeof payload === "object" && payload !== null) {
+            section = (payload as { tab?: unknown }).tab;
+        }
+        const before = viewing.get(player.id);
+        // A panel put away is told nothing: the next one asks for its section when it opens.
+        if (setSection(player, section) && viewing.get(player.id) !== before && section !== CLOSED_SECTION) {
+            sendSocial(player);
+        }
     });
 
     // The player lists ask for the page they show (what was typed, the filter, the page) and are answered with that page and
@@ -1112,6 +1198,7 @@ export function installStatus(): void {
     });
     Events.on("playerDisconnect", (player) => {
         regionPicks.delete(player.id);
+        viewing.delete(player.id);
     });
 
     Events.onClient(`${RESOURCE}:status.selectGuild`, (sender, payload) => {
@@ -1121,12 +1208,6 @@ export function installStatus(): void {
             return;
         }
         const guildId = typeof payload === "object" && payload !== null ? (payload as { guildId?: unknown }).guildId : undefined;
-        // Players do not choose a guild any more (2026-10-29, the user: "as guildas não vão poder mais ser selecionadas pelos jogadores"): a clerk, a master of a trade or a lord
-        // hands it to a citizen of theirs (`scribe.ts`). An administrator still chooses, and switches at will, to test the trades (2026-10-18).
-        if (!isAdmin(player)) {
-            notice(player, "A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras, que cede a guilda a quem é cidadão. Sem cidadania, escolha primeiro a sua cidade na seção Cidadania.");
-            return;
-        }
         // The first guild is a choice; changing it is the player's one free change and then costs coins (2026-10-26: "uma vez grátis, depois custa 100
         // moedas"). An administrator switches at will, to test the trades (2026-10-18).
         const current = getGuildId(player.steamId);
@@ -1185,34 +1266,6 @@ export function installStatus(): void {
             if (guildKitHint(guildId) !== "") {
                 notice(player, guildKitHint(guildId));
             }
-        }
-        sendSocial(player);
-    });
-
-    Events.onClient(`${RESOURCE}:status.selectFaction`, (sender, payload) => {
-        const player = sender as Player;
-        if (!player.steamId) {
-            Chat.sendToPlayer(player, "Sua conta não tem identificação Steam, então a facção não poderia ser salva.");
-            return;
-        }
-        const factionId = typeof payload === "object" && payload !== null ? (payload as { factionId?: unknown }).factionId : undefined;
-        // One faction for good, like the guild (user, 2026-10-17): the oath is not swapped from the panel, only by an administrator (`/faccao`).
-        const sworn = getFactionId(player.steamId);
-        if (sworn !== null) {
-            const kept = FACTIONS.find((candidate) => candidate.id === sworn);
-            notice(player, sworn === factionId ? `Você já jurou lealdade à ${kept?.name ?? sworn}.` : `Você já jurou lealdade à ${kept?.name ?? sworn}: o juramento é definitivo e não se troca. Só um administrador pode desfazê-lo.`);
-            return;
-        }
-        if (typeof factionId !== "string" || !setFactionId(player.steamId, factionId)) {
-            Chat.sendToPlayer(player, "Essa facção não pode ser escolhida.");
-            return;
-        }
-        const faction = FACTIONS.find((candidate) => candidate.id === factionId);
-        Chat.sendToPlayer(player, `Você jurou lealdade à ${faction?.name ?? factionId}: ela é a sua facção de lealdade.`);
-        // The first oath to a faction brings its colours; the ledger in character-state.ts stops a second set.
-        const colours = grantFactionColours(player, factionId);
-        if (colours.length > 0) {
-            notice(player, `As cores da facção estão no seu inventário: ${colours.join(" e ")}. Vista pelo inventário.`);
         }
         sendSocial(player);
     });
@@ -1372,6 +1425,17 @@ export function installStatus(): void {
         if (result.ok && target !== player) {
             Chat.sendToPlayer(target, `${nameOf(player)} entregou a você uma propriedade. Veja na seção Propriedades do painel (F2).`);
         }
+        sendSocial(player);
+    });
+
+    // A lord takes back a house of their region whose owner stopped coming (`reclaimHouse`).
+    Events.onClient(`${RESOURCE}:status.propReclaim`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = fieldsOf(payload);
+        if (typeof fields["id"] !== "string") {
+            return;
+        }
+        notice(player, reclaimHouse(player, fields["id"], (steamId) => lastSeenAt(steamId)).message);
         sendSocial(player);
     });
 
@@ -1909,11 +1973,22 @@ export function installStatus(): void {
         sendSocial(player);
     });
 
+    Events.onClient(`${RESOURCE}:status.familyProfile`, (sender, payload) => {
+        const player = sender as Player;
+        const fields = typeof payload === "object" && payload !== null ? (payload as { description?: unknown; crest?: unknown }) : {};
+        const result = setFamilyProfile(player.steamId, fields.description, fields.crest);
+        if (!result.ok) {
+            notice(player, result.reason);
+            return;
+        }
+        sendSocial(player);
+    });
+
     // The links made before a relative got their own side of it are given it once, now.
     const mirrored = backfillMirrors(savedMirroring);
     if (mirrored > 0) {
         console.log(`family: ${mirrored} ligação(ões) antiga(s) ganharam o lado delas na árvore do outro jogador`);
     }
 
-    console.log(`status panel answering; ${GUILDS.length} guild(s) and ${FACTIONS.length} faction(s) in the catalog`);
+    console.log(`status panel answering; ${GUILDS.length} guild(s) in the catalog`);
 }

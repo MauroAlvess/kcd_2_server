@@ -1,12 +1,27 @@
 /**
  * The English of what the server says to a player in the chat and on the panel's toast: the messages of the panel's actions
- * (guild, faction, keys, properties, family, nominations, supporters), of `/preso`, the carts, the horses' saddlebags, the
+ * (guild, keys, properties, family, nominations, supporters), of `/preso`, the carts, the
  * roleplay commands and the lines `/help` lists for the commands everybody has. Whole texts in `MESSAGES`; sentences with a
  * name or a number in them as regular expressions in `MESSAGE_PATTERNS`, with `$1`... for what they catch (see `language.ts`).
  * A message not here reaches an English player in Portuguese, as it is written: the administrators' commands are left so.
  */
 
 export const MESSAGES: Readonly<Record<string, string>> = {
+    // The extraction as a piece of work, and the page always answered (craft-menu.ts, 2026-11-03).
+    "Extração interrompida: nada foi quebrado.": "Extraction stopped: nothing was broken.",
+    // The lord of the lands and the vendors' lock (2026-11-04, `guild-vendors.ts`).
+    // Death forgets the introductions (2026-11-04, `acquaintances.ts`).
+    "A morte apagou as apresentações: você já não conhece ninguém e ninguém mais o conhece. Será preciso se apresentar de novo.": "Death wiped the introductions: you no longer know anybody and nobody knows you. You will have to introduce yourselves again.",
+    "A página do ofício se perdeu: abra de novo a forja ou a costura.": "The trade's page was lost: open the forge or the sewing again.",
+    "Termine o trabalho que está fazendo antes de trocar de aba.": "Finish the work you are doing before changing tabs.",
+    "Nada foi feito: a extração deu erro, e o equipamento ficou com você.": "Nothing was done: the extraction failed, and the piece is still yours.",
+    "O trabalho parou por um erro do servidor: o que já foi feito ficou feito.": "The work stopped on a server error: what was made stays made.",
+    // The tracks of the trades' day's limit (profession-xp-settings.ts, 2026-11-03).
+    "ofício manual (forja e costura)": "craftsmanship (forge and sewing)",
+    "sobrevivência": "survival",
+    "alquimia": "alchemy",
+    "bebida": "drinking",
+    "força": "strength",
     // Citizenship, the free horse and cart, the trades' tools, the perk taken out.
     "Essa cidade não existe.": "That town does not exist.",
     "Sua conta não tem identificação Steam, então a cidadania não poderia ser salva.": "Your account has no Steam identification, so the citizenship could not be saved.",
@@ -28,15 +43,10 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Não consegui guardar o cartaz agora; o seu dinheiro foi devolvido. Tente de novo em instantes.": "I could not keep the poster just now; your money was given back. Try again in a moment.",
     "Esse cartaz já não está no quadro.": "That poster is no longer on the board.",
     "Só quem afixou o cartaz pode retirá-lo.": "Only whoever pinned the poster up can take it down.",
+    "Este lugar não é uma cidade: não há cidadania aqui.": "This place is no town: there is no citizenship here.",
     "Não consegui retirar o cartaz agora. Tente de novo em instantes.": "I could not take the poster down just now. Try again in a moment.",
     "Cartaz retirado.": "Poster taken down.",
     "Só o administrador usa essas formas de /mural. /mural, sozinho, abre o quadro de avisos perto de você.": "Only the administrator uses those forms of /mural. /mural alone opens the notice board near you.",
-    // The welcome form (welcome.ts, 2026-10-24).
-    "Que a sorte lhe acompanhe, viajante. As regras e a história do reino estão sempre à mão: no menu F2, em Informações, e no nosso site.": "May fortune go with you, traveller. The rules and the story of the realm are always at hand: in the F2 menu, under Information, and on our website.",
-    "Primeiro é preciso criar o personagem; depois você concorda com as regras.": "First make your character; then you agree to the rules.",
-    "Não consegui guardar a sua concordância agora; tente de novo em instantes.": "I could not keep your agreement just now; try again in a moment.",
-    "Você já concordou com as regras e com a lore do servidor.": "You have already agreed to the rules and the server's lore.",
-    "A janela de boas-vindas não abriu no seu jogo. Leia as regras no menu F2 (Informações) e no nosso site e digite /aceitar para concordar com elas e com a lore do servidor.": "The welcome window did not open in your game. Read the rules in the F2 menu (Information) and on our website, and type /aceitar to agree to them and to the server's lore.",
     // Thirst (thirst.ts, 2026-10-20).
     "Você sente sede. Beba água, ou do rio, quando passar por um.": "You feel thirsty. Drink water, or from a river when you pass one.",
     "Sua boca está seca e a cabeça pesa: você precisa beber, e logo.": "Your mouth is dry and your head is heavy: you need to drink, and soon.",
@@ -49,12 +59,12 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Para cortar lenha ou minerar: com o machado ou a picareta na bolsa, olhe para uma árvore ou uma pedra e aperte E. Aperte E de novo, ou ande, para parar.": "To cut wood or mine: with the axe or the pick in your bag, look at a tree or a rock and press E. Press E again, or walk, to stop.",
     "Você precisa de um machado na bolsa para cortar lenha.": "You need an axe in your bag to cut wood.",
     "Você precisa de uma picareta na bolsa para minerar.": "You need a pick in your bag to mine.",
-    "O seu machado está gasto demais: conserte com um kit de reparo ou faça outro no ferreiro.": "Your axe is too worn: mend it with a repair kit or have the smith make another.",
-    "A sua picareta está gasta demais: conserte com um kit de reparo ou faça outra no ferreiro.": "Your pick is too worn: mend it with a repair kit or have the smith make another.",
+    "O seu machado quebrou de tanto uso e sumiu do inventário. Faça outro no ferreiro.": "Your axe broke from use and is gone from your inventory. Have the smith make another.",
+    "A sua picareta quebrou de tanto uso e sumiu do inventário. Faça outra no ferreiro.": "Your pick broke from use and is gone from your inventory. Have the smith make another.",
     "Você saiu do lugar e parou de trabalhar.": "You moved away and stopped working.",
     "Você foi interrompido.": "You were interrupted.",
     "Você já está trabalhando em algo.": "You are already working on something.",
-    "Cortar lenha e quebrar pedra é ofício dos Coletores (guilda Collectores). Escolha a guilda no painel (F2), em Guildas.": "Cutting wood and breaking stone is the Gatherers' trade (guild Collectores). Choose the guild on the panel (F2), under Guilds.",
+    "Cortar lenha e quebrar pedra é ofício dos Coletores (guilda Collectores). Aprenda o ofício com o comerciante da guilda da sua cidade.": "Cutting wood and breaking stone is the Gatherers' trade (guild Collectores). Learn the trade from the guild's vendor in your town.",
     "Esta árvore já deu a lenha que tinha. Procure outra.": "This tree has given all the wood it had. Look for another.",
     "Esta pedra está esgotada por ora. Procure outra.": "This rock is spent for now. Look for another.",
     // The fire's keys (cook-hint.ts, 2026-10-20).
@@ -114,8 +124,8 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Para plantar: com a pá e as sementes na bolsa, olhe para o chão de um canteiro de horta, atrás das casas das aldeias, e aperte E; a página à direita diz o que cada planta pede e em quanto tempo dá. Quando ficar pronta, E de novo no canteiro colhe. /horta mostra o que você plantou.": "To plant: with the shovel and the seeds in your bag, look at the ground of a garden bed behind the houses of the villages and press E; the page on the right says what each plant asks for and how long it takes. When it is ripe, E again at the bed picks it. /horta shows what you planted.",
     "Agora não dá.": "Not now.",
     "Só um administrador faz isso.": "Only an administrator can do that.",
-    "Lavrar as hortas é ofício dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.": "Tilling the gardens is the farmers' trade (guild Agricolae). Pick the guild in the panel (F2), under Guilds.",
-    "Plantar é ofício dos agricultores (guilda Agricolae). Escolha a guilda no painel (F2), em Guildas.": "Planting is the farmers' trade (guild Agricolae). Pick the guild in the panel (F2), under Guilds.",
+    "Lavrar as hortas é ofício dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.": "Tilling the gardens is the farmers' trade (guild Agricolae). Learn the trade from the guild's vendor in your town.",
+    "Plantar é ofício dos agricultores (guilda Agricolae). Aprenda o ofício com o comerciante da guilda da sua cidade.": "Planting is the farmers' trade (guild Agricolae). Learn the trade from the guild's vendor in your town.",
     "Sem identificação Steam não há como guardar a sua plantação.": "Without a Steam identification there is no way to keep your planting.",
     "Fique junto do canteiro para plantar.": "Stay beside the bed to plant.",
     "Este canteiro já está semeado.": "This bed is already sown.",
@@ -152,7 +162,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "atento": "alert",
     "quase manso": "almost tame",
     "confia em você": "trusts you",
-    "Só os domadores (guilda Domitores) sabem amansar um cavalo selvagem. Escolha a guilda no painel (F2), em Guildas.": "Only the tamers (the Domitores guild) know how to tame a wild horse. Pick the guild in the panel (F2), under Guilds.",
+    "Só os domadores (guilda Domitores) sabem amansar um cavalo selvagem. Aprenda o ofício com o comerciante da guilda da sua cidade.": "Only the tamers (the Domitores guild) know how to tame a wild horse. Learn the trade from the guild's vendor in your town.",
     "Sem identificação Steam não há como guardar a confiança do cavalo.": "Without a Steam identification there is no way to keep the horse's trust.",
     "Você não tem o que oferecer: uma cenoura, maçã, pera, beterraba, nabo ou pão na bolsa.": "You have nothing to offer: a carrot, apple, pear, beetroot, turnip or bread in your bag.",
     "Ele ainda não confia em você o bastante.": "It does not trust you enough yet.",
@@ -162,8 +172,6 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Você se afastou demais do cavalo.": "You moved too far from the horse.",
     "Ele é selvagem: chegue devagar, aperte E e ofereça comida até ele confiar em você.": "It is wild: come up slowly, press E and offer food until it trusts you.",
     "É um cavalo selvagem: só os domadores sabem amansá-lo.": "It is a wild horse: only the tamers know how to tame it.",
-    "Você está montado nele: desça para mandá-lo seguir.": "You are riding it: get off to send it to follow.",
-    "Só o dono manda no cavalo.": "Only the owner gives the horse orders.",
     "Cebola": "Onion",
     "cebola": "onion",
     "Repolho": "Cabbage",
@@ -233,13 +241,11 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Idioma: português.": "Language: Portuguese.",
     "Idioma: inglês.": "Language: English.",
 
-    // Panel actions: guild, faction, general.
+    // Panel actions: guild, general.
     "Sua conta não tem identificação Steam, então a guilda não poderia ser salva.": "Your account has no Steam identification, so the guild could not be saved.",
-    "Sua conta não tem identificação Steam, então a facção não poderia ser salva.": "Your account has no Steam identification, so the faction could not be saved.",
     "Sua conta não tem identificação Steam, então a família não poderia ser salva.": "Your account has no Steam identification, so the family could not be saved.",
     "Sua conta não tem identificação Steam, então o sobrenome não poderia ser salvo.": "Your account has no Steam identification, so the surname could not be saved.",
     "Essa guilda não pode ser selecionada.": "That guild cannot be chosen.",
-    "Essa facção não pode ser escolhida.": "That faction cannot be chosen.",
     "Esse jogador não está mais no servidor.": "That player is no longer on the server.",
     "Os benefícios de apoiador foram retirados por um administrador.": "Your supporter benefits were taken back by an administrator.",
     "O arquivo de apoiadores não pôde ser lido; nada foi retirado para não apagar o que está nele.": "The supporters file could not be read; nothing was taken back, so as not to erase what is in it.",
@@ -298,6 +304,11 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Seu cão já está vindo. Espere um pouco antes de chamar de novo.": "Your dog is already coming. Wait a moment before calling again.",
     "Seu cão não pôde vir agora. Tente de novo em instantes.": "Your dog could not come now. Try again in a moment.",
     "Seu cão veio para perto de você.": "Your dog came to you.",
+    "Seu cão voltou ao mundo e veio para perto de você.": "Your dog is back in the world and came to you.",
+    "Seu cão foi embora e some do mundo. Chame-o quando quiser: /cachorro, ou Chamar na seção Animais.": "Your dog is gone and vanishes from the world. Call it whenever you like: /cachorro, or Call in the Animals section.",
+    "Seu cão já foi embora. Chame-o (/cachorro, ou Chamar na seção Animais) para ele voltar.": "Your dog is already gone. Call it (/cachorro, or Call in the Animals section) to bring it back.",
+    "Só quem apoia o servidor tem um cão.": "Only those who support the server have a dog.",
+    "Seu cão foi embora: chame-o para ele voltar.": "Your dog is gone: call it to bring it back.",
     "Só quem apoia o servidor tem um cão para dar nome.": "Only those who support the server have a dog to name.",
     "Seu cão voltou a usar o nome de antes.": "Your dog went back to its earlier name.",
     "Você não tem um cão por perto. /cachorro chama o seu.": "You have no dog nearby. /cachorro calls yours.",
@@ -334,14 +345,6 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Só administradores dão, registram e liberam carroças.": "Only administrators give, register and free carts.",
 
     // Saddlebags.
-    "Você não pode abrir as alforjes agora.": "You cannot open the saddlebags now.",
-    "Você já está com um inventário aberto.": "You already have an inventory open.",
-    "Você não tem um cavalo por perto.": "You have no horse nearby.",
-    "Esse cavalo não está no mundo agora.": "That horse is not in the world now.",
-    "O jogo não abriu as alforjes agora. Tente de novo.": "The game did not open the saddlebags now. Try again.",
-    "O cavalo morreu; o que ele levava nas alforjes foi para os seus bolsos ou ficou no chão onde ele caiu.": "The horse died; what it carried in its saddlebags went to your pockets or stayed on the ground where it fell.",
-    "Abre as alforjes do seu cavalo, para guardar e pegar coisas, estando perto dele.": "Opens your horse's saddlebags, to store and take things, while near it.",
-    "/alforje <nome do cavalo>  -- as alforjes do cavalo com esse nome": "/alforje <horse name>  -- the saddlebags of the horse with that name",
 
     // Roleplay.
     "Descreve uma ação do seu personagem, para quem está por perto.": "Describes an action of your character, for whoever is nearby.",
@@ -404,7 +407,7 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "Você abaixou a tocha para fazer isso. Empunhe-a de novo quando terminar.": "You lowered the torch to do this. Draw it again when you have finished.",
     // The chat of T reaches the village or town and whoever is near (2026-10-25, local-chat.ts).
     "O chat (T) chega só a quem está na mesma vila ou cidade que você, ou a até 30 metros de você; no campo aberto, a até 50 metros.": "The chat (T) reaches only those in the same village or town as you, or within 30 metres of you; in the open country, within 50 metres.",
-    // Arrest, the pillory and the Escrivão (2026-10-29).
+    // Arrest and the pillory (2026-10-29).
     "Ninguém se prende a si mesmo.": "Nobody arrests themselves.",
     "Essa pessoa não pode ser presa.": "That person cannot be arrested.",
     "Você está preso.": "You are arrested.",
@@ -429,21 +432,81 @@ export const MESSAGES: Readonly<Record<string, string>> = {
     "30 minutos": "30 minutes",
     "1 hora": "1 hour",
     "2 horas": "2 hours",
-    "Só um escrivão, um mestre de ofício ou guilda, ou um senhor das terras cede uma guilda.": "Only a scribe, a master of a trade or guild, or a lord of the lands hands out a guild.",
-    "Essa guilda não existe.": "That guild does not exist.",
-    "Essa pessoa não é cidadã de nenhuma das terras que você atende.": "That person is not a citizen of any of the lands you attend.",
-    "Ninguém cede uma guilda a si mesmo: peça a outro escrivão ou mestre.": "Nobody hands a guild to themselves: ask another scribe or master.",
-    "Essa guilda não pôde ser cedida agora.": "That guild could not be handed out now.",
-    "Só um escrivão, um mestre de ofício ou guilda, ou um senhor das terras retira uma guilda.": "Only a scribe, a master of a trade or guild, or a lord of the lands takes away a guild.",
-    "O seu cargo não retira essa guilda: um mestre retira só a sua.": "Your office does not take away that guild: a master takes away only their own.",
-    "A guilda não pôde ser retirada agora.": "The guild could not be taken away now.",
-    "A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras, que cede a guilda a quem é cidadão. Sem cidadania, escolha primeiro a sua cidade na seção Cidadania.": "A guild is no longer chosen in the panel: look for a scribe, a master of a trade or guild, or the lord of the lands, who hands the guild to a citizen. With no citizenship, first pick your town in the Citizenship section.",
+    // The guild vendors, the wars and the sheep (2026-10-31).
+    "As duas terras são do mesmo senhor.": "Both lands belong to the same lord.",
+    "Tosquiar é ofício dos agricultores (guilda Agricolae): aprenda o ofício com o agricultor da sua cidade.": "Shearing is the farmers' trade (guild Agricolae): learn the trade from the farmer of your town.",
+    "Escolha uma ovelha.": "Choose a sheep.",
+    "Essa ovelha não está mais aí.": "That sheep is no longer there.",
+    "Chegue mais perto da ovelha.": "Come closer to the sheep.",
+    "Você saiu do lugar: nada foi tosquiado.": "You moved from the spot: nothing was sheared.",
+    "O linho não coube na sua bolsa: abra espaço e tosquie de novo.": "The flax did not fit in your bag: make room and shear again.",
+    "Tosquia interrompida: nada foi tirado.": "Shearing interrupted: nothing was taken.",
+    "Ver o que mais tenho (comprar e vender)": "See what else I have (buy and sell)",
+    "Sem a sua identificação Steam eu não teria como registrar o seu ofício.": "Without your Steam identification I would have no way to record your trade.",
+    "Essa guilda não pôde ser aprendida agora.": "That guild could not be learned now.",
+    "Esse cavalo não está à venda.": "That horse is not for sale.",
+    "O domador já lhe vendeu o cavalo de hoje: volte amanhã.": "The tamer has already sold you today's horse: come back tomorrow.",
+    "O cavalo não pôde vir agora; o seu dinheiro foi devolvido. Tente de novo daqui a pouco.": "The horse could not come just now; your money was given back. Try again in a moment.",
+    "O comerciante não pôde atender agora. Tente de novo em instantes.": "The vendor could not serve you just now. Try again in a moment.",
+    "Comprar/Vender": "Buy/Sell",
+    "Aceitar o ofício": "Accept the trade",
+    "Você não tem terras para nomear: escolha a sua cidade na seção Cidadania.": "You have no lands to name for: choose your town in the Citizenship section.",
+    "Escolha a região do título.": "Choose the region of the title.",
+    "Apenas nobres e mestres do ofício fazem esta peça.": "Only nobles and masters of the trade make this piece.",
+    "O ferro não espera. Kits de reparo e metal de forja, é o que tenho.": "Iron does not wait. Repair kits and forge metal are what I have.",
+    "Peles e flechas, nada mais. O resto a mata dá a quem sabe pedir.": "Skins and arrows, nothing more. The rest the forest gives to whoever knows how to ask.",
+    "Farinha, malte, lúpulo e o que mais a cozinha pedir. Sirva-se do básico.": "Flour, malt, hops and whatever else the kitchen asks for. Help yourself to the basics.",
+    "Flores do campo e água limpa: o princípio de qualquer remédio.": "Flowers of the field and clean water: the beginning of any remedy.",
+    "Linha, linho e couro para quem costura. Do pano, cada um faz o que sabe.": "Thread, linen and leather for whoever sews. Of the cloth, each makes what they know.",
+    "Machado para a lenha, picareta para a pedra. É o que o ofício pede.": "An axe for the wood, a pick for the stone. It is what the trade asks.",
+    "Sementes das lavouras de sempre. Quem planta cedo colhe cedo.": "Seeds of the usual crops. Whoever sows early reaps early.",
+    "Cavalo manso, de sela e rédea simples. E o que um cavalo come, para ganhar-lhe a confiança.": "A gentle horse, with a plain saddle and rein. And what a horse eats, to win its trust.",
+    "Mestre Coletor": "Master Gatherer",
+    "Mestre Domador": "Master Tamer",
+    "propriedade": "property",
+    "propriedades": "properties",
+    // The letters (letters.ts, 2026-11-02).
+    "Escolha para quem vai a carta.": "Choose whom the letter goes to.",
+    "Uma carta para você mesmo? O mensageiro não aceita.": "A letter to yourself? The courier will not take it.",
+    "Essa pessoa não está mais no reino.": "That person is no longer in the realm.",
+    "Sua conta não tem identificação Steam, então a carta não poderia ser guardada.": "Your account has no Steam identification, so the letter could not be kept.",
+    "Crie o seu personagem antes de escrever uma carta.": "Make your character before writing a letter.",
+    "O correio está fechado por enquanto.": "The post is closed for now.",
+    "Escreva o texto da carta.": "Write the text of the letter.",
+    "Esse selo não é seu: escolha o lacre simples, o brasão da sua cidadania ou o da sua guilda.": "That seal is not yours: choose plain wax, your citizenship's crest or your guild's.",
+    "Com calma: o mensageiro leva uma carta de cada vez.": "Easy: the courier takes one letter at a time.",
+    "Não consegui guardar a carta agora; o seu dinheiro foi devolvido. Tente de novo em instantes.": "I could not keep the letter now; your money was given back. Try again in a moment.",
+    "Essa carta já não está com você.": "That letter is no longer with you.",
+    // The creator's age and height, the torch lowered (2026-11-02).
+    "Você baixou a tocha para fazer isso: ela volta ao lugar dela quando você terminar.": "You lowered the torch to do this: it goes back to its place when you finish.",
+    "O seu personagem agora tem idade e altura: escolha as duas no criador para continuar (e, se quiser, ajuste o visual com as opções novas).": "Your character now has an age and a height: choose both in the creator to go on (and, if you like, adjust the look with the new options).",
 };
 
 export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
-    // Arrest, the pillory and the Escrivão (2026-10-29), first so that no broader pattern below catches them.
+    // A horse attacked while its owner was away is put out of the world and comes back with the owner (2026-11-04, `horses.ts` `unparkHorsesOf`).
+    ["^Seu cavalo (.+) foi atacado enquanto você estava fora, mas está bem\\. Ele espera onde caiu: use o assobio \\(X\\) para chamá-lo\\.$", "Your horse $1 was attacked while you were away, but it is fine. It waits where it fell: use the whistle (X) to call it."],
+    ["^Seu cavalo foi atacado enquanto você estava fora, mas está bem\\. Ele espera onde caiu: use o assobio \\(X\\) para chamá-lo\\.$", "Your horse was attacked while you were away, but it is fine. It waits where it fell: use the whistle (X) to call it."],
+    // A piece worn to nothing breaks and goes (2026-11-04, `wear-break.ts` `brokeText`).
+    ["^(.+) quebrou de tanto uso e sumiu do seu inventário\\.$", "$1 broke from use and is gone from your inventory."],
+    ["^Peças que estavam com 0 de durabilidade quebraram e sumiram do seu inventário: (.+)\\.$", "Pieces at 0 durability broke and are gone from your inventory: $1."],
+    // The guild vendor's purse, said as the trade opens (2026-11-01, `guild-vendors.ts` `purseNote`).
+    ["^(.+): compra até (.+) de você\\. A conta é só sua e vale para todos os vendedores desse ofício no reino; enche de novo 24 h depois do primeiro negócio\\.$", "$1: buys up to $2 from you. The account is yours alone and holds for every vendor of this trade in the realm; it fills again 24 h after the first deal."],
+    ["^(.+): ainda compra até (.+) de você\\. A conta é só sua e vale para todos os vendedores desse ofício no reino; enche de novo em (\\d+) h\\.$", "$1: still buys up to $2 from you. The account is yours alone and holds for every vendor of this trade in the realm; it fills again in $3 h."],
+    // The passives too strong for the server (2026-11-01, `perk-guard.ts`), taken out at the entry with their points given back.
+    ["^A passiva (.+) foi desativada no servidor, por ser forte demais para o RP: o ponto voltou para você, para gastar em outra\\.$", "The passive $1 was switched off on the server, too strong for the roleplay: the point is yours again, to spend on another."],
+    ["^As passivas (.+) foram desativadas no servidor, por serem fortes demais para o RP: os (\\d+) pontos voltaram para você, para gastar em outras\\.$", "The passives $1 were switched off on the server, too strong for the roleplay: the $2 points are yours again, to spend on others."],
+    // Arrest and the pillory (2026-10-29), first so that no broader pattern below catches them.
+    ["^(.+) prendeu você\\. As suas mãos estão amarradas e você fica parado; só fala, até que um oficial o conduza, o solte ou o leve ao pelourinho\\.$", "$1 arrested you. Your hands are tied and you stand still; you can only speak, until an officer leads you, releases you or takes you to the pillory."],
     ["^(.+) prendeu você\\. As suas mãos estão algemadas: você só pode andar e falar, até que um oficial solte você ou o leve ao pelourinho\\.$", "$1 arrested you. Your hands are cuffed: you can only walk and speak, until an officer releases you or takes you to the pillory."],
     ["^Você prendeu (.+)\\. Leve-o ao pelourinho, ou solte-o pela tecla E\\.$", "You arrested $1. Take them to the pillory, or release them with the E key."],
+    ["^Ninguém conduz você agora: você fica onde está, de mãos amarradas\\.$", "Nobody leads you now: you stay where you are, hands tied."],
+    ["^Ninguém está conduzindo essa pessoa\\.$", "Nobody is leading that person."],
+    ["^Quem conduz essa pessoa é outro oficial\\.$", "Another officer is leading that person."],
+    ["^Essa pessoa não está algemada\\.$", "That person is not in handcuffs."],
+    ["^Você prendeu (.+)\\. Pela tecla E nele: conduza-o, solte-o, ou leve-o ao pelourinho\\.$", "You arrested $1. With the E key on them: lead them, release them, or take them to the pillory."],
+    ["^Você está conduzindo (.+): ele anda com você\\. Para parar, aperte E nele de novo\\.$", "You are leading $1: they walk with you. To stop, press E on them again."],
+    ["^(.+) está conduzindo você: acompanhe\\.$", "$1 is leading you: keep up."],
+    ["^Você parou de conduzir (.+)\\.$", "You stopped leading $1."],
     ["^(.+) soltou você\\.$", "$1 released you."],
     ["^(.+) foi solto do pelourinho\\.$", "$1 was released from the pillory."],
     ["^(.+) foi solto\\.$", "$1 was released."],
@@ -451,14 +514,10 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^(.+) foi posto no pelourinho de (.+) por (.+)\\.$", "$1 was put in the pillory of $T2 for $T3."],
     ["^Você continua no pelourinho de (.+): faltam (\\d+) min\\.$", "You are still in the pillory of $T1: $2 min left."],
     ["^Você continua preso, de mãos algemadas: faltam até (\\d+) min\\.$", "You are still arrested, hands cuffed: up to $1 min left."],
-    ["^(?!Você )(.+) já faz parte de (.+)\\.$", "$1 is already part of $2."],
-    ["^(?!Você )(.+) faz parte de (.+), que o seu cargo não retira\\.$", "$1 is part of $2, which your office does not take away."],
-    ["^O seu cargo não cede a guilda (.+): um mestre cede só a sua\\.$", "Your office does not hand out the guild $1: a master hands out only their own."],
-    ["^(.+) cedeu a você a guilda (.+) \\((.+)\\)\\.$", "$1 handed you the guild $2 ($T3)."],
+    ["^Você continua preso, de mãos amarradas: faltam até (\\d+) min\\.$", "You are still arrested, hands tied: up to $1 min left."],
     ["^Kit da guilda entregue: (.+)\\.$", "Guild kit delivered: $1."],
     ["^(?!Você )(.+) agora é (.+) \\((.+)\\)\\.$", "$1 is now $T2 ($3)."],
     ["^(?!Você )(.+) não tem guilda\\.$", "$1 has no guild."],
-    ["^(.+) retirou de você a guilda (.+)\\. Procure um escrivão ou um mestre de ofício para receber outra\\.$", "$1 took the guild $2 away from you. Look for a scribe or a master of a trade to receive another."],
     ["^(.+) deixou de ser (.+)\\.$", "$1 is no longer $T2."],
     // "Refazer aparência": the new name in the answer.
     ["^Aparência refeita: agora você é (.+)\\. Tudo o que o personagem tinha continua seu\\.$", "Appearance remade: you are now $1. Everything the character had is still yours."],
@@ -477,8 +536,8 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^(.+) não tem portões\\.$", "$1 has no gates."],
     ["^(\\d+) baú\\(s\\) foram para dentro da propriedade mais perto e (\\d+) porta\\(s\\) passaram a ser portas dela\\.$", "$1 chest(es) went inside the nearest property and $2 door(s) became its doors."],
     // The taming has its own verb (before the general "Only ... use ...").
-    ["^Só (.+) usam a doma dos cavalos selvagens\\. Escolha a guilda no painel \\(F2\\), em Guildas\\.$", "Only $T1 can tame wild horses. Pick the guild in the panel (F2), under Guilds."],
-    ["^Só (.+) usam (.+)\\. Escolha a guilda no painel \\(F2\\), em Guildas\\.$", "Only $T1 use $T2. Pick the guild in the panel (F2), under Guilds."],
+    ["^Só (.+) usam a doma dos cavalos selvagens\\. Aprenda o ofício com o comerciante da guilda da sua cidade\\.$", "Only $T1 can tame wild horses. Learn the trade from the guild's vendor in your town."],
+    ["^Só (.+) usam (.+)\\. Aprenda o ofício com o comerciante da guilda da sua cidade\\.$", "Only $T1 use $T2. Learn the trade from the guild's vendor in your town."],
     ["^Você tinha (.+), que impede as mesas de alquimia de funcionarem no servidor por enquanto: o talento foi tirado e o ponto voltou para você, para gastar em outro\\.$", "You had $1, which keeps the alchemy tables from working on the server for now: the perk was taken out and the point came back to you, to spend on another."],
     ["^Você agora é cidadão de (.+): quando morrer, é lá que você acorda\\.$", "You are now a citizen of $1: when you die, that is where you wake."],
     ["^Você já é cidadão de (.+): só o senhor das terras pode depor a sua cidadania\\.$", "You are already a citizen of $1: only the lord of the lands can depose your citizenship."],
@@ -538,8 +597,6 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^Você já escolheu a guilda (.+): a escolha é definitiva e não se troca\\. Só um administrador pode desfazê-la\\.$", "You have already chosen the guild $1: the choice is final and cannot be swapped. Only an administrator can undo it."],
     ["^Você agora faz parte de (.+)\\.$", "You are now part of $1."],
     ["^Kit da guilda entregue: (.+)\\.$", "Guild kit handed over: $1."],
-    ["^Você jurou lealdade à (.+): ela é a sua facção de lealdade\\.$", "You swore loyalty to the $1: it is your faction of loyalty."],
-    ["^As cores da facção estão no seu inventário: (.+)\\. Vista pelo inventário\\.$", "The faction's colours are in your inventory: $1. Wear them from the inventory."],
     ["^(.+) entregou a você uma chave de uma porta\\. Fique perto da porta ou do baú e digite /chave para usá-la\\.$", "$1 handed you a key to one door. Stay near the door or the chest and type /chave to use it."],
     ["^(.+) entregou a você uma chave\\. Fique perto da porta ou do baú e digite /chave para usá-la\\.$", "$1 handed you a key. Stay near the door or the chest and type /chave to use it."],
     ["^(.+) entregou a você uma propriedade\\. Veja na seção Propriedades do painel \\(F2\\)\\.$", "$1 handed you a property. See it in the Properties section of the panel (F2)."],
@@ -641,13 +698,9 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^(.+) \\(você está aqui\\)$", "$1 (you are here)"],
 
     // Saddlebags.
-    ["^(.+) está longe demais: chegue a menos de (\\d+) m dele para abrir as alforjes\\.$", "$1 is too far: get within $2 m of it to open the saddlebags."],
-    ["^(.+) está montado: desça antes de abrir as alforjes\\.$", "$1 is being ridden: get off before opening the saddlebags."],
-    ["^As alforjes de (.+) já estão abertas\\.$", "The saddlebags of $1 are already open."],
-    ["^As alforjes de (.+) não puderam ser abertas\\.$", "The saddlebags of $1 could not be opened."],
-    ["^Alforjes de (.+): o que você deixar aqui fica com o cavalo\\.$", "Saddlebags of $1: what you leave here stays with the horse."],
-    ["^Você não tem um cavalo chamado '(.+)'\\.$", "You have no horse called '$1'."],
-    ["^/alforje {2}-- abre as alforjes do seu cavalo mais próximo \\(a até (\\d+) m\\)$", "/alforje  -- opens the saddlebags of your nearest horse (within $1 m)"],
+    ["^(.+) foi solto: ele corre para a mata, livre, e não volta\\.$", "$1 was let go: it runs off into the woods, free, and does not come back."],
+    ["^(.+) não está no mundo agora: espere que ele volte para soltá-lo\\.$", "$1 is not in the world now: wait for it to come back to let it go."],
+    ["^(.+) está montado: desça antes de soltá-lo\\.$", "$1 is being ridden: get off before letting it go."],
 
     // Roleplay.
     ["^Muito longo: no máximo (\\d+) letras \\(você escreveu (\\d+)\\)\\.$", "Too long: at most $1 letters (you wrote $2)."],
@@ -665,6 +718,11 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^Falta: (.+)\\. Comida estragada não serve\\.$", "Missing: $1. Spoiled food does not count."],
     ["^Plantado: (.+?) na (.+)\\. Volte para colher em (\\d+) min\\.$", "Planted: $T1 in $T2. Come back to pick in $3 min."],
     ["^Colheita: (\\d+)x (.+) e (\\d+) (semente|sementes) para semear de novo \\(\\+(\\d+) XP\\)\\.$", "Harvest: $1x $T2 and $3 $T4 to sow again (+$5 XP)."],
+    // The trades' day's limit (2026-11-03).
+    [
+        "^Você já fez hoje o XP cheio de (.+) \\(([\\d.]+)\\)\\. Até a meia-noite, cada obra rende (\\d+)% do XP: o ritmo dos ofícios é o mesmo para todos\\.$",
+        "You have already earned today's full XP of $T1 ($2). Until midnight every piece of work gives $3% of its XP: the trades' pace is the same for everyone.",
+    ],
     ["^(.+?): faltam? (.+) para colher\\.$", "$T1: $2 to go before it can be picked."],
     ["^A sua plantação de (.+?) na (.+) passou do ponto e se perdeu\\.$", "Your $T1 in $T2 went past its time and was lost."],
     ["^A sua plantação de (.+?) na (.+) está pronta para colher\\.$", "Your $T1 in $T2 is ready to pick."],
@@ -676,16 +734,63 @@ export const MESSAGE_PATTERNS: ReadonlyArray<readonly [string, string]> = [
     ["^(\\d+) canteiro\\(s\\) esvaziados\\.$", "$1 bed(s) emptied."],
     // The wild horses and the horses that follow (wild-horses.ts, horse-follow.ts, horse-menu.ts, 2026-10-22).
     ["^(.+) ainda mastiga: espere (\\d+) s\\.$", "$T1 is still chewing: wait $2 s."],
-    ["^O cavalo come (.+) da sua mão e encosta o focinho em você: ele confia em você agora\\. Monte, ou mande-o seguir\\.$", "The horse eats $T1 from your hand and rests its muzzle against you: it trusts you now. Mount it, or send it to follow."],
+    ["^O cavalo come (.+) da sua mão e encosta o focinho em você: ele confia em você agora\\. Monte nele\\.$", "The horse eats $T1 from your hand and rests its muzzle against you: it trusts you now. Mount it."],
     ["^O cavalo aceita (.+) \\((.+), confiança (\\d+)/(\\d+)\\)\\.$", "The horse accepts $T1 ($T2, trust $3/$4)."],
     ["^O cavalo cheira (.+), vira a cabeça e recua: ainda não confia o bastante para comer da sua mão\\.$", "The horse sniffs $T1, turns its head away and backs off: it does not trust you enough yet to eat from your hand."],
-    ["^(.+) não pode seguir agora\\.$", "$T1 cannot follow now."],
-    ["^(.+) vai seguir você\\. Em \"Ficar\" ele para; o assobio \\(X\\) continua chamando\\.$", "$T1 will follow you. \"Stay\" stops it; the whistle (X) still calls it."],
-    ["^(.+) ficou para trás, longe demais\\. Assobie \\(X\\) para chamá-lo\\.$", "$T1 was left behind, too far away. Whistle (X) to call it."],
-    ["^(.+) não achou caminho até você e parou\\. Assobie \\(X\\) para chamá-lo\\.$", "$T1 found no way to you and stopped. Whistle (X) to call it."],
-    ["^(.+) fica onde está\\. O assobio \\(X\\) ainda o chama\\.$", "$T1 stays where it is. The whistle (X) still calls it."],
-    ["^(.+) já estava parado\\.$", "$T1 was already standing still."],
+
+    // The guild vendors, the wars and the titles of a region (2026-10-31).
+    ["^Esta ovelha foi tosquiada há pouco: volte em (\\d+) min\\.$", "This sheep was sheared a moment ago: come back in $1 min."],
+    ["^Nada foi tosquiado\\. (.+)$", "Nothing was sheared. $T1"],
+    ["^Tosquia: (\\d+)x Linho \\(\\+(\\d+) XP\\)\\.$", "Shearing: $1x Flax (+$2 XP)."],
+    ["^Aprender Guilda: (.+)$", "Learn Guild: $T1"],
+    ["^((?:Mestre Ferreiro|Boticário|Taberneiro|Costureira|Mestre Caçador|Mestre Coletor|Agricultor|Mestre Domador)) de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)): (.+)$", "$T1 of $2: $T3"],
+    ["^(.+): cavalo manso, de sela e rédea simples\\. Cada cavalo, um por dia\\.$", "$T1: a gentle horse, with a plain saddle and rein. One horse each, one a day."],
+    ["^(.+): esgotado por hoje$", "$T1: sold out for today"],
+    ["^(.+): (\\d+(?:,\\d)?) moedas?$", "$T1: $2 coins"],
+    ["^O (.+) custa (\\d+(?:,\\d)?) moedas? e você não tem o bastante\\.$", "The $T1 costs $2 coins and you do not have enough."],
+    ["^Você comprou um (.+) por (\\d+(?:,\\d)?) moedas?: veja em Animais \\(F2\\) para dar um nome\\. Ele vem com sela, rédeas e ferraduras simples\\.$", "You bought a $T1 for $2 coins: see Animals (F2) to give it a name. It comes with a plain saddle, reins and horseshoes."],
+    ["^Só ensino o ofício a quem é cidadão de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))\\. Escolha a sua cidade na seção Cidadania do menu F2 e volte\\.$", "I only teach the trade to citizens of $1. Choose your town in the Citizenship section of the F2 menu and come back."],
+    ["^Você é cidadão de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))\\. Aqui em ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) só ensino a quem é daqui: procure o (.+) da sua terra\\.$", "You are a citizen of $1. Here in $2 I only teach those who are from here: look for the $T3 of your land."],
+    ["^Você já é (.+)\\. Pratique o ofício: é só o que posso lhe dizer\\.$", "You are already a $T1. Practise the trade: it is all I can tell you."],
+    ["^Quer aprender o ofício de (.+)\\? Em (.+), quem é cidadão aprende comigo\\.$", "Do you want to learn the trade of $T1? In $2, citizens learn with me."],
+    ["^Quer aprender o ofício de (.+)\\? Em (.+), quem é cidadão aprende comigo\\. É a sua primeira vez: o ofício é de graça\\. Depois, cada ofício novo custa (\\d+) moedas\\.$", "Do you want to learn the trade of $T1? In $2, citizens learn with me. It is your first time: the trade is free. After that, each new trade costs $3 coins."],
+    ["^Quer aprender o ofício de (.+)\\? Em (.+), quem é cidadão aprende comigo\\. Você deixaria (.+): trocar de ofício custa (\\d+) moedas\\.$", "Do you want to learn the trade of $T1? In $2, citizens learn with me. You would leave $T3: changing trades costs $4 coins."],
+    ["^Quer aprender o ofício de (.+)\\? Em (.+), quem é cidadão aprende comigo\\. Aprender outro ofício custa (\\d+) moedas\\.$", "Do you want to learn the trade of $T1? In $2, citizens learn with me. Learning another trade costs $3 coins."],
+    ["^Só ensino quem é cidadão de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))\\.$", "I only teach citizens of $1."],
+    ["^((?:Mestre Ferreiro|Boticário|Taberneiro|Costureira|Mestre Caçador|Mestre Coletor|Agricultor|Mestre Domador)) de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) lhe ensinou o ofício: você agora é (.+) \\((.+)\\)\\.$", "$T1 of $2 taught you the trade: you are now $T3 ($4)."],
+    ["^((?:Mestre Ferreiro|Boticário|Taberneiro|Costureira|Mestre Caçador|Mestre Coletor|Agricultor|Mestre Domador)) de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) lhe ensinou o ofício: você agora é (.+) \\((.+)\\)\\. Custou (\\d+) moedas\\.$", "$T1 of $2 taught you the trade: you are now $T3 ($4). It cost $5 coins."],
+    ["^((?:Mestre Ferreiro|Boticário|Taberneiro|Costureira|Mestre Caçador|Mestre Coletor|Agricultor|Mestre Domador)) de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) lhe ensinou o ofício: você agora é (.+) \\((.+)\\)\\. Foi de graça, por ser a sua primeira vez: o próximo ofício custa (\\d+) moedas\\.$", "$T1 of $2 taught you the trade: you are now $T3 ($4). It was free, as it is your first time: the next trade costs $5 coins."],
+    ["^Aprender outro ofício custa (\\d+(?:,\\d)?) moedas? e você tem (\\d+(?:,\\d)?) moedas?\\.$", "Learning another trade costs $1 coins and you have $2 coins."],
+    ["^Só o senhor das terras de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) marca a guerra\\.$", "Only the lord of the lands of $1 marks the war."],
+    ["^Você não faz guerra às suas próprias terras: ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?)\\.$", "You do not make war on your own lands: $T1."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) não está em guerra\\.$", "$1 is not at war."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) já está em guerra com ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?): nada mudou\\.$", "$1 is already at war with $T2: nothing changed."],
+    ["^\\[Guerra\\] ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) declarou guerra a ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?)\\.$", "[War] $1 declared war on $T2."],
+    ["^\\[Guerra\\] A guerra entre ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) e ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?) terminou\\.$", "[War] The war between $1 and $T2 is over."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) está em guerra com ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?)\\.$", "$1 is at war with $T2."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) está em paz: nenhuma guerra marcada\\.$", "$1 is at peace: no war marked."],
+    ["^Só o senhor das terras de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) entrega as terras\\.$", "Only the lord of the lands of $1 hands the lands over."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) não está em guerra com ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)): só se entregam terras a quem se está em guerra\\.$", "$1 is not at war with $2: lands are only handed over to someone you are at war with."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) não tem senhor das terras\\.$", "$1 has no lord of the lands."],
+    ["^Só o senhor de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) entrega as suas terras\\.$", "Only the lord of $1 hands over its lands."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) não tem senhor para receber as terras\\.$", "$1 has no lord to receive the lands."],
+    ["^\\[Guerra\\] O senhor de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) perdeu a guerra e entregou as suas terras ao senhor de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)): ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) agora é governada de lá\\.$", "[War] The lord of $1 lost the war and handed his lands to the lord of $2: $3 is now governed from there."],
+    ["^((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) foi entregue a você pelo senhor de lá: (\\d+) (propriedade|propriedades) \\(e (\\d+) (baú|baús)\\) passaram para você\\.$", "$1 was handed to you by its lord: $2 $T3 (and $4 $T5) passed to you."],
+    ["^Você entregou ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)) ao senhor de ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)): as propriedades que eram suas lá passaram para ele, os baús continuam com o que têm, e a guerra entre as duas terras acabou\\.$", "You handed $1 to the lord of $2: the properties that were yours there passed to him, the chests keep what they hold, and the war between the two lands is over."],
+    ["^\\[Guerra\\] Sua cidade, ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)), está em guerra com ((?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas)(?:, (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))*(?: e (?:Suchdol|Wysoka|Opatowitz|Raborsch|Bohunowitz|Horschan|Malešov|Bylany|Rabstein|Stará Lhota|Kuttenberg|Stará Kutná|Danemark|Pschitoky|Miskowitz|Minas))?)\\.$", "[War] Your town, $1, is at war with $T2."],
+    ["^Você só nomeia nas terras do seu título: (.+)\\.$", "You only name in the lands of your title: $1."],
+
+    // A title given ("Hans agora é Cavaleiro de Wysoka."): after the specific sentences above, so that only what they leave is caught.
+    ["^(?!Você )(.+) agora é (.+)\\.$", "$1 is now $T2."],
 
     // The commands' lines.
     ["^(\\d+) command\\(s\\):$", "$1 command(s):"],
+    // The letters (letters.ts, 2026-11-02).
+    ["^Carta entregue ao mensageiro: chega a (.+) em cerca de 1 minuto\\.$", "Letter handed to the courier: it reaches $1 in about 1 minute."],
+    ["^Carta entregue ao mensageiro: chega a (.+) em cerca de (\\d+) minutos\\.$", "Letter handed to the courier: it reaches $1 in about $2 minutes."],
+    ["^Você já mandou (\\d+) cartas hoje\\. O mensageiro volta amanhã\\.$", "You have sent $1 letters today. The courier comes back tomorrow."],
+    ["^(.+) tem cartas demais por ler\\. Tente de novo mais tarde\\.$", "$1 has too many letters to read. Try again later."],
+    ["^Você precisa de (\\d+) moedas para mandar uma carta\\.$", "You need $1 coins to send a letter."],
+    // The creator's age and height, the torch lowered (2026-11-02).
+    ["^Personagem completo: (.+), (\\d+) anos, (\\d),(\\d\\d) m\\. Bom jogo!$", "Character complete: $1, $2 years, $3.$4 m. Enjoy the game!"],
 ];

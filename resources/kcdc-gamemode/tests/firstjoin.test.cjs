@@ -7,15 +7,18 @@ const vm = require("node:vm");
 const SAVED = { gender: "male", head: "m_head_032_b00", hair: "m_hair_006_dark_brown", beard: "m_beard_19", body: "henry_injured_left_shoulder_ingame" };
 const DEFAULT_HENRY = { gender: "male", head: "", hair: "", beard: "", body: "" };
 
-function load(savedLook) {
+function load(savedLook, { behindDoor = false, incomplete = false } = {}) {
     const handlers = new Map();
+    /** The door of the server (entry.ts): whoever is behind it waits, and the callback runs when it opens. */
+    const door = { waiting: new Map(), pending: behindDoor };
     const state = {
         now: 1_000_000,
         ticks: new Map(),
         nextTimer: 1,
         chat: [],
         opened: [],
-        store: savedLook ? { 765: { appearance: savedLook } } : {},
+        // A character of these tests says its age and height (2026-11-02), unless the test is about one that does not.
+        store: savedLook ? { 765: { appearance: savedLook, ...(incomplete ? {} : { age: 30, height: 175 }) } } : {},
         players: new Map(),
         logs: [],
     };
@@ -23,6 +26,12 @@ function load(savedLook) {
     const modules = {
         "./characters.js": { getCharacter: (steamId) => state.store[steamId] ?? null },
         "./creator.js": { openCreatorFor: (player, genders) => state.opened.push({ player, genders }) },
+        "./entry.js": { whenAdmitted: (player, then) => (door.pending ? door.waiting.set(player.id, then) : then()) },
+        "./character-details.js": (() => {
+            const box = { exports: {} };
+            vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../dist/server/character-details.js"), "utf8"), box);
+            return box.exports;
+        })(),
     };
     const context = {
         exports: {},
@@ -49,7 +58,7 @@ function load(savedLook) {
             for (const tick of [...state.ticks.values()]) tick();
         }
     };
-    return { handlers, state, advance };
+    return { handlers, state, advance, door };
 }
 
 function makePlayer(published, { accepts = true } = {}) {
@@ -243,4 +252,39 @@ test("a character an administrator asked to be made again opens the creator at t
     world.advance(10_000);
     assert.equal(player.sends.length, 0);
     assert.ok(world.state.logs.some((line) => /Mauro vai refazer o personagem/.test(line)));
+});
+
+test("a newcomer behind the door of the server (the questions) gets the creator only when the door opens; a returning player's look is sent meanwhile (2026-10-29)", () => {
+    const behind = load(null, { behindDoor: true });
+    const newcomer = makePlayer(DEFAULT_HENRY);
+    behind.handlers.get("playerSpawned")(newcomer);
+    assert.equal(behind.state.opened.length, 0, "no creator while the questions are open");
+    assert.equal(behind.door.waiting.size, 1);
+    behind.handlers.get("playerSpawned")(newcomer);
+    assert.equal(behind.door.waiting.size, 1, "asked again at a respawn: still one wait");
+    behind.door.waiting.get(newcomer.id)();
+    assert.equal(behind.state.opened.length, 1, "the door opened: the creator");
+    assert.match(behind.state.chat[0], /Vamos criar o seu personagem/);
+
+    const returning = load(SAVED, { behindDoor: true });
+    const old = makePlayer(DEFAULT_HENRY);
+    spawn(returning, old);
+    returning.advance(8_000);
+    assert.ok(old.sends.length > 0, "the saved look goes on the body behind the page of the door, as before");
+    assert.equal(returning.door.waiting.size, 0, "and no creator waits for him");
+});
+
+test("a character made before the age and the height were asked gets the creator once the door lets it through, and its saved look is not pushed over the creator's (2026-11-02)", () => {
+    const sut = load(SAVED, { incomplete: true, behindDoor: true });
+    const player = makePlayer(DEFAULT_HENRY);
+    sut.state.players.set(player.id, player);
+    sut.handlers.get("playerSpawned")(player);
+    assert.equal(sut.state.opened.length, 0, "not before the door");
+    sut.door.waiting.get(player.id)();
+    assert.equal(sut.state.opened.length, 1);
+    assert.equal(sut.state.opened[0].genders, "both");
+    assert.ok(sut.state.chat.some((line) => /agora tem idade e altura/.test(line)), sut.state.chat.join("|"));
+    assert.ok(sut.state.logs.some((line) => /vai completar o personagem/.test(line)));
+    sut.advance(40_000);
+    assert.equal(player.sends.length, 0, "the creator puts the look on, not the watch of the saved one");
 });

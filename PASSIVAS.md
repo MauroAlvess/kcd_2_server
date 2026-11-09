@@ -2,7 +2,7 @@
 
 Pedido de 26/10/2026: *vamos ver todas as passivas e ver quais fazem sentido para um co-op e quais são muito roubadas e quais precisamos add no sistema de ofício, exemplo uma que faz mais poções ou que melhora comida e por aí vai.*
 
-São as **268 passivas** que o jogo mostra na tela de vantagens (as de visibilidade *Visible*, as de cada habilidade e atributo e as de herança e prestígio), com o que cada uma faz **nas palavras do próprio jogo** e a **opinião** desta revisão. Ficam de fora as 51 combinações de arma (`COMBOS.md`) e o que o jogo esconde. Gerado por `tools/make-perks-doc.py` a partir das tabelas e dos textos do jogo; as opiniões são de `tools/perks-verdicts.py` e podem ser mudadas lá.
+São as **268 passivas** que o jogo mostra na tela de vantagens (as de visibilidade *Visible*, as de cada habilidade e atributo e as de herança e prestígio), com o que cada uma faz **nas palavras do próprio jogo** e a **opinião** desta revisão. Ficam de fora as 51 combinações de arma e o que o jogo esconde. Gerado por `tools/make-perks-doc.py` a partir das tabelas e dos textos do jogo; as opiniões são de `tools/perks-verdicts.py` e podem ser mudadas lá.
 
 > **Nada disto foi testado no jogo.** Os veredictos vêm do texto de cada passiva, de quais sistemas do jogo o servidor usa (os vendedores são os nossos, as fechaduras são as nossas, a alquimia e os outros ofícios se fazem na página dos ofícios, o cão do apoiador é do servidor, não há reputação, regateio nem guardas conversando com o jogador) e de bom senso de RP. Um número que o texto não diz (o quanto uma luta fica mais fácil) fica sem número: a opinião é qualitativa.
 
@@ -21,7 +21,7 @@ São as **268 passivas** que o jogo mostra na tela de vantagens (as de visibilid
 
 ### Bloquear (forte demais para um servidor de RP)
 
-São passivas que o jogador escolhe na tela de vantagens e que mudam o que o servidor quer decidir pelo RP: a morte, a fechadura, a corrida, o ferimento. Bloqueadas, o jogo não as concede e o servidor as tira de quem tem (como se faz com as combinações).
+São passivas que o jogador escolhe na tela de vantagens e que mudam o que o servidor quer decidir pelo RP: a morte, a fechadura, a corrida, o ferimento. Bloqueadas, o jogo não as concede e o servidor as tira de quem tem (como se faz com as combinações). **Bloqueadas desde 01/11/2026** (pedido: *desativa essas passivas roubadas, deixe apenas Marbon com elas; os jogadores que a tinham, retire e devolve os pontos*): ninguém as aprende na tela de vantagens; quem as tinha as perde ao entrar e recebe o ponto de volta na árvore de cada uma, com um aviso; só o Marbon fica com as nove (`STRONG_KEEPERS` em `src/server/perk-guard.ts`).
 
 - **Golpe Destruidor II** (Armas pesadas, nível 14): A armadura do alvo conta com 20 pontos a menos (10 no primeiro nível): desfaz num golpe o que o ferreiro levou horas para forjar.
 - **Golpe Abalador** (Armas pesadas, nível 16): Depois de um combo de martelo, maça ou porrete o inimigo não esquiva nem faz golpe mestre por 20 s: quase indefeso.

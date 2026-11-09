@@ -4,11 +4,12 @@
  * list asks for the page it shows, with what was typed in its search box and the filter chosen, and is answered with
  * that page and how many there are. This file is the part that needs no game: reading a request and cutting a page.
  *
- * Three lists ask: the administrator's "Jogadores" page (`list`), the "who receives" and "is this relative a player"
- * pickers (`pick`), and the picker of whom a noble may name (`nom`).
+ * Four lists ask: the administrator's "Jogadores" page (`list`), the "who receives" and "is this relative a player"
+ * pickers (`pick`), the picker of whom a noble may name (`nom`), and the letter's "Para quem" (`mail`, 2026-11-02: every
+ * character of the server, here or not, for a letter waits for its reader).
  */
 
-export type RosterTag = "list" | "pick" | "nom";
+export type RosterTag = "list" | "pick" | "nom" | "mail";
 export type RosterFilter = "all" | "online" | "offline" | "admin" | "patron" | "noble" | "noguild" | "banned";
 
 export interface RosterQuery {
@@ -19,7 +20,7 @@ export interface RosterQuery {
 }
 
 /** How many lines of each list one answer carries. */
-export const PAGE_SIZE: Readonly<Record<RosterTag, number>> = { list: 12, pick: 8, nom: 8 };
+export const PAGE_SIZE: Readonly<Record<RosterTag, number>> = { list: 12, pick: 8, nom: 8, mail: 8 };
 
 /** The longest search text taken. */
 export const SEARCH_MAX = 40;
@@ -30,7 +31,7 @@ export const DEFAULT_QUERY: RosterQuery = { tag: "list", q: "", page: 0, filter:
 
 /** What a page event asked for; anything missing or not what it should be is the default, never an error. */
 export function parseQuery(fields: Record<string, unknown>): RosterQuery {
-    const tag = fields["tag"] === "pick" || fields["tag"] === "nom" ? fields["tag"] : "list";
+    const tag = fields["tag"] === "pick" || fields["tag"] === "nom" || fields["tag"] === "mail" ? fields["tag"] : "list";
     const q = typeof fields["q"] === "string" ? fields["q"].replace(/\s+/g, " ").trim().slice(0, SEARCH_MAX) : "";
     const page = typeof fields["page"] === "number" && Number.isInteger(fields["page"]) && fields["page"] >= 0 ? fields["page"] : 0;
     const filter = FILTERS.find((name) => name === fields["filter"]) ?? "all";

@@ -13,8 +13,7 @@
 import { nameOf } from "./acquaintances.js";
 import { bringCart, CART_NAME_MAX, CART_NAME_MIN, cartName, cartsOf, giveCartTo, renameCart, setCartShared, whereIs } from "./carts.js";
 import type { OwnedCart } from "./carts.js";
-import { BAG_REACH_M, openBags } from "./horse-bags.js";
-import { compassDirection, giveHorseTo, HORSE_NAME_MAX, HORSE_NAME_MIN, callHorse, horsesOf, renameHorse, setActiveHorse, setHorseShared } from "./horses.js";
+import { compassDirection, giveHorseTo, HORSE_NAME_MAX, HORSE_NAME_MIN, callHorse, horsesOf, letHorseGo, moodOf, moodWord, renameHorse, setActiveHorse, setHorseShared } from "./horses.js";
 import type { Outcome } from "./horses.js";
 import { itemName } from "./item-names.js";
 import { stuckIn, unstickAnimal } from "./animal-stuck.js";
@@ -58,10 +57,6 @@ export interface HorseView {
     /** "Com você", "a 120 m, a norte", "montado por Hans", "não está no mundo agora". */
     readonly where: string;
     readonly near: boolean;
-    /** Close enough, and free, for its alforjes to be opened from the panel. */
-    readonly bagsOpen: boolean;
-    /** How many kinds of things its alforjes hold. */
-    readonly bags: number;
     readonly gear: readonly string[];
     /** Left free by its owner: anybody may mount it. */
     readonly shared: boolean;
@@ -69,11 +64,16 @@ export interface HorseView {
     readonly active: boolean;
     /** Seconds until "Animal preso" may be used on it again; 0 when it may be now (`animal-stuck.ts`). */
     readonly stuckIn: number;
+    /** Its mood, of a hundred (`horses.ts`, `moodOf`): the owner's blows lower it; "calmo", "irritado" or "de mau humor" (`moodWord`). Always sent, in the world or not. */
+    readonly mood: readonly [number, number];
+    readonly moodWord: string;
 }
 
 export interface DogView {
     readonly name: string;
     readonly here: boolean;
+    /** Sent away by its owner (`Supporters.sendAway`): out of the world until it is called. */
+    readonly away: boolean;
     readonly order: string;
     readonly doing: string;
     /** 0 to 100, or null before the owner's game has said. */
@@ -110,8 +110,10 @@ export interface AnimalsView {
 function horseView(player: Player, owned: ReturnType<typeof horsesOf>[number]): HorseView {
     const { record, horse } = owned;
     const gear = [record.gear.saddle, record.gear.head, record.gear.torso, record.gear.shoe].filter((item): item is string => typeof item === "string" && item !== "").map((item) => itemName({ item }));
+    const mood = moodOf(record);
+    const humor = { mood: [Math.round(mood), 100] as const, moodWord: moodWord(mood) };
     if (horse === null) {
-        return { key: record.key, name: record.name, alive: true, health: [0, 0], stamina: [0, 0], where: "não está no mundo agora", near: false, bagsOpen: false, bags: record.bags?.length ?? 0, gear, shared: record.shared === true, active: record.active === true, stuckIn: stuckIn("horse", record.key, player.steamId) };
+        return { key: record.key, name: record.name, alive: true, health: [0, 0], stamina: [0, 0], where: "não está no mundo agora", near: false, gear, shared: record.shared === true, active: record.active === true, stuckIn: stuckIn("horse", record.key, player.steamId), ...humor };
     }
     const distance = Math.hypot(horse.position.x - player.position.x, horse.position.y - player.position.y);
     const rider = horse.rider;
@@ -131,12 +133,11 @@ function horseView(player: Player, owned: ReturnType<typeof horsesOf>[number]): 
         stamina: [Math.round(horse.stamina), Math.round(horse.maxStamina)],
         where,
         near: distance < 300,
-        bagsOpen: horse.alive && rider === null && distance <= BAG_REACH_M,
-        bags: record.bags?.length ?? 0,
         gear,
         shared: record.shared === true,
         active: record.active === true,
         stuckIn: stuckIn("horse", record.key, player.steamId),
+        ...humor,
     };
 }
 
@@ -163,11 +164,12 @@ function dogView(player: Player): DogView | null {
     }
     const dog = player.dog;
     if (dog === null) {
-        return { name: record.dogName, here: false, order: "longe", doing: "", morale: null, stuckIn: stuckIn("dog", "", player.steamId) };
+        return { name: record.dogName, here: false, away: record.dogAway === true, order: record.dogAway === true ? "embora" : "longe", doing: "", morale: null, stuckIn: stuckIn("dog", "", player.steamId) };
     }
     return {
         name: dog.name || record.dogName,
         here: true,
+        away: false,
         order: DOG_ORDERS[dog.mode] ?? "à vontade",
         doing: DOG_DOING[dog.objective] ?? "",
         morale: dog.morale > 0 ? Math.round(Math.min(100, dog.morale)) : null,
@@ -300,16 +302,20 @@ export function installPets(): void {
         }
     });
 
-    // The alforjes: the panel has closed itself, and the game's transfer screen is asked for.
-    Events.onClient(`${RESOURCE}:status.horseBags`, (sender, payload) => {
+    // The dog sent away, out of the world until it is called (2026-10-30, the panel's "Mandar embora").
+    Events.onClient(`${RESOURCE}:status.animalAway`, (sender, payload) => {
+        const player = sender as Player;
+        if (fieldsOf(payload)["kind"] === "dog") {
+            report(player, supporters.sendAway(player));
+        }
+    });
+
+    // A horse let go to the free world (2026-11-04, the panel's "Soltar", after its own confirmation).
+    Events.onClient(`${RESOURCE}:status.horseRelease`, (sender, payload) => {
         const player = sender as Player;
         const key = fieldsOf(payload)["key"];
         if (typeof key === "string") {
-            const outcome = openBags(player, key);
-            Chat.sendToPlayer(player, outcome.message);
-            if (!outcome.ok) {
-                player.emit(`${RESOURCE}:notify`, JSON.stringify({ text: outcome.message }));
-            }
+            report(player, letHorseGo(player, key));
         }
     });
 }

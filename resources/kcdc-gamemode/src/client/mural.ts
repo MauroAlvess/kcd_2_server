@@ -8,7 +8,7 @@ import { scaleView } from "./ui-scale.js";
  * once a session (`mural.art`) and the page keeps them; the prompt tells the server whether this client has them (`muralHasArt`).
  *
  * The page is made the first time it is needed and kept, hidden, afterwards: it covers the screen but draws a card in the middle, and takes the
- * keyboard and the mouse while it is up. It asks to put up a letter (`mural:publish`), to take one down (`mural:remove`) and to close (`mural:close`,
+ * keyboard and the mouse while it is up. It asks to put up a letter (`mural:publish`), to take one down (`mural:remove`), to become a citizen of the board's town (`mural:citizen`, 2026-11-09) and to close (`mural:close`,
  * its button or Esc); the server answers the first two with `mural.result`, and sends the board again whenever it changes. A server that sends
  * `mural.close` (the player walked away from the board) puts it away too, as does a death.
  */
@@ -20,6 +20,7 @@ const PAGE = `fw://resources/${RESOURCE}/ui/mural.html`;
 const PUBLISH = `${RESOURCE}:mural.publish`;
 const REMOVE = `${RESOURCE}:mural.remove`;
 const CLOSED = `${RESOURCE}:mural.closed`;
+const CITIZEN = `${RESOURCE}:mural.citizen`;
 
 /** How long the page has to say it drew, and how often it is looked at while it is up. */
 export const PAGE_WAIT_MS = 15_000;
@@ -156,6 +157,12 @@ export function installMural(): void {
             const fields = fieldsOf(payload);
             if (id === view && fields !== null) {
                 Events.emitServer(REMOVE, JSON.stringify({ id: fields["id"] }));
+            }
+        });
+        Web.on(view, "mural:citizen", (payload) => {
+            const fields = fieldsOf(payload);
+            if (id === view && fields !== null) {
+                Events.emitServer(CITIZEN, JSON.stringify({ board: fields["board"] }));
             }
         });
         Web.on(view, "mural:close", () => {

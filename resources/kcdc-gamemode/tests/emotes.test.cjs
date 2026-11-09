@@ -27,7 +27,7 @@ function load({ rows = null, only = {}, sitting = [], props = PROPS, store = {} 
         setTimeout: (fn, ms) => state.timers.push({ fn, ms }),
         setInterval: (fn, ms) => state.intervals.push({ fn, ms }),
         Vector3: class { constructor(x, y, z) { this.x = x; this.y = y; this.z = z; } },
-        Player: { getById: (id) => state.bodies.get(id) ?? null },
+        Player: { getById: (id) => state.bodies.get(id) ?? null, all: () => [...state.bodies.values()] },
         // A replicated point light, as the game has it: made with a place and its looks, moved by assigning its position, put out by destroy().
         Light: {
             spawn: (position, options) => {
@@ -538,53 +538,48 @@ test("the flute and the horn are held by the mark where the fingers close, not b
     assert.ok(GRIPS.flute.z < -0.07 && GRIPS.flute.z > -0.08);
 });
 
-test("a lamp that is carried has a light, put where its carrier is, moved with them, and put out when the lamp is put down or the gesture changed", () => {
+// The lamps' light (2026-11-02, "a luz está artificial, com cara de LED piscando; o correto é uma cor mais quente, passando sensação de fogo natural"): the server says who carries a lit
+// lamp, and each client draws a light of its own on the body (src/client/lamps.ts); the server's own light, moved four times a second, is gone.
+const told = (sut) => {
+    const sent = [];
+    sut.emotes.broadcast = (payload) => sent.push(JSON.parse(payload));
+    return sent;
+};
+
+test("a lamp that is carried is told to every client with a flame's warm light, and put out for them when it is put down", () => {
     const sut = load();
+    const sent = told(sut);
     const anna = player(1, { position: { x: 10, y: 20, z: 5 }, nickname: "Anna" });
     sut.state.bodies.set(1, anna);
     assert.equal(sut.emotes.play(anna, 128), true);
-    assert.equal(sut.state.lights.length, 1);
-    const light = sut.state.lights[0];
-    assert.deepEqual(plain(light.position), { x: 10, y: 20, z: 5.9 }, "at the height of a lantern in a hand");
-    assert.deepEqual(plain(light.options), { color: { x: 1, y: 0.62, z: 0.25 }, intensity: 1.4, radius: 7, castShadows: false });
+    assert.deepEqual(sent, [{ on: [1, [1, 0.5, 0.16], 1.1, 6, 0.9] }], "the carrier, a deep orange, its strength, reach and height in the hand");
+    assert.equal(sut.state.lights.length, 0, "no light of the server's");
     assert.equal(sut.emotes.lit(), 1);
-
-    // They stand: nothing is written. They walk a step: the light goes with them.
-    sut.emotes.followLamps((id) => sut.state.bodies.get(id) ?? null);
-    assert.deepEqual(plain(light.position), { x: 10, y: 20, z: 5.9 });
-    anna.position = { x: 10.05, y: 20, z: 5 };
-    sut.emotes.followLamps((id) => sut.state.bodies.get(id) ?? null);
-    assert.deepEqual(plain(light.position), { x: 10, y: 20, z: 5.9 }, "a step under 15 cm costs nothing");
-    anna.position = { x: 12, y: 21, z: 5 };
-    sut.emotes.followLamps((id) => sut.state.bodies.get(id) ?? null);
-    assert.deepEqual(plain(light.position), { x: 12, y: 21, z: 5.9 });
-
-    // Asked for again, the lamp is put down: and the light out.
     later(sut);
     sut.emotes.play(anna, 128);
-    assert.equal(light.destroyed, true);
+    assert.deepEqual(sent.at(-1), { off: 1 });
     assert.equal(sut.emotes.lit(), 0);
 });
 
-test("the fine lantern lights too, one lamp replacing the other leaves one light, and a gesture with no lamp puts it out", () => {
+test("the fine lantern lights too, one lamp replacing the other leaves one lit, and a gesture with no lamp puts it out", () => {
     const sut = load();
+    const sent = told(sut);
     const anna = player(1, { position: { x: 0, y: 0, z: 0 } });
     sut.state.bodies.set(1, anna);
     sut.emotes.play(anna, 128);
     later(sut);
     sut.emotes.play(anna, 129);
-    assert.equal(sut.state.lights.length, 2);
-    assert.equal(sut.state.lights[0].destroyed, true, "the first lamp's light went out with the lamp");
-    assert.equal(sut.state.lights[1].destroyed, false);
+    assert.deepEqual(sent.map((one) => Object.keys(one)[0]), ["on", "on"], "the second lamp takes the first one's place");
     assert.equal(sut.emotes.lit(), 1);
     later(sut);
     sut.emotes.play(anna, 130);
-    assert.equal(sut.state.lights[1].destroyed, true, "the standard carries no light");
+    assert.deepEqual(sent.at(-1), { off: 1 }, "the standard carries no light");
     assert.equal(sut.emotes.lit(), 0);
 });
 
-test("a lamp's light is put out when its carrier dies, leaves, comes back as a new body, or the game cuts the gesture short", () => {
+test("a lamp is put out when its carrier dies, leaves, comes back as a new body, or the game cuts the gesture short", () => {
     const sut = load();
+    const sent = told(sut);
     const make = (id) => {
         const body = player(id, { position: { x: id, y: 0, z: 0 } });
         sut.state.bodies.set(id, body);
@@ -598,51 +593,35 @@ test("a lamp's light is put out when its carrier dies, leaves, comes back as a n
     assert.equal(sut.emotes.lit(), 4);
     dead.alive = false;
     sut.state.bodies.delete(2);
-    sut.emotes.followLamps((id) => sut.state.bodies.get(id) ?? null);
-    assert.deepEqual(sut.state.lights.map((light) => light.destroyed), [true, true, false, false], "the dead and the vanished put out by the follower");
+    sut.emotes.checkLamps((id) => sut.state.bodies.get(id) ?? null);
+    assert.deepEqual(sent.filter((one) => one.off !== undefined).map((one) => one.off), [1, 2], "the dead and the vanished");
     sut.emotes.reset(renewed);
-    assert.equal(sut.state.lights[2].destroyed, true);
     sut.emotes.ended(cut, "HoldItemLeft", "interrupted");
-    assert.equal(sut.state.lights[3].destroyed, true, "cut short by a blow or a draw: the lamp is not in the hand any more");
+    assert.deepEqual(sent.filter((one) => one.off !== undefined).map((one) => one.off), [1, 2, 3, 4]);
     assert.equal(sut.emotes.lit(), 0);
     sut.emotes.left(gone);
-    assert.equal(sut.emotes.lit(), 0);
+    assert.equal(sent.filter((one) => one.off !== undefined).length, 4, "nothing put out twice");
 });
 
-test("a light that cannot be made does not stop the lamp being carried; one whose place cannot be set is put out", () => {
-    const sut = load();
-    const anna = player(1, { position: { x: 0, y: 0, z: 0 }, nickname: "Anna" });
-    sut.state.bodies.set(1, anna);
-    sut.state.lightRefuses = true;
-    assert.equal(sut.emotes.play(anna, 128), true, "the lamp is in the hand all the same");
-    assert.equal(sut.emotes.lit(), 0);
-    assert.ok(sut.state.logs.some((line) => /a luz do lampião de Anna não subiu: (Error: )?no light/.test(line)));
-
-    sut.state.lightRefuses = false;
-    later(sut);
-    sut.emotes.play(anna, 129);
-    assert.equal(sut.state.lights.length, 1);
-    // Setting the place throws: the light goes out and the follower does not throw.
-    Object.defineProperty(sut.state.lights[0], "position", { get: () => ({ x: 0, y: 0, z: 0.9 }), set: () => { throw new Error("gone"); } });
-    anna.position = { x: 5, y: 0, z: 0 };
-    assert.doesNotThrow(() => sut.emotes.followLamps((id) => sut.state.bodies.get(id) ?? null));
-    assert.equal(sut.state.lights[0].destroyed, true);
-    assert.equal(sut.emotes.lit(), 0);
-});
-
-test("installed, the lights follow their carriers on a timer of a quarter of a second, and the timer does nothing when no lamp is lit", () => {
+test("installed: the carriers are looked at every two seconds, and a player who comes in is told of every lamp lit", () => {
     const sut = load();
     sut.api.installEmotes();
-    const timer = sut.state.intervals.find((entry) => entry.ms === sut.api.FOLLOW_EVERY_MS);
-    assert.ok(timer, "a timer for the lights");
-    assert.equal(sut.api.FOLLOW_EVERY_MS, 250);
+    const timer = sut.state.intervals.find((entry) => entry.ms === sut.api.LAMP_CHECK_MS);
+    assert.ok(timer, "a timer for the carriers");
+    assert.equal(sut.api.LAMP_CHECK_MS, 2_000);
     assert.doesNotThrow(() => timer.fn());
+    // The module's own Emotes, the one the installed handlers use.
+    sut.api.emotes.broadcast = () => undefined;
     const anna = player(1, { position: { x: 0, y: 0, z: 0 } });
     sut.state.bodies.set(1, anna);
-    sut.api.emotes.play(anna, 128);
-    anna.position = { x: 3, y: 0, z: 0 };
-    timer.fn();
-    assert.deepEqual(plain(sut.state.lights[0].position), { x: 3, y: 0, z: 0.9 });
+    sut.api.emotes.play(anna, 129);
+    const emitted = [];
+    const ben = player(2, { position: { x: 5, y: 0, z: 0 }, emit: (event, payload) => emitted.push([event, JSON.parse(payload)]) });
+    sut.state.handlers.get("playerSpawned")(ben);
+    assert.deepEqual(emitted, [["kcdc-gamemode:lamp", { all: [[1, [1, 0.5, 0.16], 1.1, 6, 0.9]] }]]);
+    // Nobody carries a lamp: nothing is said to one who comes in.
+    sut.api.emotes.reset(anna);
+    sut.state.handlers.get("playerSpawned")(player(3, { emit: () => assert.fail("nothing to tell") }));
 });
 
 test("an administrator moves the model in the hand for everybody (/gesto ajustar): it is used, kept across restarts, and given back with 'padrao'", () => {

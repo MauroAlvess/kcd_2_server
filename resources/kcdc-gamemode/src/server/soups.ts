@@ -9,7 +9,7 @@
  * bowl stays in the bag.
  */
 
-import { CUSTOM_ITEMS, SOUP_EFFECTS } from "./craft-data.js";
+import { CUSTOM_ITEMS, PRODUCE_EFFECTS, SOUP_EFFECTS } from "./craft-data.js";
 import { thirstPace } from "./thirst.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -34,9 +34,9 @@ export interface Outcome {
     readonly message: string;
 }
 
-/** The soup an item id is, with its name and its verb, or null for anything else. */
+/** The soup an item id is (or the garden's fruit or leaves, eaten raw: 2026-11-02), with its name and its verb, or null for anything else. */
 export function soupOf(id: string): { readonly name: string; readonly verb: string; readonly nutrition: number; readonly thirst: number } | null {
-    const effect = SOUP_EFFECTS[id];
+    const effect = SOUP_EFFECTS[id] ?? PRODUCE_EFFECTS[id];
     const item = CUSTOM_ITEMS[id];
     if (effect === undefined || item === undefined) {
         return null;
@@ -81,7 +81,7 @@ export function eat(player: Eater, row: InventoryRow, revision: number): Outcome
 
 export function installSoups(): void {
     Events.on("playerCustomItemUse", (player, row, revision) => {
-        if (SOUP_EFFECTS[row.name] === undefined) {
+        if (SOUP_EFFECTS[row.name] === undefined && PRODUCE_EFFECTS[row.name] === undefined) {
             return;
         }
         const result = eat(player, row, revision);
@@ -89,5 +89,5 @@ export function installSoups(): void {
             tell(player, result.message);
         }
     });
-    console.log(`soups: ${Object.keys(SOUP_EFFECTS).length} sopas nas receitas do fogo, que se comem da bolsa`);
+    console.log(`soups: ${Object.keys(SOUP_EFFECTS).length} sopas nas receitas do fogo e ${Object.keys(PRODUCE_EFFECTS).length} frutos e folhas da horta, que se comem da bolsa`);
 }

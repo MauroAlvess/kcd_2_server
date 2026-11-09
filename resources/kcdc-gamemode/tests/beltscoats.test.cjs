@@ -82,45 +82,51 @@ test("the house coats are made nowhere else: not under the plain names of the tu
 });
 
 test("the clothes that were there before keep their levels: the house coats were moved out of the tunics without shifting the rest", () => {
-    const tunics = sewing.filter((recipe) => recipe.category === "Túnicas e vestidos");
-    assert.ok(tunics.length >= 60, `${tunics.length} tunics and dresses are still made`);
+    // Listed by what they are since 2026-10-31: tunics and shirts, coats and caftans, dresses.
+    const tunics = sewing.filter((recipe) => ["Túnicas e camisas", "Casacos e cafetãs", "Vestidos"].includes(recipe.category));
+    assert.ok(tunics.length >= 60, `${tunics.length} tunics, coats and dresses are still made`);
     const levels = new Set(tunics.map((recipe) => recipe.level));
     assert.ok(levels.has(0) && Math.max(...levels) >= 20, "from the first level to the top, as before");
 });
 
 const SURCOATS = ["Túnica simples", "Túnica com bainha", "Túnica para cavaleiro", "Túnica de montaria", "Túnica ornamentada", "Túnica com fecho"];
 
-test("the artisan makes the plain tunics, every dye of the six surcoats, in a category of their own and at the level each name had (2026-10-26)", () => {
-    const tunics = sewing.filter((recipe) => recipe.category === "Túnicas lisas");
-    assert.equal(tunics.length, 38, "the dyes of the six names the game numbers");
-    for (const recipe of tunics) {
+test("the artisan makes the six plain surcoats, ONE recipe for each name with every dye in its picker, at the level each name had (2026-10-26; a picker since 2026-10-31)", () => {
+    const picks = sewing.filter((recipe) => recipe.category === "Túnicas e camisas" && recipe.variants !== undefined && SURCOATS.includes(nameOf(recipe.output)));
+    picks.sort((a, b) => nameOf(a.output).localeCompare(nameOf(b.output), "pt"));
+    assert.deepEqual(plain(picks.map((recipe) => [nameOf(recipe.output), recipe.level, recipe.variants.length])), [
+        ["Túnica com bainha", 12, 3],
+        ["Túnica com fecho", 19, 4],
+        ["Túnica de montaria", 15, 14],
+        ["Túnica ornamentada", 19, 5],
+        ["Túnica para cavaleiro", 16, 5],
+        ["Túnica simples", 10, 5],
+    ], "the dyes of a name at the level the name had");
+    for (const recipe of picks) {
         assert.match(recipe.id, /^costura:Waffenrock0[1-9]_m[0-9]+_[A-Z]$/, `${recipe.id}: a surcoat in one of the game's numbered dyes`);
         assert.doesNotMatch(recipe.id, TOKEN, `${recipe.id}: not a house's`);
         assert.equal(recipe.amount, 1);
         assert.ok(recipe.ingredients.some(([item]) => item === THREAD) && recipe.seconds >= 8 && recipe.xp > 0, recipe.id);
+        assert.equal(recipe.variants[0][0], recipe.output, "the first dye is the recipe's own");
+        const labels = recipe.variants.map(([, label]) => label);
+        assert.equal(new Set(labels).size, labels.length, `${recipe.id}: no two dyes with the same word`);
+        for (const [output, label, icon, noble] of recipe.variants) {
+            assert.match(output, /^[0-9a-f-]{36}$/);
+            assert.ok(label.length > 0 && icon.length > 0 && (noble === 0 || noble === 1), `${recipe.id}: ${label}`);
+        }
     }
-    const byName = {};
-    for (const recipe of tunics) {
-        const label = nameOf(recipe.output);
-        const name = SURCOATS.find((candidate) => label.startsWith(`${candidate} (`));
-        assert.ok(name !== undefined, `${label}: one of the six names with its colour after it`);
-        (byName[name] ??= []).push({ label, level: recipe.level });
-    }
-    assert.deepEqual(plain(Object.fromEntries(Object.entries(byName).map(([name, list]) => [name, [list.length, [...new Set(list.map((one) => one.level))]]]))), {
-        "Túnica simples": [5, [10]],
-        "Túnica com bainha": [3, [12]],
-        "Túnica de montaria": [15, [15]],
-        "Túnica para cavaleiro": [6, [16]],
-        "Túnica com fecho": [4, [18]],
-        "Túnica ornamentada": [5, [19]],
-    }, "every dye of a name at the level the name had; the three whose plain piece went to a house keep the house piece's level");
-    const labels = tunics.map((recipe) => nameOf(recipe.output));
-    assert.equal(new Set(labels).size, labels.length, "no two of them have the same name in the list");
-    assert.ok(labels.includes("Túnica de montaria (ocre 1)") && labels.includes("Túnica de montaria (ocre 4)") && labels.includes("Túnica de montaria (vermelha)"), "a colour two dyes share is numbered from one, one that is alone is not");
-    assert.ok(!labels.some((label) => /\(ocre\)/.test(label) && label.startsWith("Túnica de montaria")), "and then every one of them is");
-    // Not in the general list as well, and the other tunics stay where they were.
-    const general = sewing.filter((recipe) => recipe.category === "Túnicas e vestidos").map((recipe) => nameOf(recipe.output));
-    assert.ok(!general.some((name) => SURCOATS.includes(name)), "the six names are only here");
+    const montaria = picks.find((recipe) => nameOf(recipe.output) === "Túnica de montaria");
+    const words = montaria.variants.map(([, label]) => label);
+    assert.ok(words.includes("ocre 1") && words.includes("ocre 4") && words.includes("bordô"), "a colour two dyes share is numbered from one, one that is alone is not");
+    assert.ok(!words.includes("ocre"), "and then every one of them is");
+    // The two dyes that are a town's own (the surcoat of Kuttenberg's and Malešov's sets) stay recipes of their own, for that town's citizens.
+    const own = sewing.filter((recipe) => recipe.category === "Túnicas e camisas" && recipe.place !== undefined && SURCOATS.some((name) => nameOf(recipe.output).startsWith(`${name} (`)));
+    assert.deepEqual(plain(own.map((recipe) => [nameOf(recipe.output), recipe.place]).sort()), [["Túnica de montaria (vermelho)", "malesov"], ["Túnica para cavaleiro (vermelho)", "kuttenberg"]]);
+    // The dyes are 38 in all, as when each was a recipe.
+    assert.equal(picks.reduce((sum, recipe) => sum + recipe.variants.length, 0) + own.length, 38);
+    // The other tunics stay where they were, and the six names are only here.
+    const general = sewing.filter((recipe) => recipe.category === "Túnicas e camisas").map((recipe) => nameOf(recipe.output));
+    assert.equal(general.filter((name) => SURCOATS.includes(name)).length, 6, "once each");
     assert.ok(general.includes("Túnica") && general.includes("Túnica curta") && general.includes("Camisa de estalajadeiro"), "the peasants' tunics and shirts are as they were");
 });
 

@@ -63,7 +63,6 @@ IMAGES = [
     ("title-personagem.webp", "titulo personagem.png", 300, 62, True, 28),
     # 420 px (was 250, for the package): 4.2rem is 67 px at 1080p, up to 168 px on a 4K screen at the new 125% interface size.
     ("title-guildas.webp", "titulo guilda.png", 420, 80, True, 45),
-    ("title-faccoes.webp", "titulo facção.png", 420, 80, True, 45),
     ("title-chaves.webp", "titulo chaves.png", 420, 80, True, 45),
     ("title-familia.webp", "titulo familia.png", 420, 80, True, 45),
     ("title-jogadores.webp", "titulo jogadores.png", 420, 80, True, 45),
@@ -73,17 +72,16 @@ IMAGES = [
     ("title-animais.webp", "titulo animais.png", 420, 80, True, 45),
     # The nominations section's title, "NOMINATIO": taller for its width than the others, so narrower for the same height.
     ("title-nomeacao.webp", "titulo nomeação.png", 420, 80, True, 45),
-    ("title-cidadania.webp", "titulo cidadania.png", 420, 80, True, 45),
-    # The Escrivão section (2026-10-29): the user's "SCRIBA" lettering, the same size as its siblings.
-    ("title-escrivao.webp", "titulo escrivão.png", 420, 80, True, 45),
+    # The administrator's NPCs section (2026-10-31): the user's "NON LUSOR PERSONA" lettering, the same size as its siblings.
+    ("title-npcs.webp", "titulo npc.png", 420, 80, True, 45),
+    # The Cartas section (2026-11-02): the user's "EPISTULAE" lettering, the same size as its siblings.
+    ("title-cartas.webp", "titulo cartas.png", 420, 80, True, 45),
     # LOCAL, so still modest: .orn is 10rem (160 px at 1080p); 260 covers a 1440p screen without much of the package.
     ("frame-corner-tl.webp", "border superior esquerda.png", 260, 72, True, 40),
     ("frame-corner-br.webp", "border inferior direita.png", 260, 72, True, 40),
     # 380 px (was 300-320): .detail .crestwrap is 23rem, 368 px at 1080p. Kept narrower than a single-fetch picture's 2x
-    # headroom (compare prop-crest, pet-*, below) because the Guildas and Facções galleries ask for every one of these at
+    # headroom (compare the pet-* pictures, below) because the Guildas gallery asks for every one of these at
     # once (one card each), so their weight multiplies by how many guilds exist, unlike a picture fetched on its own.
-    ("faction-leao.webp", "Brasão_Régio_com_Leão_Dourado-removebg-preview.png", 380, 72, False, 48),
-    ("faction-corvo.webp", "Brasão_Gótico_do_Corvo_Dourado-removebg-preview.png", 380, 72, False, 48),
     ("guild-ferreiro.webp", "Brasão_do_Ferreiro_em_Fogo-removebg-preview.png", 380, 72, False, 48),
     ("guild-cacador.webp", "Brasão_Florestal_do_Cervo_Dourado-removebg-preview.png", 380, 72, False, 48),
     ("guild-taberneiro.webp", "Brasão_Medieval_da_Guilda_da_Cerveja-removebg-preview.png", 380, 72, False, 48),
@@ -96,10 +94,6 @@ IMAGES = [
     # The Domadores (user, 2026-10-25: "adicionei dentro da pasta img o brasão domador, vamos separar a mecânica de domar cavalo totalmente da
     # guilda dos agricultores e criar a guilda de domadores"): the user's own art, a navy and gold shield with horses, background removed.
     ("guild-domador.webp", "brasão domador.png", 380, 72, True, 48),
-    # Drawn smaller than the others (.mark is 15rem, .pl-crest 8.6rem): 320 is still ample room above both.
-    ("logo-leao-corvo.webp", "Brasão_Medieval_do_Leão_e_Corvo-removebg-preview.png", 320, 78, False, 50),
-    # The castle above the texts of a property (Chaves and Propriedades): .pd-crest is 10.5rem, 168 px at 1080p.
-    ("prop-crest.webp", "brasão propriedades e chaves.png", 320, 80, True, 50),
     # 240 px since 2026-10-25 (drawn 4.2rem wide, 67 px at 1080p and 134 at 4K; at 120 px it went soft and looked squashed), alpha 60.
     ("tree-crest.webp", "brasão arvore genealogica familia.png", 240, 72, True, 60),
     # The crests of the Animais section: one for the horses, one for the dog. Same slot as prop-crest (.pd-crest, 10.5rem).
@@ -158,6 +152,12 @@ UI_IMAGES_FILE = Path(__file__).resolve().parent.parent / "data" / "ui-images.js
 SERVER_CRESTS = [
     ("town-kuttenberg", "Brasão Medieval de Kuttenberg.png", 380, 72, 48),
     ("town-pschitoky", "Brasão Pschitoky.png", 380, 72, 48),
+    # The letters of the Cartas section (2026-11-02, the user's "carta fechada" and "carta aberta"): the closed one, tied with twine, is drawn up to 17rem
+    # tall in the detail (272 px at 1080p) with the seal on its knot, and small on the rows of letters not yet read; the open page beside a letter that
+    # was read and on the rows of those. Both are fine illuminations that cost much at full quality (460 px of the closed one was 120 KB): about 1.5x
+    # their largest size, at a quality their detail still reads at.
+    ("carta-fechada", "carta fechada.png", 400, 70, 40),
+    ("carta-aberta", "carta aberta.png", 360, 72, 50),
 ]
 
 # The Pix QR code: output, original.
@@ -182,8 +182,7 @@ CRAFT_TITLES = [
     ("horta", "titulo agricultor.png", 420, 80, 45),
     # The trade between players on the same page (2026-10-18): src/server/trade.ts sends it with a trade's first page.
     ("negociacao", "titulo negociação.png", 420, 80, 45),
-    # The welcome form (2026-10-24, src/server/welcome.ts): "BENE ADVENISTI", its own .head-title 5.6rem (90 px at 1080p): fetched
-    # on its own, so the same 2x headroom as the panel's titles.
+    # The entry door's title (2026-10-24 for the welcome form, now the door's: src/server/entry.ts): "BENE ADVENISTI", its own .head-title 5.2rem: fetched on its own, so the same 2x headroom as the panel's titles.
     ("boas-vindas", "titulo boas vindas.png", 460, 78, 42),
     # The mural's page (src/server/mural.ts): "MURALIS", 3.7rem (59 px), AND the three posters below travel together in one
     # message, the first time a player opens any board (`mural.ts` artJson, cached after): tests/mural.test.cjs holds each

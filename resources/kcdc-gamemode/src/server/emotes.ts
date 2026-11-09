@@ -71,11 +71,16 @@ const FLUTE_GRIP = grip(0.383, -0.019, 7.48);
 const HORN_GRIP = grip(-11.482, 12.382, 5.94);
 /** The fine lantern hangs from its base up (its body is 47 cm above its origin: "o lampião apareceu acima da mão"): moved down so that it hangs from the hand like the other. */
 const FANCY_LANTERN_DOWN: Offset = { x: 0, y: 0, z: -0.45 };
-/** A lantern's flame lights its surroundings, the warm orange of a candle (2026-10-27: "o lampião não tem brilho"). */
-const LAMP_GLOW: Glow = { color: [1, 0.62, 0.25], intensity: 1.4, radius: 7, rise: 0.9 };
-/** The light follows its carrier this often, and not for a step smaller than this (a standing carrier costs nothing). */
-export const FOLLOW_EVERY_MS = 250;
-const FOLLOW_STEP_M = 0.15;
+/**
+ * A lantern's flame lights its surroundings (2026-10-27: "o lampião não tem brilho"): the deep orange of an oil flame, warmer than the first one's (2026-11-02: "a luz está artificial, com cara
+ * de LED piscando; o correto é uma cor mais quente, passando sensação de fogo natural"). It was one light of the server's moved after its carrier four times a second, and a walking carrier's
+ * light jumped from spot to spot; now each client draws it on the body that carries it, breathing like a flame (`src/client/lamps.ts`), and the server only says who carries a lit lamp.
+ */
+const LAMP_GLOW: Glow = { color: [1, 0.5, 0.16], intensity: 1.1, radius: 6, rise: 0.9 };
+/** How often the server looks whether the carriers of lit lamps are still there, alive and in the world: a lamp of one who is not is put out. */
+export const LAMP_CHECK_MS = 2_000;
+/** What the clients are told of the lamps: one lit (`on` 1, with its looks) or put out, or all of them at once for a player who has just come in. */
+export const LAMP_EVENT = "kcdc-gamemode:lamp";
 
 export type Group = "saudacoes" | "emocoes" | "rosto" | "humor" | "festa" | "fe" | "objetos";
 
@@ -330,7 +335,25 @@ export class Emotes {
     /** Where an administrator has put the models of a gesture in the hand (`/gesto ajustar`), over what the catalog above says, by `tuneKey`; kept in `playerdata/emotes.json`. */
     private readonly tuned = new Map<string, { readonly position: Offset; readonly rotation: Offset }>();
     /** The light of each lamp that is carried, by the carrier's id, and where it was put last. */
-    private readonly lamps = new Map<number, { readonly light: Light; readonly glow: Glow; at: Offset }>();
+    private readonly lamps = new Map<number, Glow>();
+    /** Says something of the lamps to every player in the game (each client draws them, `src/client/lamps.ts`). */
+    broadcast: (payload: string) => void = (payload) => {
+        let players: Player[];
+        try {
+            players = Player.all();
+        } catch {
+            return;
+        }
+        for (const player of players) {
+            if (player.ready) {
+                try {
+                    player.emit(LAMP_EVENT, payload);
+                } catch {
+                    // Gone.
+                }
+            }
+        }
+    };
     private serial = 0;
 
     constructor(
@@ -693,31 +716,28 @@ export class Emotes {
         }
     }
 
-    /** The light of a lamp put up where its carrier is, and kept by their id until the lamp is put down. */
+    /** One lamp as the clients are told of it: [the carrier's id, colour, intensity, radius, height above the feet]. */
+    private static lampRow(id: number, glow: Glow): readonly [number, readonly [number, number, number], number, number, number] {
+        return [id, glow.color, glow.intensity, glow.radius, glow.rise];
+    }
+
+    /** A lamp lit on its carrier: every client draws its light from now on, kept by the carrier's id until the lamp is put down. */
     private startGlow(player: Player, glow: Glow): void {
-        this.stopGlow(player);
-        try {
-            const here = player.position;
-            const at = { x: here.x, y: here.y, z: here.z + glow.rise };
-            const light = Light.spawn(at, { color: { x: glow.color[0], y: glow.color[1], z: glow.color[2] }, intensity: glow.intensity, radius: glow.radius, castShadows: false });
-            this.lamps.set(player.id, { light, glow, at });
-        } catch (error: unknown) {
-            console.log(`emotes: a luz do lampião de ${player.nickname} não subiu: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        this.lamps.set(player.id, glow);
+        this.broadcast(JSON.stringify({ on: Emotes.lampRow(player.id, glow) }));
     }
 
     private stopGlow(player: Player | number): void {
         const id = typeof player === "number" ? player : player.id;
-        const kept = this.lamps.get(id);
-        if (kept === undefined) {
+        if (!this.lamps.delete(id)) {
             return;
         }
-        this.lamps.delete(id);
-        try {
-            kept.light.destroy();
-        } catch {
-            // Gone with the resource already.
-        }
+        this.broadcast(JSON.stringify({ off: id }));
+    }
+
+    /** Every lamp lit now, for a player who has just come in: their client draws the others' too. */
+    lampsPayload(): string {
+        return JSON.stringify({ all: [...this.lamps].map(([id, glow]) => Emotes.lampRow(id, glow)) });
     }
 
     /** How many lamps are lit. */
@@ -725,26 +745,11 @@ export class Emotes {
         return this.lamps.size;
     }
 
-    /**
-     * Moves each lit lamp's light to the one who carries it, a few times a second (a light cannot be hung from a body, so it is put where the body is): one whose carrier is gone,
-     * dead or not in the world any more is put out, and one whose carrier has not moved is left where it is.
-     */
-    followLamps(bodyOf: (id: number) => Player | null = (id) => Player.getById(id)): void {
-        for (const [id, kept] of [...this.lamps]) {
+    /** A lamp whose carrier is gone, dead or not in the world any more is put out (each client moves the light with the body, `src/client/lamps.ts`). */
+    checkLamps(bodyOf: (id: number) => Player | null = (id) => Player.getById(id)): void {
+        for (const id of [...this.lamps.keys()]) {
             const carrier = bodyOf(id);
             if (carrier === null || !carrier.ready || !carrier.alive) {
-                this.stopGlow(id);
-                continue;
-            }
-            const here = carrier.position;
-            const to = { x: here.x, y: here.y, z: here.z + kept.glow.rise };
-            if (Math.hypot(to.x - kept.at.x, to.y - kept.at.y, to.z - kept.at.z) < FOLLOW_STEP_M) {
-                continue;
-            }
-            try {
-                kept.light.position = new Vector3(to.x, to.y, to.z);
-                kept.at = to;
-            } catch {
                 this.stopGlow(id);
             }
         }
@@ -780,10 +785,16 @@ export function installEmotes(): void {
     Events.on("playerAnimationEnd", (player, fragment, reason) => emotes.ended(player, fragment, reason));
     setInterval(() => {
         if (emotes.lit() > 0) {
-            emotes.followLamps();
+            emotes.checkLamps();
         }
-    }, FOLLOW_EVERY_MS);
-    Events.on("playerSpawned", (player) => emotes.reset(player));
+    }, LAMP_CHECK_MS);
+    // A body that comes in is told of the lamps the others carry, after its own (a new body's) is put out.
+    Events.on("playerSpawned", (player) => {
+        emotes.reset(player);
+        if (emotes.lit() > 0) {
+            player.emit(LAMP_EVENT, emotes.lampsPayload());
+        }
+    });
     Events.on("playerDisconnect", (player) => emotes.left(player));
     const off = emotes.switchedOff();
     console.log(`emotes: ${Object.keys(GESTURES).length} gestos em ${GROUPS.length} grupos na roda do G, escolhidos com um clique na página nossa (a roda do framework fica desligada)${off.length > 0 ? `; desligados por um administrador: ${off.join(", ")}` : ""}`);

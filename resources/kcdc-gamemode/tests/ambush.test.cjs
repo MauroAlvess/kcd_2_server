@@ -3,6 +3,22 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+
+// What an NPC says (src/server/npc-speech.ts, 2026-11-02), stood in for: said over the body as before, and recorded with its author.
+const SPEECH = {
+    speak: (npc, author, text, options = {}) => {
+        if (typeof npc.say === "function") npc.say(text);
+        (globalThis.__spoken ??= []).push({ npc: npc.id, author, text, to: (options.to ?? []).map((player) => player.id), radiusM: options.radiusM });
+        return 1;
+    },
+    splitSpeaker: (line, fallback) => {
+        const at = line.indexOf(": ");
+        return at > 0 && at <= 60 && !/[.!?]/.test(line.slice(0, at)) ? { author: line.slice(0, at), text: line.slice(at + 2) } : { author: fallback, text: line };
+    },
+    turnBackAfterTalk: (npc, player, yaw) => { (globalThis.__turnBacks ??= []).push([npc.id, player.id, yaw]); },
+    faceAhead: () => true,
+};
+
 const inventoryAdd = require("./inventory-add-module.cjs");
 
 const MONEY = "5ef63059-322e-4e1b-abe8-926e100c770e";
@@ -40,6 +56,7 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
     const notices = [];
     const logs = [];
     const dressed = [];
+    const purses = [];
     const handlers = new Map();
     const inventories = new Map();
     const timers = [];
@@ -109,9 +126,11 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
             if (id === "./store.js") return storeSandbox.exports;
             if (id === "./money.js") return moneySandbox.exports;
             if (id === "./trade.js") return { trades: { isTrading: (player) => state.trading.has(player.id) } };
+            if (id === "./npc-speech.js") return SPEECH;
             if (id === "./bandits.js") {
                 return {
-                    banditSettings: { health: 180, damageMultiplier: 1.6 },
+                    banditSettings: { health: 180, damageMultiplier: 1.6, chaseSpeed: "jog" },
+                    sharePurse: (corpse, hitters, now) => purses.push({ id: corpse.id, takers: Array.from(hitters.keys()), now }),
                     banditCamps: { camps, souls: () => ["soul-a", "soul-b"], dress: (npc, archer) => dressed.push({ id: npc.id, archer }), dressCuman: (npc, archer) => dressed.push({ id: npc.id, archer, cuman: true }) },
                 };
             }
@@ -170,7 +189,7 @@ function load({ seed = {}, camps = [], navigation = true } = {}) {
     };
     const page = (victim) => [...state.sessions.values()].find((entry) => entry.player === victim.id)?.page ?? null;
     const sessionOf = (victim) => context.Dialogue.sessionOf(victim.id);
-    return { api: context.exports, state, players, npcs, chat, notices, logs, dressed, handlers, timers, disk, money, inventory, make, player, page, sessionOf, surface, context };
+    return { api: context.exports, state, players, npcs, chat, notices, logs, dressed, purses, handlers, timers, disk, money, inventory, make, player, page, sessionOf, surface, context };
 }
 
 /** A gang sent at `victim`, walked up to them, demanding. */
@@ -236,7 +255,7 @@ test("a gang comes from behind the player, dressed as the camps' bandits, and ru
         assert.equal(npc.options.lootable, true);
         assert.equal(npc.options.health, 180);
         assert.ok(["soul-a", "soul-b"].includes(npc.options.soul));
-        assert.deepEqual(npc.orders[0], ["follow", hans.id, "run"]);
+        assert.deepEqual(npc.orders[0], ["follow", hans.id, "jog"], "at a jog (a run until 2026-11-02: 'os bandidos correm muito rápido')");
     }
     assert.deepEqual(sut.dressed.map((entry) => entry.archer), [false, false, false]);
     assert.equal(ambushes.status().active, 1);
@@ -378,6 +397,27 @@ test("a victim who gets away is let go, and a gang that cannot catch up gives up
     assert.equal(theirs.status().active, 0);
 });
 
+test("a road bandit's purse goes to whoever struck him, the killing blow's player among them, once, when he falls (2026-11-02)", () => {
+    const sut = load();
+    const ambushes = sut.make();
+    const hans = sut.player("Hans", 100);
+    const jan = sut.player("Jan");
+    const gang = demanding(sut, ambushes, hans);
+    ambushes.tick();
+    ambushes.choose(sut.sessionOf(hans), hans, "fight");
+    const [first, second] = gang;
+    ambushes.hit(first.id, hans);
+    first.alive = false;
+    ambushes.died(first.id, jan);
+    assert.deepEqual(sut.purses.map((entry) => [entry.id, entry.takers.slice().sort((a, b) => a - b)]), [[first.id, [hans.id, jan.id].sort((a, b) => a - b)]]);
+    ambushes.died(first.id, jan);
+    assert.equal(sut.purses.length, 1, "shared once");
+    // One nobody struck: nobody's, and his purse stays on him for the loot.
+    second.alive = false;
+    ambushes.died(second.id);
+    assert.deepEqual(sut.purses.at(-1).takers, []);
+});
+
 test("the beaten lie for ten minutes for their pockets, then go when nobody is near", () => {
     const sut = load();
     const ambushes = sut.make();
@@ -504,7 +544,7 @@ test("a bandit who stands still for three seconds away from his target is sent r
     ambushes.tick();
     sut.state.now += 3_500;
     ambushes.tick();
-    for (const npc of gang) assert.deepEqual(npc.orders.at(-1), ["moveTo", 0, 20, "run"], "run at him by the server's route");
+    for (const npc of gang) assert.deepEqual(npc.orders.at(-1), ["moveTo", 0, 20, "jog"], "sent at him by the server's route, at a jog");
     assert.ok(sut.logs.some((line) => /parado há \d+ s: mandado correr até ele \(aceito\)/.test(line)));
 
     // Arrived (the walk is over): the order to fight is given again.

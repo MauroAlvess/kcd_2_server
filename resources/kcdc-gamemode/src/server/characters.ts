@@ -37,6 +37,12 @@ export interface SavedCharacter {
     /** The id of the alcunha (`EPITHETS`), when they chose one. */
     epithet?: string;
     /**
+     * The age and the height (in centimetres) the player gave the character in the creator (`character-details.ts`, 2026-11-02). A character made before
+     * they were asked has neither, and the creator asks for them at its next entry.
+     */
+    age?: number;
+    height?: number;
+    /**
      * An administrator asked for this character to be made again (`/creator refazer`): at the next entry the creator opens and
      * cannot be left until a look is accepted, the name free to change. Whatever saves the character next drops it.
      */
@@ -83,9 +89,10 @@ export function getCharacter(steamId: string): SavedCharacter | null {
 
 /**
  * Remembers this look under the player's Steam id. Does nothing without one. The name and the alcunha already kept
- * stay, unless `identity` brings new ones.
+ * stay, unless `identity` brings new ones; so do the age and the height, unless `details` brings new ones (a barber's
+ * work or the game's own stage saves the look alone).
  */
-export function saveCharacter(steamId: string, appearance: Appearance, nickname: string, identity?: CharacterIdentity): void {
+export function saveCharacter(steamId: string, appearance: Appearance, nickname: string, identity?: CharacterIdentity, details?: { readonly age: number; readonly height: number }): void {
     if (!steamId) {
         return;
     }
@@ -93,6 +100,8 @@ export function saveCharacter(steamId: string, appearance: Appearance, nickname:
     const existing = store[steamId];
     const name = identity?.name ?? existing?.name;
     const epithet = identity === undefined ? existing?.epithet : identity.epithet;
+    const age = details?.age ?? existing?.age;
+    const height = details?.height ?? existing?.height;
     store[steamId] = {
         appearance,
         nickname,
@@ -100,6 +109,8 @@ export function saveCharacter(steamId: string, appearance: Appearance, nickname:
         updatedAt: Date.now(),
         ...(name !== undefined && name !== "" ? { name } : {}),
         ...(epithet !== undefined && epithet !== "" ? { epithet } : {}),
+        ...(typeof age === "number" ? { age } : {}),
+        ...(typeof height === "number" ? { height } : {}),
         ...(existing?.clothesGiven !== undefined && existing.clothesGiven.length > 0 ? { clothesGiven: existing.clothesGiven } : {}),
     };
     persist(store);

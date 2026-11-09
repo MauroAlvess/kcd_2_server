@@ -7,8 +7,8 @@ const test = require("node:test");
 const vm = require("node:vm");
 require("./reachpatch.cjs");
 
-// The client's E at a horse of the player's (src/client/horse-menu.ts): the game's climb is held back while the aim is on the horse, and
-// the game's "[E] Montar" goes with it, so our own hint "Cavalo" stands in its place (2026-10-20: "o E parou de aparecer na direita").
+// The client's E at a wild horse (src/client/horse-menu.ts): the game's climb is held back while the aim is on the horse, and
+// the game's "[E] Montar" goes with it, so our own hint "Domar" stands in its place (2026-10-20: "o E parou de aparecer na direita"). A horse a player keeps has none of this since 2026-11-09.
 
 function load() {
     const state = { hints: [], removed: [], disabled: [], enabled: [], emitted: [], handlers: new Map(), keys: new Map(), tick: null, visible: true, person: 0, asked: [], dialogue: false, screen: false, hintFails: false };
@@ -42,14 +42,14 @@ function load() {
     return { api: context.exports, state, me, near };
 }
 
-const HORSE = { id: 77, x: 10, y: 20, z: 5 };
+const HORSE = { id: 77, x: 10, y: 20, z: 5, w: 1 };
 
-test("aiming at a horse of the player's puts up our hint on E, once, beside the climb being held back; looking away takes both down", () => {
+test("aiming at a wild horse puts up our hint on E, once, beside the climb being held back; looking away takes both down", () => {
     const sut = load();
     sut.near(HORSE);
     sut.state.tick();
     assert.equal(sut.state.hints.length, 1);
-    assert.deepEqual(JSON.parse(JSON.stringify(sut.state.hints[0].options)), { key: "primary_action", text: "Cavalo" });
+    assert.deepEqual(JSON.parse(JSON.stringify(sut.state.hints[0].options)), { key: "primary_action", text: "Domar" });
     assert.deepEqual(sut.state.disabled, ["mount_horse", "use_horse"], "the game's climb is held back");
     sut.state.tick();
     assert.equal(sut.state.hints.length, 1, "one hint");
@@ -61,6 +61,16 @@ test("aiming at a horse of the player's puts up our hint on E, once, beside the 
     sut.state.visible = true;
     sut.state.tick();
     assert.equal(sut.state.hints.length, 2, "and back again when the aim returns");
+});
+
+test("a horse the server does not call wild gets no hint and no hold, and E asks for nothing: a kept horse is mounted by the game's own E (2026-11-09)", () => {
+    const sut = load();
+    sut.near({ id: 77, x: 10, y: 20, z: 5 });
+    sut.state.tick();
+    assert.equal(sut.state.hints.length, 0);
+    assert.deepEqual(sut.state.disabled, [], "the game's own climb is not held back");
+    sut.state.keys.get("e")();
+    assert.deepEqual(sut.state.emitted, []);
 });
 
 test("no hint while mounted, in a dialogue, over a transfer screen, or when no horse is near; and E still asks for the menu", () => {

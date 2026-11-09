@@ -16,16 +16,18 @@
  * walked off, died, or no longer have it.
  */
 
-import { CRAFT_ITEMS, CRAFT_RECIPES } from "./craft-data.js";
+import { CRAFT_ITEMS, CRAFT_RECIPES, ITEM_INFO } from "./craft-data.js";
 import type { CraftRecipe, CraftStation } from "./craft-data.js";
 import { playWork, stopWork } from "./craft-animation.js";
 import { classOf } from "./craft-items.js";
 import { craftPlaceNear, PLACE_HEIGHT_M, PLACE_REACH_M } from "./craft-places.js";
 import { FOOD_DECAY, SPOILED_BELOW } from "./food-decay-data.js";
 import { mayCraft, usesFreeCrafts } from "./guild-crafts.js";
-import { paid } from "./profession-xp.js";
+import { litForCooking } from "./pot-fires.js";
+import { award, paid, quote } from "./profession-xp.js";
 import type { Craft } from "./guild-crafts.js";
 import { allowedTo, EDGE_M } from "./reach.js";
+import { thirstPace } from "./thirst.js";
 
 const RESOURCE = "kcdc-gamemode";
 
@@ -55,7 +57,112 @@ export const craftSettings = {
     alchemyGrantMs: 3 * 60_000,
     /** Every step of a recipe the game's recipe book can show. */
     fullKnowledge: 536870911,
+    /** Where the chance of a better piece comes from (a test sets it). */
+    random: (): number => Math.random(),
 };
+
+// ---------------------------------------------------------------------------------------------
+// What the worker's standing and town ask of a recipe, and the quality of what comes out (2026-10-31).
+
+/**
+ * Who may make a piece (user, 2026-10-31: "os itens nobres roupas joias armas armaduras só podem ser fabricados por nobres, então a receita deve ter um aviso apenas nobres" and
+ * "só um cidadão de Suchdol pode fabricar armaduras de Suchdol e armas, e só um artesão pode fabricar os casacos e coisas de Suchdol"): the recipe says it (`noble`, `place`, made by
+ * `tools/make-craft-recipes.py`), and `index.ts` hands in what the server knows of the player (their standing, their town). Until then everybody may: the tests and a server that starts
+ * without the modules are not locked out of their own trade.
+ */
+export interface CraftGates {
+    isNoble(player: Player): boolean;
+    /** Whether the player holds a master's title, of a guild or of a trade (`mestre-guilda`, `mestre-oficio`). */
+    isMaster?(player: Player): boolean;
+    /** Whether the player is a citizen of one of the towns (a land counts for its seat). */
+    citizenOf(player: Player, towns: readonly string[]): boolean;
+    townName(id: string): string;
+}
+
+let gates: CraftGates = { isNoble: () => true, citizenOf: () => true, townName: (id) => id };
+
+export function setCraftGates(next: CraftGates): void {
+    gates = next;
+}
+
+/**
+ * Whether the player may make the nobles' pieces: a noble, or a master of a guild or of a trade (user, 2026-11-01: "um jogador que recebe título de mestre de ofício ou guilda deve
+ * conseguir fazer até os itens de nobres da sua profissão"). A master's are those of their own trade, since a guild works only its own places (`guild-crafts.ts`).
+ */
+export function mayMakeNoble(player: Player): boolean {
+    return gates.isNoble(player) || gates.isMaster?.(player) === true;
+}
+
+/** Why the player's standing or town bars a recipe, or "" when they do not (an administrator with every tool is never barred). */
+export function gateReason(player: Player, recipe: CraftRecipe, free: boolean): string {
+    if (free) {
+        return "";
+    }
+    if (recipe.noble === true && !mayMakeNoble(player)) {
+        return "Apenas nobres e mestres do ofício fazem esta peça.";
+    }
+    if (recipe.place !== undefined) {
+        const towns = recipe.place.split(",");
+        if (!gates.citizenOf(player, towns)) {
+            return `Só cidadãos de ${towns.map((id) => gates.townName(id)).join(" ou ")} fazem esta peça.`;
+        }
+    }
+    return "";
+}
+
+/** How many levels of the trade over a recipe's own take a piece to its best tier of quality. */
+export const QUALITY_SPAN = 15;
+
+/** The tier a worker's piece is expected to come out in, between 1 (the recipe's own level) and the class's best (`QUALITY_SPAN` levels over it), as a number with a fraction. */
+export function expectedQuality(skill: number, recipeLevel: number, best: number): number {
+    if (!(best > 1)) {
+        return 1;
+    }
+    const mastery = Math.min(1, Math.max(0, (skill - recipeLevel) / QUALITY_SPAN));
+    return 1 + mastery * (best - 1);
+}
+
+/** The tier of one piece: the whole of the expected one, and the fraction of it as the chance of one more (2026-10-31: "quanto melhor o nível de ofícios na fabricação melhor pode vir aquele item"). */
+export function rollQuality(skill: number, recipeLevel: number, best: number, roll: number): number {
+    const expected = expectedQuality(skill, recipeLevel, best);
+    const whole = Math.floor(expected);
+    return Math.min(best, whole + (roll < expected - whole ? 1 : 0));
+}
+
+/**
+ * A recipe well under the worker's own level gives less XP (2026-11-01, user: "diminuir o xp por receitas fracas ... assim criamos um sistema recompensador e desafiador"): the
+ * whole of it up to `WEAK_FULL_GAP` levels under, then `WEAK_DROP` less for each level more, never under `WEAK_FLOOR` of it. The recipes' own XP climbs with their level
+ * (`tools/make-craft-recipes.py`); this keeps the first ones from being the way up for a worker long past them.
+ */
+export const WEAK_FULL_GAP = 3;
+export const WEAK_DROP = 0.12;
+export const WEAK_FLOOR = 0.1;
+
+/** The share of a recipe's XP a worker of `skill` gets for one of `recipeLevel`. */
+export function weakShare(skill: number, recipeLevel: number): number {
+    const over = skill - recipeLevel - WEAK_FULL_GAP;
+    return over <= 0 ? 1 : Math.max(WEAK_FLOOR, 1 - over * WEAK_DROP);
+}
+
+/**
+ * The first steps of a chain pay a quarter of their recipe's XP (2026-11-03, the trades' standard): turning logs into charcoal, scrap into iron and iron into steel, flax into thread
+ * and logs into boiled water are a minute's work on cheap stuff, and they were the way up of the farms of XP (5007 charcoal and 1906 steel in five days of logs; a smith went from
+ * level 7 to 24 in seven hours). What is made of them pays in full.
+ */
+export const CONVERSION_CATEGORIES: ReadonlySet<string> = new Set(["Carvão", "Fundição", "Fios"]);
+export const CONVERSION_IDS: ReadonlySet<string> = new Set(["fogo:water", "forja:prata-barra"]);
+export const CONVERSION_SHARE = 0.25;
+
+export const isConversion = (recipe: CraftRecipe): boolean => CONVERSION_CATEGORIES.has(recipe.category) || CONVERSION_IDS.has(recipe.id);
+
+/** The XP one piece of `recipe` pays a worker of `skill` at the trades' standard, before the day's limit (`profession-xp.ts`). */
+export function xpFor(recipe: CraftRecipe, skill: number): number {
+    return paid(recipe.xp * weakShare(skill, recipe.level) * (isConversion(recipe) ? CONVERSION_SHARE : 1), recipe.station);
+}
+
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI"];
+/** A tier as the game writes it. */
+export const romanOf = (tier: number): string => ROMAN[tier] ?? String(tier);
 
 /**
  * How many a piece of work may make in one go (user, 2026-10-27: "no defumador e nas receitas das guildas vamos permitir que o jogador faça de 1 a 10 de uma vez e receba o XP
@@ -143,6 +250,21 @@ export interface RecipeView {
     readonly v?: string;
     /** Made on the page, so that a number of them may be asked for at once (`MAX_BATCH`): not the potions the game's own table brews, which are only chosen. */
     readonly batch?: boolean;
+    /** What the work costs the body in its own water (the thread wetted with the mouth, 2026-10-30): the points of thirst each piece takes, and how many pieces the body can pay now. */
+    readonly th?: readonly [each: number, pieces: number];
+    /** Only a noble makes it, and the names of the towns whose citizens do (2026-10-31); `no` is why this player may not, when they may not. */
+    readonly nb?: true;
+    readonly pl?: readonly string[];
+    readonly no?: string;
+    /** The tiers a piece may come out in for this worker, and the best the class is made in: [lowest, highest, best] (2026-10-31). */
+    readonly q?: readonly [number, number, number];
+    /** What the potion, poison or ointment it makes does, in the game's words (`ITEM_INFO`, 2026-11-02). */
+    readonly d?: string;
+    /**
+     * The garment in its dyes, for the little square that picks the colour (2026-10-31): each is [the colour in a word, the game's icon of it, 0 for anybody's / 1 a noble's that
+     * this worker may make / 2 a noble's that they may not]. The page sends the index it picked back with the work (`make`).
+     */
+    readonly vs?: ReadonlyArray<readonly [label: string, icon: string, noble: number]>;
 }
 
 export interface CraftView {
@@ -164,6 +286,7 @@ export function viewFor(player: Player, station: CraftStation): CraftView {
     const items: Record<string, readonly [string, string]> = {};
     // At an alchemy table a potion is brewed on the page (`brew`), whichever table it is: "Fazer", and the seconds it takes.
     const atTable = station === "alquimia" && alchemyTableNear(player.position);
+    const mayNoble = free || mayMakeNoble(player);
     const recipes = CRAFT_RECIPES.filter((recipe) => recipe.station === station).map((recipe): RecipeView => {
         const track = trackOf(recipe);
         const level = levels.get(track) ?? levelOf(player, track);
@@ -176,6 +299,9 @@ export function viewFor(player: Player, station: CraftStation): CraftView {
             }
         }
         const unlocked = free || level >= recipe.level;
+        const barred = gateReason(player, recipe, free);
+        const expected = recipe.maxq === undefined ? 1 : expectedQuality(level, recipe.level, recipe.maxq);
+        const pay = recipe.thirst === undefined ? undefined : thirstPace.pieces(player, recipe.thirst, MAX_BATCH);
         return {
             id: recipe.id,
             cat: recipe.category,
@@ -183,13 +309,20 @@ export function viewFor(player: Player, station: CraftStation): CraftView {
             n: recipe.amount,
             ing,
             lvl: recipe.level,
-            xp: paid(recipe.xp),
+            xp: quote(player.steamId, track, xpFor(recipe, level)),
             s: atTable && recipe.alchemy !== undefined ? BREW_SECONDS : recipe.seconds,
             lock: !unlocked,
             ...(recipe.track === undefined ? {} : { trk: recipe.track }),
             ...(recipe.station === "alquimia" && (madeOnPage(recipe) || atTable) ? { v: "Fazer" } : {}),
             ...(madeOnPage(recipe) || atTable ? { batch: true } : {}),
-            can: unlocked && ing.every(([, need, have]) => have >= need),
+            ...(recipe.thirst === undefined || pay === undefined ? {} : { th: [recipe.thirst, pay] as const }),
+            ...(recipe.noble === true ? { nb: true as const } : {}),
+            ...(recipe.variants === undefined ? {} : { vs: recipe.variants.map(([, label, icon, rich]): readonly [string, string, number] => [label, icon, rich === 1 ? (mayNoble ? 1 : 2) : 0]) }),
+            ...(recipe.place === undefined ? {} : { pl: recipe.place.split(",").map((id) => gates.townName(id)) }),
+            ...(barred === "" ? {} : { no: barred }),
+            ...(recipe.maxq === undefined ? {} : { q: [Math.floor(expected), Math.min(recipe.maxq, Math.ceil(expected)), recipe.maxq] as const }),
+            ...(ITEM_INFO[recipe.output] === undefined ? {} : { d: ITEM_INFO[recipe.output] }),
+            can: unlocked && barred === "" && ing.every(([, need, have]) => have >= need) && (pay === undefined || pay >= 1),
         };
     });
     return { station, title: info.title, verb: info.verb, track: info.track, level: levelOf(player, info.track), recipes, items };
@@ -246,6 +379,8 @@ interface Job {
     readonly count: number;
     made: number;
     xp: number;
+    /** The tier each piece made came out in, when the class has more than one. */
+    readonly tiers: number[];
 }
 
 const working = new Map<number, Job>();
@@ -253,10 +388,29 @@ const working = new Map<number, Job>();
 export interface Outcome {
     readonly ok: boolean;
     readonly message: string;
+    /** The tier of the piece that was made, for a batch's word at the end (2026-10-31); left out for a piece with one tier. */
+    readonly tier?: number;
+    /** The XP the piece gave. */
+    readonly xp?: number;
 }
 
+let variantNames: Map<string, string> | null = null;
+
 function itemName(id: string): string {
-    return CRAFT_ITEMS[id]?.[0] ?? id;
+    const known = CRAFT_ITEMS[id]?.[0];
+    if (known !== undefined) {
+        return known;
+    }
+    // A dye of a garment (2026-10-31) has no name of its own in the list: the garment's, and its colour.
+    if (variantNames === null) {
+        variantNames = new Map();
+        for (const recipe of CRAFT_RECIPES) {
+            for (const [output, label] of recipe.variants ?? []) {
+                variantNames.set(output, `${CRAFT_ITEMS[recipe.output]?.[0] ?? recipe.output} (${label})`);
+            }
+        }
+    }
+    return variantNames.get(id) ?? id;
 }
 
 /** Why the player may not make the recipe now, or "" when they may: `count` of them, for the ingredients. */
@@ -271,6 +425,10 @@ export function whyNot(player: Player, recipe: CraftRecipe, near: NearCheck, cou
     if (!usesFreeCrafts(player) && levelOf(player, trackOf(recipe)) < recipe.level) {
         return `É preciso nível ${recipe.level} para esta receita.`;
     }
+    const barred = gateReason(player, recipe, usesFreeCrafts(player));
+    if (barred !== "") {
+        return barred;
+    }
     if (recipe.station !== "costura" && recipe.station !== "alquimia" && !near(player, recipe.station)) {
         return `Fique junto ${recipe.station === "forja" ? "da forja" : recipe.station === "fogo" ? "do fogo" : recipe.station === "defumador" ? "do defumador" : "do secador"} para isso.`;
     }
@@ -280,6 +438,13 @@ export function whyNot(player: Player, recipe: CraftRecipe, near: NearCheck, cou
         const spoiled = spoiledCountsOf(player);
         const bad = missing.some(([item]) => (spoiled.get(classOf(item)) ?? 0) > 0);
         return `Falta: ${missing.map(([item, need]) => `${need * count}x ${itemName(item)} (tem ${counts.get(classOf(item)) ?? 0})`).join(", ")}.${bad ? " Comida estragada não serve." : ""}`;
+    }
+    // The work that is paid with the body's own water (2026-10-30): a body already dry has none to give.
+    if (recipe.thirst !== undefined) {
+        const pieces = thirstPace.pieces(player, recipe.thirst, count);
+        if (pieces < count) {
+            return pieces === 0 ? "Seu corpo está seco demais para isso: mate a sede antes." : `Seu corpo só tem água para ${pieces} ${pieces === 1 ? "peça" : "peças"}: mate a sede ou faça menos.`;
+        }
     }
     return "";
 }
@@ -338,13 +503,25 @@ export function madeOnPage(recipe: CraftRecipe): boolean {
  * Makes a recipe: the work is played for its time, and at the end what it takes is taken and what it makes is given, with its
  * XP. `report` is told how it ended (at once, when it cannot start).
  */
-export function make(player: Player, recipeId: string, near: NearCheck, report: Reporter, spotOf?: SpotOf, count = 1): void {
+export function make(player: Player, recipeId: string, near: NearCheck, report: Reporter, spotOf?: SpotOf, count = 1, variant = 0): void {
     const recipe = recipeById(recipeId);
     if (recipe === undefined || !madeOnPage(recipe)) {
         report(player, { ok: false, message: "Receita desconhecida." });
         return;
     }
-    work(player, recipe, near, report, () => true, spotOf, count);
+    work(player, withVariant(recipe, variant), near, report, () => true, spotOf, count);
+}
+
+/** What a page sends as the number of the dye it picked: a whole number from zero (anything else is the first dye). */
+export function variantOf(value: unknown): number {
+    const wanted = typeof value === "number" ? value : typeof value === "string" ? Number(value) : 0;
+    return Number.isInteger(wanted) && wanted > 0 ? wanted : 0;
+}
+
+/** The recipe as it is made in the dye picked (2026-10-31): the same work, bill and XP, another class out, and a noble's when the dye is. A number the garment has no dye for is the first. */
+export function withVariant(recipe: CraftRecipe, index: number): CraftRecipe {
+    const pick = index > 0 ? recipe.variants?.[index] : undefined;
+    return pick === undefined ? recipe : { ...recipe, output: pick[0], ...(pick[3] === 1 ? { noble: true } : {}) };
 }
 
 /** A potion brewed at an alchemy table of ours takes this long, there being no minigame of the game's to play there. */
@@ -395,8 +572,12 @@ function work(player: Player, recipe: CraftRecipe, near: NearCheck, report: Repo
         spot = null;
     }
     const unitMs = Math.max(1, recipe.seconds) * 1000;
+    // A recipe of the fire made at a cauldron: it burns (2026-11-02, `pot-fires.ts`).
+    if (recipe.station === "fogo") {
+        litForCooking(player);
+    }
     const played = playWork(player, recipe.station, { ms: unitMs * times, ...(spot === null ? {} : spot) });
-    const job: Job = { recipe, timer: null, count: times, made: 0, xp: 0 };
+    const job: Job = { recipe, timer: null, count: times, made: 0, xp: 0, tiers: [] };
     const end = (outcome: Outcome): void => {
         working.delete(player.id);
         if (played) {
@@ -415,15 +596,16 @@ function work(player: Player, recipe: CraftRecipe, near: NearCheck, report: Repo
             unit = stillThere(player) ? finishWork(player, recipe, near) : { ok: false, message: `Nada foi feito. ${AWAY_FROM_TABLE}` };
         } catch (error: unknown) {
             console.log(`craft: o trabalho de ${player.nickname} em ${recipe.id} não terminou: ${error instanceof Error ? error.message : String(error)}`);
-            working.delete(player.id);
-            if (played) {
-                stopWork(player);
-            }
+            // The page is told (2026-11-03): with no word its bar stood for good, and every button of it with it.
+            end(summary(job, { ok: false, message: "O trabalho parou por um erro do servidor: o que já foi feito ficou feito." }));
             return;
         }
         if (unit.ok) {
             job.made += 1;
-            job.xp += paid(recipe.xp);
+            job.xp += unit.xp ?? 0;
+            if (unit.tier !== undefined) {
+                job.tiers.push(unit.tier);
+            }
             if (job.made < job.count) {
                 begin();
                 return;
@@ -446,7 +628,13 @@ function summary(job: Job, last: Outcome): Outcome {
     }
     const total = `${job.recipe.amount * job.made}x ${itemName(job.recipe.output)} (+${job.xp} XP)`;
     const word = STATIONS[job.recipe.station].doing === "" ? "Pronto" : "Feito";
-    return job.made === job.count ? { ok: true, message: `${word}: ${total}.` } : { ok: false, message: `${word} ${job.made} de ${job.count}: ${total}. ${last.message}` };
+    // What the pieces came out in, when it is more than the plainest tier (2026-10-31): "Qualidade: 2x III, 1x II".
+    const counted = new Map<number, number>();
+    for (const tier of job.tiers) {
+        counted.set(tier, (counted.get(tier) ?? 0) + 1);
+    }
+    const quality = [...counted].some(([tier]) => tier > 1) ? ` Qualidade: ${[...counted].sort((a, b) => b[0] - a[0]).map(([tier, n]) => `${n}x ${romanOf(tier)}`).join(", ")}.` : "";
+    return job.made === job.count ? { ok: true, message: `${word}: ${total}.${quality}` } : { ok: false, message: `${word} ${job.made} de ${job.count}: ${total}.${quality} ${last.message}` };
 }
 
 /** The end of a piece of work: checked again, taken, given, and the XP. */
@@ -458,7 +646,16 @@ export function finishWork(player: Player, recipe: CraftRecipe, near: NearCheck)
     if (!take(player, recipe)) {
         return { ok: false, message: "Nada foi feito: o que a receita pede não estava mais todo aí." };
     }
-    const given = Inventory.add(player, { item: classOf(recipe.output), amount: recipe.amount });
+    // The piece comes out in the tier the worker's level allows (2026-10-31): the better the level of the trade over the recipe's, the better a piece can be. A class with one tier has none to ask for.
+    const skill = levelOf(player, trackOf(recipe));
+    let tier = recipe.maxq === undefined ? 1 : rollQuality(skill, recipe.level, recipe.maxq, craftSettings.random());
+    let given = Inventory.add(player, { item: classOf(recipe.output), amount: recipe.amount, ...(tier > 1 ? { metadata: { quality: tier } } : {}) });
+    if (!given.ok && tier > 1 && (given.code === "invalidQuality" || given.code === "invalidMetadata")) {
+        // The game turned the tier down (the class is not made in so many): the plain piece, once, and the log says it.
+        console.log(`craft: o jogo não aceitou a qualidade ${tier} de ${itemName(recipe.output)} (${recipe.id}): ${given.code}; saiu a comum`);
+        tier = 1;
+        given = Inventory.add(player, { item: classOf(recipe.output), amount: recipe.amount });
+    }
     if (!given.ok) {
         giveBack(player, recipe);
         // A full bag is the player's to empty. The game turning the item itself down (a class it will not hand out, 2026-10-26: the belts and pouches
@@ -469,14 +666,18 @@ export function finishWork(player: Player, recipe: CraftRecipe, near: NearCheck)
         }
         return { ok: false, message: "Nada foi feito: não coube no seu inventário." };
     }
-    const xp = paid(recipe.xp);
+    // What the body paid with its own water goes with each piece made: the more a worker makes, the thirstier they get.
+    if (recipe.thirst !== undefined) {
+        thirstPace.spend(player, recipe.thirst);
+    }
+    const xp = award(player.steamId, trackOf(recipe), xpFor(recipe, skill));
     try {
         player.addXp(trackOf(recipe), xp);
     } catch (error: unknown) {
         console.log(`craft: o XP de ${recipe.id} não foi dado a ${player.nickname}: ${error instanceof Error ? error.message : String(error)}`);
     }
-    console.log(`craft: ${player.nickname} fez ${recipe.amount}x ${itemName(recipe.output)} (${recipe.id}, +${xp} XP de ${trackOf(recipe)})`);
-    return { ok: true, message: `${STATIONS[recipe.station].doing === "" ? "Pronto" : "Feito"}: ${recipe.amount}x ${itemName(recipe.output)} (+${xp} XP).` };
+    console.log(`craft: ${player.nickname} fez ${recipe.amount}x ${itemName(recipe.output)} (${recipe.id}, +${xp} XP de ${trackOf(recipe)}${tier > 1 ? `, qualidade ${romanOf(tier)}` : ""})`);
+    return { ok: true, message: `${STATIONS[recipe.station].doing === "" ? "Pronto" : "Feito"}: ${recipe.amount}x ${itemName(recipe.output)} (+${xp} XP)${tier > 1 ? `, qualidade ${romanOf(tier)}` : ""}.`, xp, ...(recipe.maxq === undefined ? {} : { tier }) };
 }
 
 /**

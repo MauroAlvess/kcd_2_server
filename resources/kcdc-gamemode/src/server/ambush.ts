@@ -25,8 +25,12 @@
  * sent running at it along the server's route; each of them is told in the log (`ambush: ...`).
  */
 
-import { banditCamps, banditSettings } from "./bandits.js";
+import { banditCamps, banditSettings, sharePurse } from "./bandits.js";
 import { coins, giveMoney, moneyOf, MONEY_UNIT, takeMoney } from "./money.js";
+import { speak } from "./npc-speech.js";
+
+/** Who the road's robbers' lines are said by in the chat card (`npc-speech.ts`). */
+const ROBBER = "Assaltante";
 import { distanceBetween, groundForward, yawTowards } from "./place.js";
 import { ensureDir, read, write } from "./store.js";
 import { trades } from "./trade.js";
@@ -114,6 +118,8 @@ interface Ambush {
     readonly targets: Map<number, number>;
     readonly orderedAt: Map<number, number>;
     readonly deadAt: Map<number, number>;
+    /** Who struck each of the gang, by player id, and when last: a fallen man's purse is theirs (2026-11-02, `sharePurse` in bandits.ts). */
+    readonly hitters: Map<number, Map<number, number>>;
     /** When the victim was last within reach of the gang, for giving up a chase. */
     seenAt: number;
     /** Where each bandit was last seen to move, and when: one who stands still is sent running. */
@@ -411,6 +417,7 @@ export class Ambushes {
             targets: new Map(gang.map((id) => [id, victim.id])),
             orderedAt: new Map(),
             deadAt: new Map(),
+            hitters: new Map(),
             seenAt: now,
             watch: new Map(),
         };
@@ -420,7 +427,7 @@ export class Ambushes {
         this.nextStart = now + this.settings.globalCooldownMs;
         this.started += 1;
         for (const id of gang) {
-            Npc.getById(id)?.follow(victim, { speed: "run", radius: 3 });
+            Npc.getById(id)?.follow(victim, { speed: banditSettings.chaseSpeed, radius: 3 });
         }
         console.log(`ambush: ${gang.length} ${kind === "cumans" ? "cumano(s)" : "salteador(es)"} atrás de ${victim.nickname} em ${from.x.toFixed(0)} ${from.y.toFixed(0)}`);
         return true;
@@ -469,7 +476,7 @@ export class Ambushes {
             npc.hold();
             npc.lookAt(ambush.victim);
         }
-        leader?.say("A bolsa ou a vida!");
+        if (leader !== null) speak(leader, ROBBER, "A bolsa ou a vida!", { radiusM: 30 });
         ambush.demand = this.demandFor(moneyOf(ambush.victim));
         this.enter(ambush, "demand");
     }
@@ -494,7 +501,7 @@ export class Ambushes {
                 if (leader !== null) {
                     giveMoney(leader, amount);
                 }
-                leader?.say(option === "pay" ? "Sábia escolha." : "Só isso? Some daqui!");
+                if (leader !== null) speak(leader, ROBBER, option === "pay" ? "Sábia escolha." : "Só isso? Some daqui!", { radiusM: 30 });
                 tell(player, `Os salteadores levaram ${coins(amount)} e sumiram no mato.`);
                 this.leave(ambush, "");
                 return;
@@ -504,11 +511,11 @@ export class Ambushes {
         }
         if (option === "broke") {
             if (this.random() < this.settings.mercyChance) {
-                leader?.say("Pobre diabo... Some daqui!");
+                if (leader !== null) speak(leader, ROBBER, "Pobre diabo... Some daqui!", { radiusM: 30 });
                 tell(player, "Os salteadores riram da sua bolsa vazia e deixaram você passar.");
                 this.leave(ambush, "");
             } else {
-                leader?.say("Então paga com o couro!");
+                if (leader !== null) speak(leader, ROBBER, "Então paga com o couro!", { radiusM: 30 });
                 this.fight(ambush, "Sem nada para dar, os salteadores atacam!");
             }
             return;
@@ -554,7 +561,7 @@ export class Ambushes {
         const from = ambush.victim.position;
         for (const npc of this.living(ambush)) {
             npc.pin(null);
-            npc.flee(from, { speed: "run", radius: 70 });
+            npc.flee(from, { speed: banditSettings.chaseSpeed, radius: 70 });
         }
         this.enter(ambush, "leaving");
     }
@@ -562,7 +569,16 @@ export class Ambushes {
     /** A road bandit was struck: whoever did it is fought, whatever the gang was doing. */
     hit(npcId: number, attacker: Player): void {
         const ambush = this.byNpc.get(npcId);
-        if (ambush === undefined || ambush.stage === "over") {
+        if (ambush === undefined) {
+            return;
+        }
+        let struck = ambush.hitters.get(npcId);
+        if (struck === undefined) {
+            struck = new Map();
+            ambush.hitters.set(npcId, struck);
+        }
+        struck.set(attacker.id, this.now());
+        if (ambush.stage === "over") {
             return;
         }
         ambush.targets.set(npcId, attacker.id);
@@ -572,10 +588,21 @@ export class Ambushes {
         }
     }
 
-    died(npcId: number): void {
+    died(npcId: number, killer?: Player): void {
         const ambush = this.byNpc.get(npcId);
         if (ambush !== undefined && !ambush.deadAt.has(npcId)) {
-            ambush.deadAt.set(npcId, this.now());
+            const now = this.now();
+            ambush.deadAt.set(npcId, now);
+            // His purse to those who fought him, the killing blow's player among them (2026-11-02): the leader's holds what a victim paid.
+            const struck = ambush.hitters.get(npcId) ?? new Map<number, number>();
+            if (killer !== undefined) {
+                struck.set(killer.id, now);
+            }
+            ambush.hitters.delete(npcId);
+            const corpse = Npc.getById(npcId);
+            if (corpse !== null) {
+                sharePurse(corpse, struck, now);
+            }
         }
     }
 
@@ -627,6 +654,27 @@ export class Ambushes {
     }
 
     /**
+     * A man of the gang is run by the game of the one he fights when his own runner is far off (2026-11-01, as the camps' men are, `bandits.ts`): the game that runs a body
+     * judges the blows on it, and a man pinned to a victim who ran off dodged the blows of whoever stayed to fight him.
+     */
+    private runByTarget(npc: Npc, target: Player): void {
+        const runner = npc.simulator;
+        if (runner !== null && runner !== undefined && runner.id === target.id) {
+            return;
+        }
+        const range = flat(npc.position, target.position);
+        if (range > banditSettings.fightRunM) {
+            return;
+        }
+        const there = runner === null || runner === undefined ? Number.POSITIVE_INFINITY : flat(runner.position, npc.position);
+        if (there <= Math.max(banditSettings.fightRunNearM, range + banditSettings.fightRunGapM)) {
+            return;
+        }
+        npc.pin(target);
+        this.note(npc, target, `preso ao jogo do alvo (${runner === null || runner === undefined ? "ninguém o rodava" : `o jogo de ${runner.nickname}, a ${Math.round(there)} m dele, o rodava`})`);
+    }
+
+    /**
      * A bandit who has stood where he is for `stillMs`, farther than `chaseFromM` from `target`, is sent running at it along
      * the server's route. True when he was.
      */
@@ -644,7 +692,7 @@ export class Ambushes {
         // The victim's game runs him: pinned again, in case the pin was lost (the victim went out of range and came back).
         npc.pin(target.id === ambush.victim.id ? ambush.victim : target);
         const goal = target.position;
-        const sent = npc.moveTo(new Vector3(goal.x, goal.y, goal.z), { speed: "run", radius: 1.8, pathfinding: Navigation.ready ? "server" : "game" });
+        const sent = npc.moveTo(new Vector3(goal.x, goal.y, goal.z), { speed: banditSettings.chaseSpeed, radius: 1.8, pathfinding: Navigation.ready ? "server" : "game" });
         this.note(npc, target, `parado há ${Math.round((now - seen.at) / 1000)} s: mandado correr até ele (${sent ? "aceito" : "RECUSADO"})`);
         ambush.orderedAt.set(npc.id, now - this.settings.retryMs);
         return true;
@@ -689,7 +737,7 @@ export class Ambushes {
                 } else if (leader !== null && leader.alive && distanceBetween(leader.position, ambush.victim.position) <= this.settings.demandRangeM) {
                     if (ambush.kind === "cumans") {
                         // Cumans do not bargain.
-                        leader.say("Hayde! Hayde!");
+                        speak(leader, ROBBER, "Hayde! Hayde!", { radiusM: 45 });
                         this.fight(ambush, "Cumanos! Eles atacam sem dizer palavra.");
                     } else {
                         this.makeDemand(ambush);
@@ -702,7 +750,7 @@ export class Ambushes {
                             continue;
                         }
                         if (now - (ambush.orderedAt.get(npc.id) ?? 0) >= this.settings.retryMs * 2) {
-                            npc.follow(ambush.victim, { speed: "run", radius: 3 });
+                            npc.follow(ambush.victim, { speed: banditSettings.chaseSpeed, radius: 3 });
                             ambush.orderedAt.set(npc.id, now);
                         }
                     }
@@ -753,6 +801,7 @@ export class Ambushes {
                 }
                 for (const npc of gang) {
                     const target = Player.getById(ambush.targets.get(npc.id) ?? ambush.victim.id) ?? ambush.victim;
+                    this.runByTarget(npc, target);
                     if (this.chase(ambush, npc, target, now)) {
                         continue;
                     }
@@ -807,7 +856,7 @@ export function installAmbushes(): void {
     Events.on("playerDisconnect", (player) => ambushes.gone(player));
     Events.on("dialogueChoice", (session, player, option) => ambushes.choose(session, player, option));
     Events.on("dialogueClosed", (session, _player, reason) => ambushes.closed(session, reason));
-    Events.on("npcDeath", (npc) => ambushes.died(npc.id));
+    Events.on("npcDeath", (npc, attacker) => ambushes.died(npc.id, typeof attacker === "object" && attacker !== null && "steamId" in attacker ? attacker : undefined));
     Events.on("npcDestroy", (npc) => ambushes.removed(npc.id));
     Events.on("npcDamage", (npc, attacker) => {
         if (attacker !== null && "steamId" in attacker) {

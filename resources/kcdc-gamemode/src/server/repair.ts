@@ -138,8 +138,9 @@ interface Row {
 
 /** The weapons in a player's bag that the bench can be asked about. */
 export function weaponRows(player: Player): Row[] {
+    // Whether or not the player's game has caught up with the bag: `ready` is false from each change until the game shows it, and the list sent right after a repair came out empty (2026-11-03, as in `extract.ts`).
     const state = Inventory.get(player);
-    if (state === null || !state.ready) {
+    if (state === null) {
         return [];
     }
     return state.items.filter((row) => weaponKind(row.item) !== null);
@@ -239,7 +240,7 @@ export function repair(player: Player, pageId: string): Outcome {
         return { ok: false, message: "Fique junto da pedra de amolar para isso." };
     }
     const state = Inventory.get(player);
-    if (state === null || !state.ready) {
+    if (state === null) {
         return { ok: false, message: "A sua bolsa ainda não está pronta." };
     }
     const rowId = pageId.slice(REPAIR_PREFIX.length);

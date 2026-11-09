@@ -18,25 +18,38 @@ function slice(start, end) {
     return page.slice(from, to + end.length);
 }
 
-function tree(hierarchy) {
+/** The page's rules of who hangs from whom (`hierarchyChildren`) and of who stands beside whom (`hierarchyCouples`), over a hierarchy and the towns of the citizenship. */
+function run(hierarchy, towns = []) {
     const source = [
         slice("const collator = ", ";\n"),
         slice("const natural = ", ";\n"),
+        slice("function titleRanker() {", "\n}\n"),
+        slice("const placeOf = ", ";\n"),
+        slice("function regionIdOf(holder) {", "\n}\n"),
+        slice("function branchOfTitle() {", "\n}\n"),
+        slice("const holderCat = ", "\n};\n"),
         slice("function hierarchyChildren() {", "\n    return children;\n}\n"),
+        slice("function hierarchyCouples(children) {", "\n    return { partners, merged };\n}\n"),
         slice("const levelOfHolder = ", ";\n"),
         "exports.children = hierarchyChildren();",
+        "exports.couples = hierarchyCouples(exports.children);",
     ].join("\n");
-    const context = { exports: {}, hierarchy, Map, Set, Math, String, Array };
+    const context = { exports: {}, hierarchy, citizenship: { towns }, Map, Set, Math, String, Array, Number };
     vm.runInNewContext(source, context);
-    const children = context.exports.children;
+    return context.exports;
+}
+
+/** Each holder's parent, by name, once the pairs are made ("" for a root; a spouse drawn at somebody's side has none). */
+function tree(hierarchy, towns = []) {
     const parentOf = new Map();
+    const { children } = run(hierarchy, towns);
     for (const [parent, list] of children) for (const holder of list) parentOf.set(holder.name, parent === "" ? "" : hierarchy.holders.find((h) => h.key === parent).name);
     return parentOf;
 }
 
-const LEVEL = { rei: 1, lorde: 3, burgomestre: 3, conselheiro: 4, burgrave: 4, "capitao-guarda": 5, "capitao-milicia": 5, escrivao: 5, "guarda-portoes": 6, cavaleiro: 4, escudeiro: 4 };
-const SERVES = { "guarda-portoes": ["capitao-milicia", "capitao-guarda"], "capitao-milicia": ["burgomestre"], conselheiro: ["burgomestre"], escrivao: ["burgomestre"], "capitao-guarda": ["burgrave"] };
-const ORDER = ["rei", "lorde", "cavaleiro", "escudeiro", "burgrave", "capitao-guarda", "burgomestre", "conselheiro", "capitao-milicia", "escrivao", "guarda-portoes"];
+const LEVEL = { rei: 1, lorde: 3, burgomestre: 3, conselheiro: 4, burgrave: 4, "capitao-guarda": 5, "capitao-milicia": 5, escrivao: 5, "guarda-portoes": 6, cavaleiro: 4, escudeiro: 4, "mestre-guilda": 4, "mestre-oficio": 5 };
+const SERVES = { "guarda-portoes": ["capitao-milicia", "capitao-guarda"], "capitao-milicia": ["burgomestre"], conselheiro: ["burgomestre"], escrivao: ["burgomestre"], "capitao-guarda": ["burgrave"], "mestre-oficio": ["mestre-guilda", "burgomestre"] };
+const ORDER = ["rei", "lorde", "cavaleiro", "escudeiro", "burgrave", "capitao-guarda", "burgomestre", "conselheiro", "capitao-milicia", "escrivao", "guarda-portoes", "mestre-guilda", "mestre-oficio"];
 
 function realm(people) {
     return {
@@ -100,6 +113,8 @@ test("the knight and the squire he named keep their place, and nothing that name
 function blocks(hierarchy, towns) {
     const source = [
         slice("const levelOfHolder = ", ";\n"),
+        slice("function regionIdOf(holder) {", "\n}\n"),
+        slice("const placeOf = ", ";\n"),
         slice("function treeBlocks() {", "\n    return blocks;\n}\n"),
         "exports.blocks = treeBlocks();",
     ].join("\n");
@@ -164,4 +179,133 @@ test("with no trades in the answer (an older server) the tree is still cut, and 
     const none = blocks({ holders: [holder("rei", "rei", 1, null), holder("lorde", "lorde", 3, "suchdol")], trades: [] }, []);
     assert.deepEqual(Array.from(none, (block) => block.id), ["crown", "none"]);
     assert.deepEqual(Array.from(none[1].holders, (one) => one.key), ["lorde"]);
+});
+
+// Who hangs from the lord of the land, and the pairs (2026-10-30: "a árvore hierárquica tá toda gaga, repetindo pessoas e jogadores fora da árvore; todo mundo precisa seguir a lógica de nomeação
+// do lorde das terras"): the live realm had knights the Crown named and a soldier a lord of another land named standing in the air beside the lord of their land, and a lord and his wife who
+// were both lords drawn twice, each as a card and as the other's spouse.
+const REGIONS = [
+    { id: "suchdol", name: "Suchdol", seat: null },
+    { id: "wysoka", name: "Wysoka", seat: "suchdol" },
+    { id: "raborsch", name: "Raborsch", seat: null },
+];
+const CATALOG = [
+    { id: "great", titles: [{ id: "lorde" }] },
+    { id: "lesser", titles: [{ id: "cavaleiro" }, { id: "escudeiro" }, { id: "capitao-guarda" }, { id: "soldado" }, { id: "guarda-portoes" }] },
+    { id: "church", titles: [{ id: "bispo" }, { id: "padre" }] },
+];
+const RUNG = { lorde: 3, bispo: 3, cavaleiro: 4, escudeiro: 4, padre: 4, "capitao-guarda": 5, soldado: 6, "guarda-portoes": 6 };
+const SERVES_UNDER = { "guarda-portoes": ["capitao-guarda"], soldado: ["capitao-guarda"] };
+
+/** A holder named `key` (also their name) with one title, named by `by` ("crown" or another holder's key), living in `townId`. */
+function person(key, title, by, townId, extra = {}) {
+    return {
+        key, name: key, self: false, lands: [], townId, consorts: [], female: false, ...extra,
+        titles: [{ id: title, label: title, byKey: by === "crown" ? "" : by, crown: by === "crown", level: RUNG[title], reportsTo: SERVES_UNDER[title] ?? [] }],
+    };
+}
+const spouseOf = (key, female) => ({ label: female ? "Lady" : "Esposo", name: key, courtesy: female, text: key, key });
+const realmOf = (holders) => ({ branches: CATALOG, holders });
+const seatOf = (townId) => (REGIONS.find((town) => town.id === townId)?.seat) ?? townId;
+
+test("whoever the Crown named, and whoever a lord of another land named, hangs from the lord of the land they live in; a parent is always in the holder's own region", () => {
+    const holders = [
+        person("Erik", "lorde", "crown", "suchdol"),
+        person("Gunther", "lorde", "crown", "raborsch"),
+        person("Alaric", "cavaleiro", "crown", "suchdol"),
+        person("Kael", "soldado", "Erik", "raborsch"),
+        person("Wylk", "escudeiro", "Alaric", "wysoka"),
+        person("Alustin", "capitao-guarda", "crown", "suchdol"),
+        person("Vladimir", "guarda-portoes", "crown", "suchdol"),
+    ];
+    const parents = tree(realmOf(holders), REGIONS);
+    assert.equal(parents.get("Erik"), "", "a lord is a root of his region");
+    assert.equal(parents.get("Gunther"), "");
+    assert.equal(parents.get("Alaric"), "Erik", "named by the Crown: under the lord of Suchdol, not in the air beside him");
+    assert.equal(parents.get("Kael"), "Gunther", "named by the lord of another land: under the lord of Raborsch, where he lives");
+    assert.equal(parents.get("Wylk"), "Alaric", "the squire a knight named stays under him; Wysoka is a land of Suchdol");
+    assert.equal(parents.get("Alustin"), "Erik");
+    assert.equal(parents.get("Vladimir"), "Alustin", "the guard hangs from the captain of his own land");
+    for (const holder of holders) {
+        const parent = parents.get(holder.name);
+        if (parent === "") continue;
+        const chief = holders.find((one) => one.name === parent);
+        assert.equal(seatOf(chief.townId), seatOf(holder.townId), `${holder.name} hangs from somebody in their own region`);
+    }
+});
+
+test("where nobody holds the lordship, and for the Church, and between lords, nobody is hung from a lord who is not theirs: the roots stay roots", () => {
+    const parents = tree(realmOf([
+        person("Cav", "cavaleiro", "crown", "raborsch"),
+        person("Padre", "padre", "crown", "suchdol"),
+        person("Bispo", "bispo", "crown", "suchdol"),
+        person("Erik", "lorde", "crown", "suchdol"),
+        person("Outro", "lorde", "crown", "suchdol"),
+        person("Sem cidade", "cavaleiro", "crown", null),
+    ]), REGIONS);
+    assert.equal(parents.get("Cav"), "", "Raborsch has no lord here");
+    assert.equal(parents.get("Padre"), "", "the Church has its own chain of nomination, not the lord's");
+    assert.equal(parents.get("Bispo"), "");
+    assert.equal(parents.get("Outro"), "", "a lord is not below another lord");
+    assert.equal(parents.get("Sem cidade"), "", "no city, no lord");
+});
+
+test("a holder and a spouse who holds a title too are one pair: the husband leads, what hangs from either hangs from him, and the wife is a card of no tree of her own", () => {
+    const holders = [
+        person("Gunther", "lorde", "crown", "raborsch", { consorts: [spouseOf("Elisabeth", true)] }),
+        person("Elisabeth", "lorde", "crown", "raborsch", { female: true, consorts: [spouseOf("Gunther", false)] }),
+        person("Tristan", "cavaleiro", "Elisabeth", "raborsch"),
+        person("Urik", "cavaleiro", "Gunther", "raborsch"),
+    ];
+    const done = run(realmOf(holders), REGIONS);
+    assert.deepEqual(Array.from(done.couples.partners, ([lead, spouses]) => [lead, Array.from(spouses, (spouse) => spouse.name)]), [["Gunther", ["Elisabeth"]]]);
+    assert.deepEqual(Array.from(done.couples.merged), ["Elisabeth"]);
+    assert.deepEqual(Array.from(done.children.get("Gunther"), (one) => one.name).sort(), ["Tristan", "Urik"], "her knight and his knight hang from the pair");
+    const placed = Array.from(done.children.values()).flatMap((list) => Array.from(list, (one) => one.name));
+    assert.ok(!placed.includes("Elisabeth"), "she is at his side, in no list of children, so no root and no branch of her own");
+    assert.equal(placed.filter((name) => name === "Gunther").length, 1, "and he is there once");
+});
+
+test("the one who named the other leads the pair, whoever is the husband; a spouse in another region, or named by somebody else, keeps their own place and is not paired", () => {
+    const lady = run(realmOf([
+        person("Lady", "lorde", "crown", "raborsch", { female: true, consorts: [spouseOf("Knight", false)] }),
+        person("Knight", "cavaleiro", "Lady", "raborsch", { consorts: [spouseOf("Lady", true)] }),
+    ]), REGIONS);
+    assert.deepEqual(Array.from(lady.couples.partners.keys()), ["Lady"], "she named him: she leads");
+    assert.deepEqual(Array.from(lady.couples.merged), ["Knight"]);
+
+    const apart = run(realmOf([
+        person("A", "lorde", "crown", "suchdol", { consorts: [spouseOf("B", true)] }),
+        person("B", "lorde", "crown", "raborsch", { female: true, consorts: [spouseOf("A", false)] }),
+    ]), REGIONS);
+    assert.equal(apart.couples.partners.size, 0, "two regions are two trees");
+
+    const strangers = run(realmOf([
+        person("Erik", "lorde", "crown", "suchdol"),
+        person("Cav", "cavaleiro", "Erik", "suchdol"),
+        person("K1", "cavaleiro", "Erik", "suchdol", { consorts: [spouseOf("K2", true)] }),
+        person("K2", "escudeiro", "Cav", "suchdol", { female: true, consorts: [spouseOf("K1", false)] }),
+    ]), REGIONS);
+    assert.equal(strangers.couples.partners.size, 0, "one is under Erik and the other under Cav: each keeps the place their nominator gave");
+});
+
+// Pschitoky (2026-11-06, "corrija a árvore hierárquica de Pschitoky colocando cada um certinho igual Suchdol"): its four craft masters with no other title hung from the lord in one wide row, as
+// the catalog said they answer to a guild master and nobody holds that title. They answer to the burgomaster of the town when there is no guild master, as the clerk and the militia captain do.
+
+test("a craft master with no guild master above answers to the burgomaster, and to the lord when the town has none", () => {
+    const people = [["Lorde", "lorde", "crown"], ["Burgo", "burgomestre", "Lorde"], ["Mestre A", "mestre-oficio", "Lorde"], ["Mestre B", "mestre-oficio", "crown"], ["Escrivao", "escrivao", "Lorde"]];
+    const parents = tree(realm(people));
+    assert.equal(parents.get("Mestre A"), "Burgo", "named by the lord, under his burgomaster");
+    assert.equal(parents.get("Mestre B"), "Burgo", "named by the Crown, the same");
+    assert.equal(parents.get("Escrivao"), "Burgo", "as the clerk already was");
+    assert.equal(parents.get("Burgo"), "Lorde");
+
+    const none = tree(realm(people.filter(([key]) => key !== "Burgo")));
+    assert.equal(none.get("Mestre A"), "Lorde", "no burgomaster: under whoever named them");
+});
+
+test("a guild master comes before the burgomaster for a craft master", () => {
+    const withGuild = tree(realm([["Lorde", "lorde", "crown"], ["Burgo", "burgomestre", "Lorde"], ["Guilda", "mestre-guilda", "Lorde"], ["Mestre", "mestre-oficio", "Lorde"]]));
+    assert.equal(withGuild.get("Mestre"), "Guilda", "the guild master first");
+    assert.equal(withGuild.get("Guilda"), "Lorde");
 });

@@ -14,8 +14,9 @@ import { getCharacter, saveCharacter } from "./characters.js";
 import { buildCatalog, pickedFrom } from "./creator-catalog.js";
 import type { Catalog, GenderCatalog, Tone } from "./creator-catalog.js";
 import { coins, moneyOf, MONEY_UNIT, takeMoney } from "./money.js";
-import { installPostLife, installPosts } from "./townsfolk.js";
-import type { Post } from "./townsfolk.js";
+import { ensureDir, read, write } from "./store.js";
+import { installPostLife, installPosts, placeOf } from "./townsfolk.js";
+import type { Post, PostHandle } from "./townsfolk.js";
 
 /** What every service costs, in coins as the game shows them. */
 export const BARBER_PRICE = 20;
@@ -313,10 +314,111 @@ function tell(player: Player, text: string): void {
 
 export const barbering = new Barbering();
 
+// ---------------------------------------------------------------------------------------------
+// Where the barbers stand (2026-11-02, user: "na seção NPC de região vamos colocar os NPC barbeiro e de carroça também, assim se eu quiser posso mover eles de lugar também"): the place an
+// administrator chose with `/barbeiro aqui`, kept in `playerdata/barbers.json`, or the one written above.
+
+const DIR = "playerdata";
+const FILE = `${DIR}/barbers.json`;
+
+type Spot = { x: number; y: number; z: number; yaw: number };
+type MutablePost = { -readonly [K in keyof Post]: Post[K] };
+
+/** The barbers' posts as they stand now: copies of `BARBERS`, with a chosen place put over the written one. */
+const live: MutablePost[] = BARBERS.map((post) => ({ ...post }));
+let chosen: Record<string, Spot> = {};
+let handle: PostHandle | null = null;
+
+function loadChosen(): void {
+    const loaded = read<Record<string, unknown>>(FILE);
+    if (loaded.status !== "ok") {
+        return;
+    }
+    for (const [id, raw] of Object.entries(loaded.value)) {
+        const spot = raw as Partial<Spot> | null;
+        if (spot !== null && typeof spot === "object" && [spot.x, spot.y, spot.z, spot.yaw].every((value) => typeof value === "number" && Number.isFinite(value)) && live.some((post) => post.id === id)) {
+            chosen[id] = { x: spot.x as number, y: spot.y as number, z: spot.z as number, yaw: spot.yaw as number };
+        }
+    }
+    for (const post of live) {
+        const spot = chosen[post.id];
+        if (spot !== undefined) {
+            Object.assign(post, spot);
+        }
+    }
+}
+
+function saveChosen(): void {
+    try {
+        ensureDir(DIR);
+        write(FILE, chosen);
+    } catch (error: unknown) {
+        console.log(`barbers: não consegui salvar os lugares: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
+export function isBarberId(id: string): boolean {
+    return live.some((post) => post.id === id);
+}
+
+/** The barbers for the administrator's NPCs section: where each stands, whether the place was chosen, and whether its body is up. */
+export function barberListing(): Array<{ readonly id: string; readonly name: string; readonly x: number; readonly y: number; readonly z: number; readonly chosen: boolean; readonly up: boolean }> {
+    const standing = handle?.standing();
+    return live.map((post) => ({ id: post.id, name: post.name, x: post.x, y: post.y, z: post.z, chosen: chosen[post.id] !== undefined, up: standing?.has(post.id) === true }));
+}
+
+/** Puts a barber where `spot` is, kept across restarts; its body goes there at once. */
+export function moveBarber(id: string, spot: { readonly x: number; readonly y: number; readonly z: number }, yaw: number): boolean {
+    const post = live.find((one) => one.id === id);
+    if (post === undefined) {
+        return false;
+    }
+    chosen[id] = { x: spot.x, y: spot.y, z: spot.z, yaw };
+    Object.assign(post, chosen[id]);
+    saveChosen();
+    respawn(post);
+    return true;
+}
+
+/** Puts one barber (or all) back where the server's list has them; the number put back. */
+export function resetBarbers(id?: string): number {
+    let back = 0;
+    for (const post of live) {
+        if ((id !== undefined && post.id !== id) || chosen[post.id] === undefined) {
+            continue;
+        }
+        const written = BARBERS.find((one) => one.id === post.id) as Post;
+        delete chosen[post.id];
+        Object.assign(post, { x: written.x, y: written.y, z: written.z, yaw: written.yaw });
+        respawn(post);
+        back += 1;
+    }
+    if (back > 0) {
+        saveChosen();
+    }
+    return back;
+}
+
+/** The body of a moved post is made again at its new place (taken out and woken there, as at night and in the morning). */
+function respawn(post: Post): void {
+    if (handle === null) {
+        return;
+    }
+    try {
+        handle.sleep(post.id);
+        handle.wake(post.id, placeOf(post), post.yaw ?? 0);
+    } catch (error: unknown) {
+        console.log(`barbers: não consegui pôr ${post.id} no lugar novo agora: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
 export function installBarbers(): void {
-    const posts = installPosts("barbers", BARBERS, (player, post, npc) => {
+    chosen = {};
+    loadChosen();
+    const posts = installPosts("barbers", live, (player, post, npc) => {
         barbering.open(player, post, npc);
     });
+    handle = posts;
     // What a barber says to whoever comes to the chair (user, 2026-10-17: the NPCs should speak when the moment is theirs).
     installPostLife(posts, ["Cabelo e barba ao seu gosto, é só sentar.", "Uma tesoura afiada e a mão firme: é o que o senhor precisa.", "Venha, que lhe dou outra cara."]);
     Events.on("dialogueChoice", (session, player, option) => barbering.choose(session, player, option));

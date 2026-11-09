@@ -370,7 +370,31 @@ export function installCreatorPage(): void {
             const name = textOf(fields["name"], 40);
             const epithet = textOf(fields["epithet"], 24);
             if (id === view && typeof look === "object" && look !== null && name !== null && epithet !== null) {
-                Events.emitServer(ACCEPT, JSON.stringify({ look, name, epithet }));
+                const sent: Record<string, unknown> = { look, name, epithet };
+                // The age and the height (2026-11-02): whole numbers, which the server checks against the limits. Left out here at first, and nobody could save.
+                for (const key of ["age", "height"]) {
+                    const value = fields[key];
+                    if (typeof value === "number" && Number.isInteger(value) && value > 0 && value < 1000) {
+                        sent[key] = value;
+                    }
+                }
+                // The pieces a character that exists marked in the "Roupas" tab, to receive once each (the server checks them against the catalog).
+                const clothes = fields["clothes"];
+                if (typeof clothes === "object" && clothes !== null) {
+                    const picked = clothes as Record<string, unknown>;
+                    const kept: Record<string, unknown> = {};
+                    if (picked["gender"] === "male" || picked["gender"] === "female") {
+                        kept["gender"] = picked["gender"];
+                        for (const part of ["top", "legs", "feet"]) {
+                            const value = picked[part];
+                            if (typeof value === "number" && Number.isInteger(value) && value >= -1 && value < 64) {
+                                kept[part] = value;
+                            }
+                        }
+                        sent["clothes"] = kept;
+                    }
+                }
+                Events.emitServer(ACCEPT, JSON.stringify(sent));
             }
         });
 

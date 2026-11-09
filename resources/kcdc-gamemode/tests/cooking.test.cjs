@@ -31,6 +31,8 @@ function load({ refuse = new Set(), removeOk = true, pots = [{ guid: "pot", posi
             if (id === "./item-uses.js") return itemUses;
             if (id === "./item-names.js") return { itemLine: (row) => `${row.amount}x ${row.item}` };
             if (id === "./guild-crafts.js") return { mayCraft: (player, kind) => player.crafts === undefined || player.crafts.includes(kind), refusal: (kind) => `não é para você: ${kind}` };
+            // The cauldron cooked at is lit (pot-fires.ts, 2026-11-02): recorded.
+            if (id === "./pot-fires.js") return { litForCooking: (player) => { (globalThis.__potsLit ??= []).push(player.id); return ""; } };
             if (id === "./vendors.js") return { CAMPS: [{ place: "estrada", fire: { x: 1000, y: 1000, z: 50 } }] };
             assert.fail(`unexpected require ${id}`);
         },

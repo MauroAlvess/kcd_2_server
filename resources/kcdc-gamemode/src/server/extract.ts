@@ -14,14 +14,22 @@
  * the player stands by it, as for forging. It gives no XP: it is not a way to level. A recipe that makes several at a time (arrows, soups) is not equipment and is
  * left out.
  *
+ * Several at once (2026-10-31, user: "na extração de itens deve ser possível extrair itens em quantidade igual na produção com limite de 10 itens"): a stack of the same piece (a row of
+ * the bag holds the units of one class and one condition) is taken apart a number of units at a time, from one up to ten and up to what the stack holds, the way the work of a trade
+ * is made a number of pieces at a time (`MAX_BATCH`); each unit gives back what one gives, all of it added first and the units taken last.
+ *
  * The materials are added before the piece is taken away: if the bag has no room, or the game turns one of them down, what was added is taken back and the
  * piece stays where it was, with its condition and its name; the other order would hand back a new, whole item.
+ *
+ * The bag is read whether or not the player's game has caught up with it (2026-11-03, a smith: "ao extrair um item a tela com a lista some, ele precisa fechar e abrir para vir a lista de
+ * novo"). `InventoryState.ready` is false from each change until the game shows it: the list sent right after a piece was broken took that for an empty bag and came out empty, and nothing
+ * sent it again until the page was reopened. The server holds the stock, and its rows are right at once.
  */
 
 import { CRAFT_ITEMS, CRAFT_PRICES, CRAFT_RECIPES, EXTRACT_ALIASES, EXTRACT_EXTRAS } from "./craft-data.js";
 import type { CraftRecipe, CraftStation } from "./craft-data.js";
 import { classOf } from "./craft-items.js";
-import { levelOf, STATIONS } from "./craft.js";
+import { batchOf, levelOf, MAX_BATCH, STATIONS } from "./craft.js";
 import type { NearCheck } from "./craft.js";
 import { mayCraft, showRefusal } from "./guild-crafts.js";
 import { iconOf } from "./item-icons.js";
@@ -79,6 +87,7 @@ function recipesOf(station: CraftStation): Map<string, CraftRecipe> {
 export function forgetTable(): void {
     table = null;
     extrasTable = null;
+    colours = null;
     scaledRecipes.clear();
 }
 
@@ -198,13 +207,29 @@ const worn = (row: Row): boolean => Number(row.equipped ?? 0) > 0;
 /** The pieces in a player's bag that the station's trade makes. */
 export function pieceRows(player: Player, station: CraftStation): Row[] {
     const state = Inventory.get(player);
-    if (state === null || !state.ready) {
+    if (state === null) {
         return [];
     }
     return state.items.filter((row) => row.amount > 0 && recipeFor(station, row.item) !== undefined);
 }
 
 const plural = (n: number): string => (n === 1 ? "1 material" : `${n} materiais`);
+
+/** The colour of each class that has a word for it (the dyes of the recipes, 2026-10-31 and 2026-11-03), by class. */
+let colours: Map<string, string> | null = null;
+
+/** The word for the colour of a piece: rows of one name and one icon differ by it (2026-11-03). Empty for a class with no word. */
+export function colourOf(item: string): string {
+    if (colours === null) {
+        colours = new Map();
+        for (const recipe of CRAFT_RECIPES) {
+            for (const [output, label] of recipe.variants ?? []) {
+                colours.set(String(output).toLowerCase(), label);
+            }
+        }
+    }
+    return colours.get(String(item).toLowerCase()) ?? "";
+}
 
 /** What the page says of a piece, and how its row is marked. */
 function describe(row: Row, recipe: CraftRecipe): { text: string; can: boolean; badge: [string, string] } {
@@ -238,6 +263,7 @@ export function extractView(player: Player, station: CraftStation): Record<strin
             }
         }
         const said = describe(row, recipe);
+        const colour = colourOf(row.item);
         return {
             id: key,
             cat: recipe.category,
@@ -247,10 +273,12 @@ export function extractView(player: Player, station: CraftStation): Record<strin
             lvl: 0,
             xp: 0,
             s: 0,
-            t: said.text,
+            t: colour === "" ? said.text : `${colour} · ${said.text}`,
             lock: false,
             can: said.can,
             badge: said.badge,
+            // The units of the stack that may be taken apart at once (the page's number of pieces, `craft.html`): up to what the stack holds and to ten.
+            ...(said.can ? { batch: true, qmax: Math.min(MAX_BATCH, row.amount) } : {}),
         };
     });
     return {
@@ -286,8 +314,18 @@ function undo(player: Player, added: ReadonlyArray<{ readonly units: ReadonlyArr
     }
 }
 
-/** A piece broken apart: `pageId` is the row's id behind its prefix. */
-export function extract(player: Player, pageId: string, station: CraftStation, near: NearCheck): Outcome {
+/** What a piece to break is, once every check said yes. */
+interface Prepared {
+    readonly row: Row;
+    readonly recipe: CraftRecipe;
+    readonly label: string;
+    readonly share: number;
+    readonly count: number;
+    readonly back: Array<[item: string, amount: number]>;
+}
+
+/** The checks of a piece to break: a refusal, or what is to be broken and what comes back. Nothing is taken or given. */
+function prepare(player: Player, pageId: string, station: CraftStation, near: NearCheck, wanted: unknown): Prepared | Outcome {
     if (!pageId.startsWith(EXTRACT_PREFIX) || !canExtractAt(station)) {
         return { ok: false, message: "Escolha um equipamento." };
     }
@@ -303,7 +341,7 @@ export function extract(player: Player, pageId: string, station: CraftStation, n
         return { ok: false, message: "Fique junto da forja para isso." };
     }
     const state = Inventory.get(player);
-    if (state === null || !state.ready) {
+    if (state === null) {
         return { ok: false, message: "A sua bolsa ainda não está pronta." };
     }
     const rowId = pageId.slice(EXTRACT_PREFIX.length);
@@ -320,10 +358,32 @@ export function extract(player: Player, pageId: string, station: CraftStation, n
     if (conditionOf(row) < MIN_CONDITION) {
         return { ok: false, message: `${label} está gasto demais (${share}%): só se extrai equipamento com ${Math.round(MIN_CONDITION * 100)}% de condição ou mais.` };
     }
-    const back = returnsOf(recipe);
-    if (back.length === 0) {
+    const one = returnsOf(recipe);
+    if (one.length === 0) {
         return { ok: false, message: `${label} não rende material para extrair.` };
     }
+    // A number of the stack at once: no more than ten, and no more than it holds (a stack of one unit is one).
+    const count = Math.min(batchOf(wanted), Math.max(1, row.amount));
+    const back: Array<[item: string, amount: number]> = one.map(([item, amount]) => [item, amount * count]);
+    return { row, recipe, label, share, count, back };
+}
+
+/**
+ * Whether a piece may be broken now, and how many of its stack: the checks of `extract`, with nothing taken or given. The breaking is a piece of work since 2026-11-03 (the station's
+ * animation plays for a while, `craft-menu.ts`), so it is asked before the work begins and checked again, whole, when it ends.
+ */
+export function checkExtraction(player: Player, pageId: string, station: CraftStation, near: NearCheck, wanted: unknown = 1): Outcome & { readonly count?: number } {
+    const ready = prepare(player, pageId, station, near, wanted);
+    return "ok" in ready ? ready : { ok: true, message: "", count: ready.count };
+}
+
+/** A piece broken apart, or `count` units of a stack of them (one to ten): `pageId` is the row's id behind its prefix. */
+export function extract(player: Player, pageId: string, station: CraftStation, near: NearCheck, wanted: unknown = 1): Outcome {
+    const ready = prepare(player, pageId, station, near, wanted);
+    if ("ok" in ready) {
+        return ready;
+    }
+    const { row, recipe, label, share, count, back } = ready;
 
     // The materials first; the piece goes last, and only if every one of them came.
     const added: Array<{ units: Array<{ id: string; amount: number }>; asked: number }> = [];
@@ -345,13 +405,17 @@ export function extract(player: Player, pageId: string, station: CraftStation, n
         undo(player, added);
         return { ok: false, message: "Nada foi feito: o equipamento mudou no meio do caminho." };
     }
-    const taken = Inventory.remove(player, { units: [{ id: row.id, amount: 1 }], revision: fresh.revision });
+    if (still.amount < count) {
+        undo(player, added);
+        return { ok: false, message: "Nada foi feito: o equipamento mudou no meio do caminho." };
+    }
+    const taken = Inventory.remove(player, { units: [{ id: row.id, amount: count }], revision: fresh.revision });
     if (!taken.ok) {
         undo(player, added);
         console.log(`extract: o jogo não tirou ${label} de ${player.nickname} (${recipe.id}): ${taken.code}`);
         return { ok: false, message: "Nada foi feito: o jogo não aceitou a extração, e o equipamento ficou com você." };
     }
     const list = back.map(([item, amount]) => `${amount}x ${CRAFT_ITEMS[item]?.[0] ?? item}`).join(", ");
-    console.log(`extract: ${player.nickname} extraiu ${label} (${share}%): ${list}`);
-    return { ok: true, message: `Você extraiu ${label}: voltaram ${list}.` };
+    console.log(`extract: ${player.nickname} extraiu ${count > 1 ? `${count}x ` : ""}${label} (${share}%): ${list}`);
+    return { ok: true, message: `Você extraiu ${count > 1 ? `${count}x ` : ""}${label}: voltaram ${list}.` };
 }

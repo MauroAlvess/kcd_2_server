@@ -7,11 +7,14 @@
  * The level's +Y is north and +X east, and the map is drawn with north up.
  */
 
+import { onKuttenberg } from "./level.js";
 import { MAP_PLACE_DATA, type MapPlaceData } from "./map-places-data.js";
+import { MAP_PLACE_DATA_TROSECKO } from "./map-places-data-trosecko.js";
 
 export type MapPlace = MapPlaceData;
 
-export const MAP_PLACES: readonly MapPlace[] = MAP_PLACE_DATA;
+/** The places of the level the server runs (`level.ts`): Kuttenberg's, or Trosky's since 2026-11-09. */
+export const MAP_PLACES: readonly MapPlace[] = onKuttenberg() ? MAP_PLACE_DATA : MAP_PLACE_DATA_TROSECKO;
 
 export interface Spot {
     readonly x: number;

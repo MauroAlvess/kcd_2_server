@@ -27,6 +27,31 @@ export interface Fee {
 
 const nothing = (): void => undefined;
 
+/**
+ * Takes the price of a change with no free one to spend (2026-10-31, user: "NPC só a primeira vez de graça qualquer ofício, depois é 100 moedas"): the guild vendors give the first trade a
+ * player learns for nothing and ask this for every one after it, whatever is left of the player's one free change of the panel (`guild-vendors.ts`).
+ */
+export function chargeChangePrice(player: Player): Fee {
+    if (player.steamId === "") {
+        return { ok: false, free: false, message: "Sua conta não tem identificação Steam, então a troca não poderia ser salva.", refund: nothing };
+    }
+    const have = moneyOf(player);
+    if (have < CHANGE_PRICE_UNITS) {
+        return { ok: false, free: false, message: `Aprender outro ofício custa ${coins(CHANGE_PRICE_UNITS)} e você tem ${coins(have)}.`, refund: nothing };
+    }
+    if (!takeMoney(player, CHANGE_PRICE_UNITS)) {
+        return { ok: false, free: false, message: "As moedas não puderam ser cobradas agora: espere o inventário terminar de atualizar e tente de novo.", refund: nothing };
+    }
+    return {
+        ok: true,
+        free: false,
+        message: "",
+        refund: () => {
+            giveMoney(player, CHANGE_PRICE_UNITS);
+        },
+    };
+}
+
 /** Takes the free change or the price of a change of this kind. */
 export function chargeForChange(player: Player, kind: FreeChange): Fee {
     if (player.steamId === "") {

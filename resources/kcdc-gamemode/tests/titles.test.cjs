@@ -191,10 +191,13 @@ test("over the head: only the title the player chose, in gold, in the form of th
     api.setShown(KATERINA, "cavaleiro");
     const worn = fakePlayer(HANS);
     api.applyNametag(worn);
-    assert.deepEqual(plain(worn.calls), [["text", "Cavaleiro"], ["colour", 0xffd5a156], ["health", false], ["visible", true]]);
+    // The nametag is a blank line since 2026-11-04 (the text is a label only who knows the player is sent: head-labels.ts); `headOf` says what the text is.
+    assert.deepEqual(plain(worn.calls), [["text", "\u00a0"], ["colour", 0xffffffff], ["health", false], ["visible", true]]);
+    assert.deepEqual(plain(api.headOf(worn)), { text: "Cavaleiro", colour: 0xffd5a156 });
     const she = fakePlayer(KATERINA, "male");
     api.applyNametag(she);
-    assert.deepEqual(plain(she.calls)[0], ["text", "Cavaleira"], "the saved look says woman whatever the game reports");
+    assert.deepEqual(plain(api.headOf(she)), { text: "Cavaleira", colour: 0xffd5a156 }, "the saved look says woman whatever the game reports");
+    assert.equal(api.headOf(fakePlayer("76561198000000077")), null, "nothing to say, nothing over the head");
 
     const plainOne = fakePlayer("76561198000000077");
     api.applyNametag(plainOne);
@@ -215,8 +218,9 @@ test("a marked thief wears Ladrão over the head, in red, over any title, and La
     api.setShown(HANS, "cavaleiro");
     const hans = fakePlayer(HANS);
     api.applyNametag(hans);
-    assert.deepEqual(plain(hans.calls), [["text", "Ladrão"], ["colour", 0xffd23c32], ["health", false], ["visible", true]]);
+    assert.deepEqual(plain(hans.calls), [["text", "\u00a0"], ["colour", 0xffffffff], ["health", false], ["visible", true]], "a blank line, whoever knows him is sent the text");
+    assert.deepEqual(plain(api.headOf(hans)), { text: "Ladrão", colour: 0xffd23c32 });
     const she = fakePlayer(KATERINA, "male");
     api.applyNametag(she);
-    assert.deepEqual(plain(she.calls)[0], ["text", "Ladra"]);
+    assert.deepEqual(plain(api.headOf(she)), { text: "Ladra", colour: 0xffd23c32 });
 });

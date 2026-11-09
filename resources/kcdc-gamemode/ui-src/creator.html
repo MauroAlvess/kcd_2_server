@@ -98,6 +98,10 @@
     .ctabs { display: flex; gap: 1.6rem; margin-top: .7rem; border-bottom: 1px solid var(--rule); }
     .ctab { padding: .45rem 0 .5rem; margin-bottom: -1px; font: 600 .74rem/1.2 var(--display); letter-spacing: .24em; text-transform: uppercase; color: var(--ink-2); background: none; border: 0; border-bottom: 2px solid transparent; }
     .ctab.on { color: var(--ink); border-bottom-color: var(--btn); }
+    .ctab:disabled { opacity: .4; cursor: default; }
+    /* A newcomer goes in order, and the steps are numbered. */
+    .ctabs.stepped { counter-reset: step; }
+    .ctabs.stepped .ctab::before { counter-increment: step; content: counter(step) ". "; }
     .clothes { flex: 1; min-height: 0; overflow-y: auto; padding: .8rem .3rem .4rem 0; }
     .cgroup + .cgroup { margin-top: 1.1rem; }
     .cgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
@@ -114,6 +118,9 @@
     .k em { font: italic .95rem/1 var(--body); letter-spacing: 0; text-transform: none; color: var(--ink-2); opacity: .8; }
 
     .sexus { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+    /* Aetas and Statura side by side (2026-11-02): two steppers that keep going while their arrow is held. */
+    .duo { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+    .duo .arrow { width: 2.2rem; }
     .gender {
         display: flex;
         flex-direction: column;
@@ -243,6 +250,16 @@
                 <div class="k">Cutis<em>pele</em></div>
                 <div class="sel" id="s-skin"></div>
             </section>
+            <section class="row duo">
+                <div>
+                    <div class="k">Aetas<em>idade</em></div>
+                    <div class="sel" id="s-age"></div>
+                </div>
+                <div>
+                    <div class="k">Statura<em>altura</em></div>
+                    <div class="sel" id="s-height"></div>
+                </div>
+            </section>
             <section class="row">
                 <div class="k">Nomen<em>o primeiro nome</em></div>
                 <input class="field" id="name" type="text" maxlength="16" autocomplete="off" spellcheck="false">
@@ -259,6 +276,8 @@
 
         <footer class="foot">
             <button class="btn ghost" id="dice" title="Um visual ao acaso">Sortear</button>
+            <button class="btn ghost" id="back" hidden>Voltar</button>
+            <button class="btn go" id="next" hidden>Próximo</button>
             <button class="btn go" id="save">Salvar e criar</button>
         </footer>
 
@@ -330,6 +349,11 @@ let rules = { min: 2, max: 16 };
 let epithets = { groups: [], list: [] };
 /* The first time there is no way out: the player makes the character and gives it a name, or does not play. */
 let mandatory = false;
+/* A character that exists saves; a newcomer creates. */
+let existing = false;
+/* The age and the height (2026-11-02, the server's `character-details.ts`): what the character says, and the limits; the height in centimetres. */
+let detailLimits = { age: { min: 18, max: 80 }, height: { male: { min: 155, max: 200 }, female: { min: 145, max: 185 } }, defaults: { age: 25, height: { male: 172, female: 162 } } };
+let details = { age: 25, height: 172 };
 let locked = false;
 let picked = null;
 let epithet = "";
@@ -373,9 +397,30 @@ function step(kind, by) {
     changed();
 }
 
+const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+const heightText = (cm) => (cm / 100).toFixed(2).replace(".", ",") + " m";
+
+/* A height that does not fit the other gender is that gender's own start. */
+function fitHeight() {
+    const limits = detailLimits.height[picked.gender];
+    if (details.height < limits.min || details.height > limits.max) details.height = detailLimits.defaults.height[picked.gender];
+}
+
+function stepDetail(kind, by) {
+    if (kind === "age") details.age = clamp(details.age + by, detailLimits.age.min, detailLimits.age.max);
+    else {
+        const limits = detailLimits.height[picked.gender];
+        details.height = clamp(details.height + by, limits.min, limits.max);
+    }
+    note = "";
+    draw();
+    drawName();
+}
+
 function setGender(gender) {
     if (picked.gender === gender || (genders !== "both" && genders !== gender)) return;
     picked = freshLook(gender);
+    fitHeight();
     changed();
     // The other gender wears other clothes: what was picked for it before, or the first of each.
     drawClothes();
@@ -391,10 +436,60 @@ let clothesMode = "dress";
 let dress = { male: { top: 0, legs: 0, feet: 0 }, female: { top: 0, legs: 0, feet: 0 } };
 const CLOTH_PARTS = [["top", "Parte de cima", "túnica ou vestido"], ["legs", "Calças", "para as pernas"], ["feet", "Calçados", "botas ou sapatos"]];
 
-function showPane(pane) {
-    for (const tab of document.querySelectorAll(".ctab")) tab.classList.toggle("on", tab.dataset.pane === pane);
+/* ---------- The steps of a newcomer's first creation (2026-10-29: "primeira etapa o corpo, segunda a roupa"): the next one opens once the name is good; the last one saves.
+   A character already made has no such steps, and its tabs are free as they always were. ---------- */
+
+let pane = "rows";
+
+const paneList = () => ["rows"].concat(clothes ? ["clothes"] : []);
+const stepped = () => !existing;
+const lastPane = () => {
+    const panes = paneList();
+    return pane === panes[panes.length - 1];
+};
+
+function showPane(next) {
+    pane = next;
+    drawSteps();
+}
+
+function drawSteps() {
+    const panes = paneList();
+    if (panes.indexOf(pane) < 0) pane = "rows";
+    const stepper = stepped();
+    $("ctabs").hidden = panes.length < 2;
+    $("ctabs").classList.toggle("stepped", stepper);
+    for (const tab of document.querySelectorAll(".ctab")) {
+        const index = panes.indexOf(tab.dataset.pane);
+        tab.hidden = index < 0;
+        tab.classList.toggle("on", tab.dataset.pane === pane);
+        tab.disabled = stepper && index > 0 && !canSave();
+    }
     $("rows").hidden = pane !== "rows";
     $("clothes").hidden = pane !== "clothes";
+    const at = panes.indexOf(pane);
+    $("dice").hidden = stepper && pane !== "rows";
+    $("back").hidden = !stepper || at <= 0;
+    $("next").hidden = !stepper || lastPane();
+    $("save").hidden = stepper && !lastPane();
+    $("next").disabled = pane === "rows" && !canSave();
+}
+
+function advance() {
+    const panes = paneList();
+    const at = panes.indexOf(pane);
+    if (!stepped() || at < 0 || at >= panes.length - 1) {
+        save();
+        return;
+    }
+    if (pane === "rows" && !canSave()) return;
+    showPane(panes[at + 1]);
+}
+
+function retreat() {
+    const panes = paneList();
+    const at = panes.indexOf(pane);
+    if (at > 0) showPane(panes[at - 1]);
 }
 
 function drawClothes() {
@@ -480,11 +575,48 @@ function selector(host, kind) {
     return value;
 }
 
+/* A number stepped one at a time, faster while the arrow is held, and with the wheel over it. */
+function stepper(host, kind) {
+    const back = make("button", "arrow", "‹");
+    const value = make("span", "val");
+    const next = make("button", "arrow", "›");
+    const hold = (button, by) => {
+        let timer = 0;
+        const stop = () => {
+            clearTimeout(timer);
+            clearInterval(timer);
+            timer = 0;
+        };
+        button.addEventListener("mousedown", (event) => {
+            if (event.button !== 0) return;
+            stop();
+            stepDetail(kind, by);
+            timer = setTimeout(() => {
+                timer = setInterval(() => stepDetail(kind, by), 70);
+            }, 380);
+        });
+        button.addEventListener("mouseup", stop);
+        button.addEventListener("mouseleave", stop);
+    };
+    hold(back, -1);
+    hold(next, 1);
+    host.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        stepDetail(kind, event.deltaY > 0 ? -1 : 1);
+    }, { passive: false });
+    host.appendChild(back);
+    host.appendChild(value);
+    host.appendChild(next);
+    return value;
+}
+
 const values = {
     hair: selector($("s-hair"), "hair"),
     head: selector($("s-head"), "head"),
     beard: selector($("s-beard"), "beard"),
     skin: selector($("s-skin"), "skin"),
+    age: stepper($("s-age"), "age"),
+    height: stepper($("s-height"), "height"),
 };
 
 function label(node, text, of) {
@@ -524,6 +656,8 @@ function draw() {
     const beards = beardCount();
     $("s-beard").classList.toggle("off", beards === 0);
     label(values.beard, beards === 0 ? "Sem barba" : picked.beard < 0 ? "Sem barba" : "Barba " + (picked.beard + 1), beards === 0 ? "" : "de " + beards);
+    label(values.age, details.age + " anos");
+    label(values.height, heightText(details.height));
     drawTones();
 }
 
@@ -574,7 +708,8 @@ function drawName() {
         hint.className = "hint bad";
     }
     $("save").disabled = saving || !canSave();
-    $("save").textContent = saving ? "Criando…" : "Salvar e criar";
+    $("save").textContent = saving ? (existing ? "Salvando…" : "Criando…") : existing ? "Salvar" : "Salvar e criar";
+    drawSteps();
 }
 
 function canSave() {
@@ -608,7 +743,7 @@ $("name").addEventListener("input", (event) => {
     askName();
 });
 $("name").addEventListener("keydown", (event) => {
-    if (event.key === "Enter") save();
+    if (event.key === "Enter") advance();
 });
 
 /* ---------- the alcunha: a list that opens upwards, in groups ---------- */
@@ -692,7 +827,9 @@ function save() {
     saving = true;
     drawName();
     const wear = clothes && clothesMode === "give" ? { gender: picked.gender, ...dress[picked.gender] } : undefined;
-    send("creator:accept", wear ? { look: picked, name, epithet, clothes: wear } : { look: picked, name, epithet });
+    const sent = { look: picked, name, epithet, age: details.age, height: details.height };
+    if (wear) sent.clothes = wear;
+    send("creator:accept", sent);
     // The server's answer closes the page; a refusal frees the button, and so does a silence.
     setTimeout(() => {
         if (saving) {
@@ -776,6 +913,8 @@ $("g-male").addEventListener("click", () => setGender("male"));
 $("g-female").addEventListener("click", () => setGender("female"));
 $("dice").addEventListener("click", dice);
 $("save").addEventListener("click", save);
+$("next").addEventListener("click", advance);
+$("back").addEventListener("click", retreat);
 
 /* ---------- what the server sends ---------- */
 
@@ -786,10 +925,20 @@ window.addEventListener("creator:begin", (event) => {
     rules = data.rules;
     epithets = data.epithets;
     mandatory = data.mandatory === true;
+    existing = data.existing === true;
     $("close").hidden = mandatory;
-    $("sub").textContent = mandatory ? "Para entrar em Kuttenberg, crie o seu personagem e dê um nome a ele" : "Quem você será em Kuttenberg";
+    $("sub").textContent = data.complete === true
+        ? "O seu personagem agora tem idade e altura: escolha as duas para continuar (o visual também pode mudar, se quiser)"
+        : mandatory ? "Para entrar em Kuttenberg, crie o seu personagem e dê um nome a ele" : "Quem você será em Kuttenberg";
     locked = data.identity.locked === true;
     picked = Object.assign({}, data.look);
+    if (data.detailLimits && data.detailLimits.age && data.detailLimits.height && data.detailLimits.defaults) detailLimits = data.detailLimits;
+    const said = data.details || {};
+    details = {
+        age: Number.isInteger(said.age) ? clamp(said.age, detailLimits.age.min, detailLimits.age.max) : detailLimits.defaults.age,
+        height: Number.isInteger(said.height) ? said.height : detailLimits.defaults.height[picked.gender],
+    };
+    fitHeight();
     name = data.identity.name || data.identity.suggestion || "";
     epithet = data.identity.epithet || "";
     verdict = { for: "", ok: false, message: "", full: "" };
@@ -805,7 +954,6 @@ window.addEventListener("creator:begin", (event) => {
     askName();
     // A new start: the clothes come after.
     clothes = null;
-    $("ctabs").hidden = true;
     showPane("rows");
 });
 
@@ -815,9 +963,9 @@ window.addEventListener("creator:clothes", (event) => {
     // Nothing marked to receive until the player marks it; a newcomer starts in the first of each.
     const first = clothesMode === "give" ? -1 : 0;
     dress = { male: { top: first, legs: first, feet: first }, female: { top: first, legs: first, feet: first } };
-    $("ctabs").hidden = !clothes;
     drawClothes();
     sendDress();
+    drawSteps();
 });
 
 window.addEventListener("creator:name", (event) => {

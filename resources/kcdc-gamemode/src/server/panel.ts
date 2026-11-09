@@ -8,6 +8,7 @@
  */
 
 import { isAdmin } from "./auth.js";
+import { emitLarge } from "./big-emit.js";
 import type { CommandRegistry } from "./command.js";
 
 const RESOURCE = "kcdc-gamemode";
@@ -31,8 +32,21 @@ function world(): Record<string, unknown> {
     };
 }
 
-function roster(): ReadonlyArray<Record<string, unknown>> {
-    return Player.all().map((player) => ({
+/**
+ * The players the panel lists: the administrator and the `ROSTER_MAX` nearest to them (2026-11-02: every player of the server went in one message, which
+ * with the commands' list was over the ~29 KB a client reads in one piece already, and with 512 players would be some 130 KB a poll).
+ */
+const ROSTER_MAX = 40;
+
+function roster(viewer: Player): ReadonlyArray<Record<string, unknown>> {
+    const at = viewer.position;
+    const away = (player: Player): number => (player.id === viewer.id ? -1 : player.ready ? Math.hypot(player.position.x - at.x, player.position.y - at.y) : Number.POSITIVE_INFINITY);
+    const nearest = Player.all()
+        .map((player) => ({ player, distance: away(player) }))
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, ROSTER_MAX + 1)
+        .map((entry) => entry.player);
+    return nearest.map((player) => ({
         id: player.id,
         slot: player.playerIndex,
         nickname: player.nickname,
@@ -84,11 +98,14 @@ export function installDebugPanel(registry: CommandRegistry): void {
         if (!isAdmin(player)) {
             return;
         }
-        player.emit(
-            `${RESOURCE}:panel.realm`,
+        // In pieces when it is too big for one message (`big-emit.ts`): the commands' list alone is some 40 KB.
+        emitLarge(
+            player,
+            "panel.realm",
             JSON.stringify({
                 world: world(),
-                players: roster(),
+                players: roster(player),
+                total: Player.all().length,
                 spawned: spawned(),
                 commands: registry.all().map((command) => ({ name: command.name, summary: command.summary, usage: command.usage })),
             }),

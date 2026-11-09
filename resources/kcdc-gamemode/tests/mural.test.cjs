@@ -34,7 +34,14 @@ function run(file, requires, extra = {}) {
     return context.exports;
 }
 
-function load({ saved = null, characters = {}, wallets = {}, diskFails = false, lang = "pt", admins = [] } = {}) {
+/** The towns the board tests know (the real list is `citizenship.ts`'s): the id of a board's place is its town's. */
+const TOWNS_FOR_TESTS = [
+    { id: "suchdol", name: "Suchdol", crest: "town-suchdol.webp", crestUrl: "", lord: "Gunther", family: "Von Capon", consort: { label: "Lady", name: "Ludmilla", courtesy: true, text: "" }, seatName: null, lands: ["Wysoka"], citizens: 3, npcs: 7 },
+    { id: "raborsch", name: "Raborsch", crest: "", crestUrl: "https://exemplo.com/brasao.png", lord: null, family: null, consort: null, seatName: null, lands: [], citizens: 0, npcs: 4 },
+    { id: "minas", name: "Minas", crest: "town-suchdol.webp", crestUrl: "", lord: null, family: null, consort: null, seatName: "Pschitoky", lands: [], citizens: 1, npcs: 2 },
+];
+
+function load({ saved = null, characters = {}, wallets = {}, diskFails = false, lang = "pt", admins = [], towns = TOWNS_FOR_TESTS, citizen = {}, closed = [], wars = {}, free = true, chooseResult = { ok: true, message: "Você agora é cidadão de Suchdol: quando morrer, é lá que você acorda." }, lords = [] } = {}) {
     const files = new Map();
     if (saved !== null) files.set(FILE, typeof saved === "string" ? saved : JSON.stringify(saved));
     const disk = {
@@ -54,8 +61,8 @@ function load({ saved = null, characters = {}, wallets = {}, diskFails = false, 
     const store = run("store.js", { "node:fs": disk }, { logs });
     // The real reach table and the real boards' module.
     const reach = run("reach.js", {});
-    const places = run("mural-places.js", { "./reach.js": reach }, { logs, globals: { WorldResource: { ready: true, all: () => [] }, Events: { once() {} } } });
-    const state = { logs, players: [], handlers: new Map(), client: new Map(), intervals: [], characters, wallets: { ...wallets }, art: 0, chat: [] };
+    const places = run("mural-places.js", { "./reach.js": reach, "./level.js": { onKuttenberg: () => true } }, { logs, globals: { WorldResource: { ready: true, all: () => [] }, Events: { once() {} } } });
+    const state = { logs, players: [], handlers: new Map(), client: new Map(), intervals: [], characters, wallets: { ...wallets }, art: 0, chat: [], towns, citizen: { ...citizen }, closed: [...closed], wars, free, chooseResult, chosen: [], social: [], lords: [...lords] };
     const money = {
         MONEY_UNIT: 10,
         moneyOf: (player) => state.wallets[player.id] ?? 0,
@@ -72,10 +79,24 @@ function load({ saved = null, characters = {}, wallets = {}, diskFails = false, 
         "./big-emit.js": { emitLarge: (player, name, json) => player.large.push({ name, data: JSON.parse(json) }) },
         "./characters.js": { getCharacter: (steamId) => state.characters[steamId] ?? null },
         "./craft-titles.js": { craftTitle: (key) => { state.art += 1; return key === "cartaz-recursos" ? "" : `data:image/webp;base64,${key}`; } },
+        // The towns (`citizenship.ts`, tested on its own): what a town's card holds, who is a citizen of which, who may depose (a lord, an administrator) and what `choose` answers.
+        "./citizenship.js": {
+            townById: (id) => state.towns.find((town) => town.id === id) ?? null,
+            townOf: (steamId) => state.citizen[steamId] ?? null,
+            isClosed: (town) => state.closed.includes(town.id),
+            mayDepose: (player, town) => admins.includes(player.id) || state.lords.includes(player.id),
+            choose: (player, id) => { state.chosen.push([player.id, id]); return state.chooseResult; },
+            townView: (town) => ({ ...town, closed: state.closed.includes(town.id) }),
+        },
+        "./free-changes.js": { CHANGE_PRICE_COINS: 100, freeChangeLeft: () => state.free },
+        "./status.js": { sendSocial: (player) => state.social.push(player.id) },
+        "./wars.js": { opponentsOf: (id) => state.wars[id] ?? [] },
         "./language.js": { languageOf: () => lang, translate: (text, to) => (to === "en" ? `EN:${text}` : text) },
         "./money.js": money,
         "./mural-places.js": places,
         "./store.js": store,
+        // The text rules shared with the letters (2026-11-02): the real ones.
+        "./text-style.js": run("text-style.js", {}),
     }, {
         logs,
         globals: {
@@ -176,6 +197,53 @@ test("the places are the villages and the towns, no castle among them; no two sh
     assert.equal(places.placeOf(791.4, 3345.4)?.id, "suchdol");
     assert.equal(places.placeOf(1431.0, 3878.9)?.id, "raborsch");
     assert.equal(places.placeOf(3000, 3000), null);
+});
+
+test("on Trosky the places of the boards are the grounds of the catalog's regions, and each one's id is its town's (user, 2026-11-09: a board in every place)", () => {
+    const reach = run("reach.js", {});
+    const places = run("mural-places.js", { "./reach.js": reach, "./level.js": { onKuttenberg: () => false } }, { globals: { WorldResource: { ready: true, all: () => [] }, Events: { once() {} } } });
+    const catalog = fs.readFileSync(path.join(__dirname, "../src/server/properties.ts"), "utf8");
+    const towns = fs.readFileSync(path.join(__dirname, "../src/server/citizenship.ts"), "utf8");
+    const ids = places.PLACES.map((one) => one.id);
+    assert.equal(new Set(ids).size, ids.length);
+    assert.deepEqual(plain(ids), ["semine", "nebakov", "trosky", "acampamento-nomade", "zhelejov", "troskowitz", "tachov", "apolonia", "slatego", "schdiar", "vidlak"]);
+    const block = catalog.slice(catalog.indexOf("export const TROSKY_REGIONS"), catalog.indexOf("\n];", catalog.indexOf("export const TROSKY_REGIONS")));
+    const starts = ids.map((id) => block.indexOf(`id: "${id}",`));
+    assert.ok(starts.every((at, index) => at >= 0 && (index === 0 || at > starts[index - 1])), "the regions are in the catalog in the places' order");
+    for (const [index, place] of places.PLACES.entries()) {
+        // the box is the one round the catalog's region and its compounds (mills, inn, farms), so a region moved there moves its board's place too
+        const text = block.slice(starts[index], index + 1 < starts.length ? starts[index + 1] : block.length);
+        const found = text.match(/name: "[^"]+",\s*minX: (\d+),\s*maxX: (\d+),\s*minY: (\d+),\s*maxY: (\d+)/);
+        assert.ok(found, `${place.id} is a region of the catalog`);
+        const boxes = [{ minX: Number(found[1]), maxX: Number(found[2]), minY: Number(found[3]), maxY: Number(found[4]) }];
+        for (const compound of text.matchAll(/box: \{ minX: (\d+), maxX: (\d+), minY: (\d+), maxY: (\d+) \}/g)) boxes.push({ minX: Number(compound[1]), maxX: Number(compound[2]), minY: Number(compound[3]), maxY: Number(compound[4]) });
+        const round = { minX: Math.min(...boxes.map((box) => box.minX)), maxX: Math.max(...boxes.map((box) => box.maxX)), minY: Math.min(...boxes.map((box) => box.minY)), maxY: Math.max(...boxes.map((box) => box.maxY)) };
+        assert.deepEqual(plain(place.box), round, place.id);
+        const middle = { x: (place.box.minX + place.box.maxX) / 2, y: (place.box.minY + place.box.maxY) / 2 };
+        assert.equal(places.placeOf(middle.x, middle.y)?.id, place.id, `${place.id}: a point in its middle is its`);
+    }
+    // the eight towns of Trosky's citizenship are all places (so their boards' decrees are theirs); the three that are no town (Slatego, Schdiar, Vidlak) have a board but no decree
+    const trosky = towns.slice(towns.indexOf("export const TROSKY_TOWNS"));
+    const townIds = [...trosky.slice(0, trosky.indexOf("\n];")).matchAll(/\{ id: "([a-z-]+)", region:/g)].map((match) => match[1]);
+    assert.ok(townIds.length >= 8, "the towns were read");
+    assert.equal(townIds.length, 8);
+    for (const id of townIds) assert.ok(ids.includes(id), `${id} is a town of Trosky and has a place for its board`);
+    assert.equal(places.placeOf(100, 100), null);
+});
+
+test("the user's boards of Trosky (worlds/quadros-trosky.world.json): one in each of the 11 places, each named by the place it stands in (2026-11-09)", (context) => {
+    const file = path.join(__dirname, "../../../worlds/quadros-trosky.world.json");
+    if (!fs.existsSync(file)) {
+        context.skip("the worlds folder is not beside the gamemode (the staging copy)");
+        return;
+    }
+    const reach = run("reach.js", {});
+    const places = run("mural-places.js", { "./reach.js": reach, "./level.js": { onKuttenberg: () => false } }, { globals: { WorldResource: { ready: true, all: () => [] }, Events: { once() {} } } });
+    const world = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(world.level, "trosecko");
+    const boards = places.boardsOf(world.objects.map((one) => ({ model: one.model, position: { x: one.position[0], y: one.position[1], z: one.position[2] } })));
+    assert.deepEqual(plain(boards.map((board) => board.id).sort()), plain(places.PLACES.map((place) => place.id).sort()), "one board in each place, none outside them");
+    for (const board of boards) assert.ok(board.z > 0, `${board.id}: a ground height`);
 });
 
 test("the boards the world file puts up stand only in villages and towns that have a coach stop, never in a castle (user, 2026-10-24)", (context) => {
@@ -542,4 +610,115 @@ test("an administrator takes letters down by id or by board, from anywhere", () 
     assert.equal(sut.mural.adminRemove("suchdol", "admin retirou"), 2);
     assert.equal(sut.mural.allPosters().length, 0);
     assert.equal(sut.mural.adminRemove("nada", "admin retirou"), 0);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The Cidadania tab (2026-11-09): the town the board stands in, and the button that makes the player its citizen. (The information of the region, of 2026-11-04, left the boards the same night.)
+
+const CITIZEN = "kcdc-gamemode:mural.citizen";
+const KUTTENBERG_BOARD_AT = { x: 3157.6, y: 703, z: 54 };
+
+test("the view has the card of the board's town: crest, lord, family, Lady, how many citizens, the wars, the NPCs; and the player's own standing", () => {
+    const { sut, hans } = ready({ wars: { suchdol: ["raborsch", "minas"] } });
+    sut.mural.openMural(hans, true, 1_000_000);
+    const view = hans.large.at(-1).data;
+    assert.deepEqual(plain(view.town), {
+        id: "suchdol", name: "Suchdol", crest: "town-suchdol.webp", crestUrl: "", lord: "Gunther", family: "Von Capon", consort: { label: "Lady", name: "Ludmilla", courtesy: true, text: "" }, seatName: null,
+        lands: ["Wysoka"], citizens: 3, closed: false, npcs: 7, wars: ["Raborsch", "Minas"], mine: null, kind: "first", price: 100,
+    });
+    assert.equal(view.decrees, undefined, "the information of the region is gone");
+    assert.equal(view.decree, undefined);
+    assert.ok(!JSON.stringify(view).includes(STEAM), "no account goes to a page");
+});
+
+test("a board in a place that is no town has no Cidadania tab: the view says so (null), and the citizenship cannot be asked for from it", () => {
+    const { sut } = ready();
+    const far = sut.player(4, OTHER, { position: KUTTENBERG_BOARD_AT, charName: "Radovan" });
+    sut.mural.openMural(far, true, 1_000_000);
+    assert.equal(far.large.at(-1).data.town, null, "Kuttenberg is no town of the test's list");
+    assert.equal(far.large.at(-1).data.board.id, "kuttenberg");
+    const outcome = sut.mural.becomeCitizen(far, { board: "kuttenberg" });
+    assert.equal(outcome.ok, false);
+    assert.match(outcome.message, /não é uma cidade/);
+    assert.deepEqual(plain(sut.state.chosen), []);
+    assert.equal(sut.mural.townOfBoard("zikmundovo"), null);
+    assert.equal(sut.mural.townOfBoard("grunta").id, "minas", "the board of Minas is called grunta");
+    assert.equal(sut.mural.townOfBoard("suchdol").name, "Suchdol");
+});
+
+test("the button of the tab says what the change is: a first choice, the free change, a paid one, an administrator's, or that the player is a citizen already, or that the lord closed the town", () => {
+    const kindFor = (over, extra = {}) => {
+        const { sut, hans } = ready(over);
+        sut.mural.openMural(hans, true, 1_000_000);
+        return hans.large.at(-1).data.town;
+    };
+    const SUCHDOL = TOWNS_FOR_TESTS[0];
+    const RABORSCH = TOWNS_FOR_TESTS[1];
+    assert.equal(kindFor({}).kind, "first", "nobody's citizen yet");
+    assert.equal(kindFor({ citizen: { [STEAM]: RABORSCH }, free: true }).kind, "free");
+    assert.deepEqual([kindFor({ citizen: { [STEAM]: RABORSCH }, free: false }).kind, kindFor({ citizen: { [STEAM]: RABORSCH }, free: false }).price], ["paid", 100]);
+    assert.equal(kindFor({ citizen: { [STEAM]: RABORSCH }, admins: [1] }).kind, "admin", "an administrator changes at will");
+    const here = kindFor({ citizen: { [STEAM]: SUCHDOL } });
+    assert.deepEqual([here.kind, here.mine], ["here", "Suchdol"]);
+    assert.equal(kindFor({ closed: ["suchdol"] }).kind, "closed", "a town whose lord closed the citizenship takes nobody new");
+    assert.equal(kindFor({ closed: ["suchdol"], lords: [1] }).kind, "first", "the lord of the lands (and an administrator) may still choose it");
+    const closedFor = kindFor({ closed: ["suchdol"] });
+    assert.equal(closedFor.closed, true);
+});
+
+test("asking for the citizenship at the board makes the player a citizen of its town, tells the panel, and sends the board again; the page is answered in the player's language", () => {
+    const { sut, hans } = ready();
+    sut.mural.openMural(hans, true, 1_000_000);
+    hans.large.length = 0;
+    send(sut, CITIZEN, hans, { board: "suchdol" });
+    assert.deepEqual(plain(sut.state.chosen), [[1, "suchdol"]], "the town is the board's own");
+    assert.deepEqual(plain(sut.state.social), [1], "the F2 panel is told");
+    assert.deepEqual(answers(hans).map((a) => [a.what, a.ok]), [["citizen", true]]);
+    assert.match(answers(hans)[0].message, /Você agora é cidadão de Suchdol/);
+    assert.equal(hans.large.length, 1, "the board is sent again, with the new standing");
+    const english = ready({ lang: "en" });
+    english.sut.mural.openMural(english.hans, true, 1_000_000);
+    send(english.sut, CITIZEN, english.hans, { board: "suchdol" });
+    assert.match(answers(english.hans)[0].message, /^EN:Você agora é cidadão/);
+});
+
+test("a refusal of the citizenship (the town closed, a price not paid) is told to the page and changes nothing else; and it is asked only at the board, for the board", () => {
+    const { sut, hans } = ready({ chooseResult: { ok: false, message: "A cidadania de Suchdol está fechada pelo senhor das terras: ninguém novo pode se tornar cidadão por enquanto." } });
+    sut.mural.openMural(hans, true, 1_000_000);
+    send(sut, CITIZEN, hans, { board: "suchdol" });
+    assert.deepEqual(answers(hans).map((a) => [a.what, a.ok]), [["citizen", false]]);
+    assert.deepEqual(plain(sut.state.social), [], "nothing changed: the panel is not touched");
+    // Another board's id, or none: refused before the town is asked.
+    assert.match(sut.mural.becomeCitizen(hans, { board: "raborsch" }).message, /se afastou/);
+    assert.match(sut.mural.becomeCitizen(hans, {}).message, /se afastou/);
+    assert.match(sut.mural.becomeCitizen(hans, null).message, /se afastou/);
+    const away = sut.player(4, OTHER, { position: { x: 100, y: 100, z: 10 } });
+    assert.match(sut.mural.becomeCitizen(away, { board: "suchdol" }).message, /se afastou/);
+    assert.equal(sut.state.chosen.length, 1, "only the first one reached the town");
+});
+
+test("what the file holds of the information of the region (kind decreto) is let go at the next start, and the posters stay", () => {
+    const old = { id: "d1", board: "suchdol", category: "decreto", title: "Regras", body: "O senhor manda e o povo cumpre.", style: {}, anonymous: false, author: "Hans", owner: STEAM, at: 5, until: 8_640_000_000_000_000, role: "Lorde de Suchdol" };
+    const letter = { id: "p1", board: "suchdol", category: "avisos", title: "Velho", body: "Um aviso comum e comprido.", style: {}, anonymous: false, author: "Hans", owner: STEAM, at: 5, until: 9_999_999_999_999 };
+    const sut = load({ saved: { posters: [old, letter] } });
+    sut.places.setBoards(sut.places.boardsOf(BOARDS));
+    sut.mural.installMural();
+    assert.deepEqual(plain(sut.mural.allPosters().map((one) => one.id)), ["p1"]);
+    assert.equal(sut.mural.DECREE, undefined);
+    assert.equal(sut.mural.decreeSettings, undefined);
+});
+
+test("the page has the two tabs and asks the server for the citizenship with the board it is at; nothing of the information of the region is left in it", () => {
+    const page = fs.readFileSync(path.join(__dirname, "../ui-src/mural.html"), "utf8");
+    assert.match(page, /\["town", t\.tabTown\]/);
+    assert.match(page, /send\("mural:citizen", \{ board: data\.board\.id \}\)/);
+    for (const text of ["tabTown", "btnFirst", "btnFree", "btnAdmin", "btnHere", "noteShut", "tWarWith", "townFoot"]) {
+        assert.equal(page.split(`${text}:`).length - 1, 2, `${text} in both languages`);
+    }
+    for (const gone of ["decreto", "decreeBtn", "tabDecrees", "draftDecree", "data.decree", "noExpiry", "Informações da região"]) {
+        assert.ok(!page.includes(gone), `${gone} is gone from the page`);
+    }
+    const server = fs.readFileSync(path.join(__dirname, "../src/server/mural.ts"), "utf8");
+    assert.ok(!/decree/i.test(server.replace(/the information of the region|decreto/g, "")), "the server's side has no decree code left");
+    assert.ok(!fs.existsSync(path.join(__dirname, "../src/server/decrees.ts")), "the rights module is gone");
 });

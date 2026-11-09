@@ -97,12 +97,12 @@ test("the tamers' hint and the farmers' hint (2026-10-25): the taming went to th
     assert.equal(en("É um cavalo selvagem: só os domadores sabem amansá-lo."), "It is a wild horse: only the tamers know how to tame it.");
 });
 
-test("the gardens, the wild horses and the horses that follow speak English too, with the crop, the garden and the horse translated inside the sentence", () => {
+test("the gardens and the wild horses speak English too, with the crop, the garden and the horse translated inside the sentence", () => {
     const { api } = load();
     const en = (text) => api.translate(text, "en");
-    assert.equal(en("Só os agricultores (guilda Agricolae) usam as hortas. Escolha a guilda no painel (F2), em Guildas."), "Only the farmers (the Agricolae guild) use the gardens. Pick the guild in the panel (F2), under Guilds.");
-    assert.equal(en("Só os domadores (guilda Domitores) usam a doma dos cavalos selvagens. Escolha a guilda no painel (F2), em Guildas."), "Only the tamers (the Domitores guild) can tame wild horses. Pick the guild in the panel (F2), under Guilds.");
-    assert.equal(en("Só os artesãos (guilda Artifices) usam a costura. Escolha a guilda no painel (F2), em Guildas."), "Only the tailors (the Artifices guild) use the sewing. Pick the guild in the panel (F2), under Guilds.", "the guilds that had no English before");
+    assert.equal(en("Só os agricultores (guilda Agricolae) usam as hortas. Aprenda o ofício com o comerciante da guilda da sua cidade."), "Only the farmers (the Agricolae guild) use the gardens. Learn the trade from the guild's vendor in your town.");
+    assert.equal(en("Só os domadores (guilda Domitores) usam a doma dos cavalos selvagens. Aprenda o ofício com o comerciante da guilda da sua cidade."), "Only the tamers (the Domitores guild) can tame wild horses. Learn the trade from the guild's vendor in your town.");
+    assert.equal(en("Só os artesãos (guilda Artifices) usam a costura. Aprenda o ofício com o comerciante da guilda da sua cidade."), "Only the tailors (the Artifices guild) use the sewing. Learn the trade from the guild's vendor in your town.", "the guilds that had no English before");
     assert.equal(en("Plantado: cebola na Horta de Suchdol 2. Volte para colher em 30 min."), "Planted: onion in Garden of Suchdol 2. Come back to pick in 30 min.");
     assert.equal(en("Colheita: 5x Cebola e 2 sementes para semear de novo (+4 XP)."), "Harvest: 5x Onion and 2 seeds to sow again (+4 XP).");
     assert.equal(en("Colheita: 3x Cravo-de-defunto e 1 semente para semear de novo (+9 XP)."), "Harvest: 3x Marigold and 1 seed to sow again (+9 XP).");
@@ -125,20 +125,12 @@ test("the gardens, the wild horses and the horses that follow speak English too,
 
     assert.equal(en("O cavalo aceita a cenoura (arisco, confiança 14/100)."), "The horse accepts the carrot (skittish, trust 14/100).");
     assert.equal(en("O cavalo aceita o pão (quase manso, confiança 85/100)."), "The horse accepts the bread (almost tame, trust 85/100).");
-    assert.equal(en("O cavalo come a pera da sua mão e encosta o focinho em você: ele confia em você agora. Monte, ou mande-o seguir."), "The horse eats the pear from your hand and rests its muzzle against you: it trusts you now. Mount it, or send it to follow.");
+    assert.equal(en("O cavalo come a pera da sua mão e encosta o focinho em você: ele confia em você agora. Monte nele."), "The horse eats the pear from your hand and rests its muzzle against you: it trusts you now. Mount it.");
     assert.equal(en("Cavalo selvagem ainda mastiga: espere 40 s."), "Wild horse is still chewing: wait 40 s.");
     assert.equal(en("O cavalo cheira a cenoura, vira a cabeça e recua: ainda não confia o bastante para comer da sua mão."), "The horse sniffs the carrot, turns its head away and backs off: it does not trust you enough yet to eat from your hand.");
     assert.equal(en("O cavalo agora é seu: veja em Animais (F2) para dar um nome. Ele já vem com sela, rédeas e ferraduras simples."), "The horse is yours now: see it in Animals (F2) to give it a name. It already comes with a plain saddle, reins and horseshoes.");
     assert.equal(en("Você não tem o que oferecer: uma cenoura, maçã, pera, beterraba, nabo ou pão na bolsa."), "You have nothing to offer: a carrot, apple, pear, beetroot, turnip or bread in your bag.");
     assert.equal(en("O cavalo agora é seu: veja em Animais (F2) para dar um nome. Ele ainda não tem sela nem arreios."), "The horse is yours now: see it in Animals (F2) to give it a name. It has no saddle or harness yet.");
-    assert.equal(en("Carpiado vai seguir você. Em \"Ficar\" ele para; o assobio (X) continua chamando."), "Carpiado will follow you. \"Stay\" stops it; the whistle (X) still calls it.");
-    assert.equal(en("O cavalo vai seguir você. Em \"Ficar\" ele para; o assobio (X) continua chamando."), "The horse will follow you. \"Stay\" stops it; the whistle (X) still calls it.", "the horse with no name of its own is translated inside the sentence");
-    assert.equal(en("Carpiado ficou para trás, longe demais. Assobie (X) para chamá-lo."), "Carpiado was left behind, too far away. Whistle (X) to call it.");
-    assert.equal(en("Carpiado não achou caminho até você e parou. Assobie (X) para chamá-lo."), "Carpiado found no way to you and stopped. Whistle (X) to call it.");
-    assert.equal(en("Carpiado fica onde está. O assobio (X) ainda o chama."), "Carpiado stays where it is. The whistle (X) still calls it.");
-    assert.equal(en("O cavalo já estava parado."), "The horse was already standing still.");
-    assert.equal(en("Só o dono manda no cavalo."), "Only the owner gives the horse orders.");
-    assert.equal(en("Carpiado não pode seguir agora."), "Carpiado cannot follow now.");
     assert.equal(en("Para plantar: com a pá e as sementes na bolsa, olhe para o chão de um canteiro de horta, atrás das casas das aldeias, e aperte E; a página à direita diz o que cada planta pede e em quanto tempo dá. Quando ficar pronta, E de novo no canteiro colhe. /horta mostra o que você plantou.").startsWith("To plant: with the shovel and the seeds"), true);
     assert.equal(api.translate("Plantado: cebola na Horta de Suchdol 2. Volte para colher em 30 min.", "pt"), "Plantado: cebola na Horta de Suchdol 2. Volte para colher em 30 min.", "Portuguese is never touched");
 });
@@ -256,7 +248,7 @@ test("the catalogs the panel shows are all in the dictionary: guilds, houses, ti
     assert.deepEqual(missing, []);
 });
 
-test("what the notice boards and the welcome form say is said in English, the numbers in the sentences kept", () => {
+test("what the notice boards say is said in English, the numbers in the sentences kept", () => {
     const { api } = load();
     const en = (text) => api.translate(text, "en");
     assert.equal(en("Não há quadro de avisos por perto."), "There is no notice board nearby.");
@@ -264,8 +256,6 @@ test("what the notice boards and the welcome form say is said in English, the nu
     assert.equal(en("Você precisa de 10 moedas para afixar um cartaz."), "You need 10 coins to pin up a poster.");
     assert.equal(en("Você já tem 4 cartazes neste quadro. Retire um, ou espere que saiam."), "You already have 4 posters on this board. Take one down, or wait for them to leave.");
     assert.equal(en("Cartaz afixado: fica 7 dias no quadro."), "Poster pinned up: it stays 7 days on the board.");
-    assert.match(en("Que a sorte lhe acompanhe, viajante. As regras e a história do reino estão sempre à mão: no menu F2, em Informações, e no nosso site."), /^May fortune go with you, traveller\./);
-    assert.match(en("A janela de boas-vindas não abriu no seu jogo. Leia as regras no menu F2 (Informações) e no nosso site e digite /aceitar para concordar com elas e com a lore do servidor."), /type \/aceitar/);
     // The player's own words are never touched.
     assert.equal(en("Procura-se o ladrão"), "Procura-se o ladrão");
 });
@@ -284,17 +274,11 @@ test("no pattern of the dictionaries has lost a backslash: a single one before (
     }
 });
 
-test("the Escrivão section, the guild's new rule and the tree by region speak English (2026-10-29)", () => {
+test("the tree by region and the titles speak English (2026-10-29)", () => {
     const { api } = load();
     const en = (text) => api.translate(text, "en");
     assert.equal(en("Escrivão"), "Scribe");
     assert.equal(en("Reino"), "Realm");
-    assert.equal(en("Ceder a guilda VENATORES (Caçador) a Hans?"), "Hand the guild VENATORES (Hunter) to Hans?");
-    assert.equal(en("Hans deixa de ser Caçador e passa a ser Ferreiro."), "Hans stops being Hunter and becomes Blacksmith.");
-    assert.equal(en("Recebe o título de Caçador, aparece na árvore da hierarquia e ganha o kit da guilda."), "Receives the title of Hunter, shows in the hierarchy tree and gets the guild's kit.");
-    assert.equal(en("Retirar de Hans a guilda VENATORES (Caçador)?"), "Take the guild VENATORES (Hunter) away from Hans?");
-    assert.equal(en("Cidadão de Wysoka"), "Citizen of Wysoka");
-    assert.equal(en("Cidadãos com guilda / cidadãos de Suchdol"), "Citizens with a guild / citizens of Suchdol");
     assert.equal(en("Página 1 de 3 · 29 cidadãos"), "Page 1 of 3 · 29 citizens");
     assert.equal(en("Página 2 de 5 · 57 jogadores"), "Page 2 of 5 · 57 players");
     assert.equal(en("1 cidadão"), "1 citizen");
@@ -303,33 +287,10 @@ test("the Escrivão section, the guild's new rule and the tree by region speak E
     assert.equal(en("Sem senhor"), "No lord");
     assert.equal(en("11 cargos · 6 ofícios"), "11 offices · 6 trades");
     assert.equal(en("1 cargo · 1 ofício"), "1 office · 1 trade");
-    assert.equal(en("Retirar guilda"), "Take away guild");
     assert.equal(en("Soldado"), "Soldier");
 });
 
-test("every line of Informações, by category, is in the dictionary: the categories, the topics, their subtitles and each paragraph (2026-10-29)", () => {
-    const { api } = load();
-    const page = fs.readFileSync(path.join(__dirname, "../ui-src/status.html"), "utf8");
-    const topics = JSON.parse(/const INFO_TOPICS = (\[.*\]);/.exec(page)[1]);
-    const cats = JSON.parse(/const INFO_CATS = (\[.*\]);/.exec(page)[1]);
-    assert.ok(topics.length >= 25);
-    const known = new Set(cats.map(([id]) => id));
-    for (const [, label] of cats) assert.notEqual(api.translate(label, "en"), label, label);
-    for (const topic of topics) {
-        assert.ok(known.has(topic.cat), `${topic.id} has a category the list knows`);
-        for (const text of [topic.name, topic.sub, ...topic.paras]) {
-            assert.notEqual(api.translate(text, "en"), text, `${topic.id}: ${text.slice(0, 60)}`);
-        }
-    }
-    const ids = topics.map((topic) => topic.id);
-    for (const wanted of ["como-guilda", "escrivao", "como-casa", "como-cavaleiro", "prisao", "vender", "comecar"]) assert.ok(ids.includes(wanted), wanted);
-    assert.equal(new Set(ids).size, ids.length);
-    const joined = topics.flatMap((topic) => topic.paras).join(" ");
-    assert.ok(!/a primeira troca é grátis e cada troca depois custa 100 moedas\.$/.test(topics.find((topic) => topic.id === "guildas").paras.at(-1)), "the old rule of choosing a guild is gone from the guilds' topic");
-    assert.ok(/escrivão/i.test(joined));
-});
-
-test("arrest, the pillory and the Escrivão speak English in the chat, with the sentence and the place translated inside the sentence (2026-10-29)", () => {
+test("arrest and the pillory speak English in the chat, with the sentence and the place translated inside the sentence (2026-10-29)", () => {
     const { api } = load();
     const en = (text) => api.translate(text, "en");
     assert.equal(en("Você está preso: só pode falar."), "You are arrested: you can only speak.");
@@ -340,10 +301,103 @@ test("arrest, the pillory and the Escrivão speak English in the chat, with the 
     assert.equal(en("Ivan pôs você no pelourinho de Kuttenberg, na prefeitura por 1 hora. Você sai quando o tempo acabar, mesmo se sair do jogo e voltar."), "Ivan put you in the pillory of Kuttenberg, at the town hall for 1 hour. You are freed when the time is up, even if you leave the game and come back.");
     assert.equal(en("Kath foi posto no pelourinho de Suchdol por 15 minutos."), "Kath was put in the pillory of Suchdol for 15 minutes.");
     assert.equal(en("Você continua no pelourinho de Zikmundovo: faltam 12 min."), "You are still in the pillory of Zikmundovo: 12 min left.");
-    assert.equal(en("Anežka cedeu a você a guilda VENATORES (Caçador)."), "Anežka handed you the guild VENATORES (Hunter).");
-    assert.equal(en("Hans agora é Caçador (VENATORES)."), "Hans is now Hunter (VENATORES).");
-    assert.equal(en("Hans deixou de ser Caçador."), "Hans is no longer Hunter.");
-    assert.equal(en("Ninguém cede uma guilda a si mesmo: peça a outro escrivão ou mestre."), "Nobody hands a guild to themselves: ask another scribe or master.");
-    assert.equal(en("Anežka retirou de você a guilda VENATORES. Procure um escrivão ou um mestre de ofício para receber outra."), "Anežka took the guild VENATORES away from you. Look for a scribe or a master of a trade to receive another.");
-    assert.match(en("A guilda não se escolhe mais no painel: procure um escrivão, um mestre de ofício ou guilda, ou o senhor das terras, que cede a guilda a quem é cidadão. Sem cidadania, escolha primeiro a sua cidade na seção Cidadania."), /^A guild is no longer chosen in the panel/);
+});
+
+test("the two titles that were renamed (2026-10-29)", () => {
+    const { api } = load();
+    const en = (text) => api.translate(text, "en");
+    // Alcaide da aldeia and Meirinho are Iberian words: the village's headman is the rychtář, the lord's steward the správce.
+    assert.equal(en("Chefe da aldeia"), "Village head");
+    assert.equal(en("Administrador do domínio"), "Estate steward");
+    assert.equal(en("Administradora do domínio"), "Estate steward");
+    assert.equal(en("Grande senhor territorial: governa um território de alto status. Na Boêmia, o kníže era o duque de um ducado, como os da Silésia, vassalos da Coroa."), "Great territorial lord: governs a territory of high standing. In Bohemia the kníže was the duke of a duchy, like those of Silesia, vassals of the Crown.");
+});
+
+test("the wars, the guild vendors, the sheep and the titles of a region speak English, the names of the towns kept and the lists of them joined with 'and' (2026-10-31)", () => {
+    const { api } = load();
+    const en = (text) => api.translate(text, "en");
+    // The lists of towns and the titles of a region.
+    assert.equal(en("Raborsch e Malešov"), "Raborsch and Malešov");
+    assert.equal(en("Suchdol, Wysoka e Raborsch"), "Suchdol, Wysoka and Raborsch");
+    assert.equal(en("Suchdol ou Wysoka"), "Suchdol or Wysoka");
+    assert.equal(en("Cavaleiro de Suchdol"), "Knight of Suchdol");
+    assert.equal(en("Escudeiro de Stará Kutná"), "Squire of Stará Kutná");
+    assert.equal(en("Hans agora é Cavaleiro de Wysoka."), "Hans is now Knight of Wysoka.");
+    assert.equal(en("Você só nomeia nas terras do seu título: Suchdol, Wysoka."), "You only name in the lands of your title: Suchdol, Wysoka.");
+    assert.equal(en("Escolha a região do título."), "Choose the region of the title.");
+    assert.equal(en("Você não tem terras para nomear: escolha a sua cidade na seção Cidadania."), "You have no lands to name for: choose your town in the Citizenship section.");
+    // The wars.
+    assert.equal(en("[Guerra] Suchdol declarou guerra a Raborsch e Malešov."), "[War] Suchdol declared war on Raborsch and Malešov.");
+    assert.equal(en("[Guerra] A guerra entre Suchdol e Raborsch terminou."), "[War] The war between Suchdol and Raborsch is over.");
+    assert.equal(en("Suchdol está em guerra com Raborsch."), "Suchdol is at war with Raborsch.");
+    assert.equal(en("Suchdol está em paz: nenhuma guerra marcada."), "Suchdol is at peace: no war marked.");
+    assert.equal(en("Suchdol já está em guerra com Raborsch e Malešov: nada mudou."), "Suchdol is already at war with Raborsch and Malešov: nothing changed.");
+    assert.equal(en("Só o senhor das terras de Suchdol marca a guerra."), "Only the lord of the lands of Suchdol marks the war.");
+    assert.equal(en("Você não faz guerra às suas próprias terras: Wysoka."), "You do not make war on your own lands: Wysoka.");
+    assert.equal(en("[Guerra] Sua cidade, Suchdol, está em guerra com Raborsch e Bohunowitz."), "[War] Your town, Suchdol, is at war with Raborsch and Bohunowitz.");
+    assert.equal(en("[Guerra] O senhor de Suchdol perdeu a guerra e entregou as suas terras ao senhor de Raborsch: Suchdol agora é governada de lá."), "[War] The lord of Suchdol lost the war and handed his lands to the lord of Raborsch: Suchdol is now governed from there.");
+    assert.equal(en("Suchdol foi entregue a você pelo senhor de lá: 4 propriedades (e 2 baús) passaram para você."), "Suchdol was handed to you by its lord: 4 properties (and 2 chests) passed to you.");
+    assert.equal(en("Suchdol não está em guerra com Raborsch: só se entregam terras a quem se está em guerra."), "Suchdol is not at war with Raborsch: lands are only handed over to someone you are at war with.");
+    assert.equal(en("Você entregou Suchdol ao senhor de Raborsch: as propriedades que eram suas lá passaram para ele, os baús continuam com o que têm, e a guerra entre as duas terras acabou."), "You handed Suchdol to the lord of Raborsch: the properties that were yours there passed to him, the chests keep what they hold, and the war between the two lands is over.");
+    // The sheep.
+    assert.equal(en("Tosquia: 2x Linho (+4 XP)."), "Shearing: 2x Flax (+4 XP).");
+    assert.equal(en("Esta ovelha foi tosquiada há pouco: volte em 29 min."), "This sheep was sheared a moment ago: come back in 29 min.");
+    assert.equal(en("Nada foi tosquiado. Essa ovelha não está mais aí."), "Nothing was sheared. That sheep is no longer there.");
+    assert.equal(en("Escolha uma ovelha."), "Choose a sheep.");
+});
+
+test("the guild vendors speak English: the list, the talk, the price of the first trade and of the next, the horse (2026-10-31)", () => {
+    const { api } = load();
+    const en = (text) => api.translate(text, "en");
+    assert.equal(en("Comprar/Vender"), "Buy/Sell");
+    assert.equal(en("Aprender Guilda: Ferreiro"), "Learn Guild: Blacksmith");
+    assert.equal(en("Aprender Guilda: Coletor"), "Learn Guild: Gatherer");
+    assert.equal(en("Mestre Ferreiro de Suchdol: O ferro não espera. Kits de reparo e metal de forja, é o que tenho."), "Master Smith of Suchdol: Iron does not wait. Repair kits and forge metal are what I have.");
+    assert.equal(en("Mestre Domador de Raborsch: Cavalo manso, de sela e rédea simples. E o que um cavalo come, para ganhar-lhe a confiança."), "Master Tamer of Raborsch: A gentle horse, with a plain saddle and rein. And what a horse eats, to win its trust.");
+    assert.equal(en("Quer aprender o ofício de Ferreiro? Em Suchdol, quem é cidadão aprende comigo. É a sua primeira vez: o ofício é de graça. Depois, cada ofício novo custa 100 moedas."), "Do you want to learn the trade of Blacksmith? In Suchdol, citizens learn with me. It is your first time: the trade is free. After that, each new trade costs 100 coins.");
+    assert.equal(en("Quer aprender o ofício de Caçador? Em Suchdol, quem é cidadão aprende comigo. Você deixaria Tabernarii: trocar de ofício custa 100 moedas."), "Do you want to learn the trade of Hunter? In Suchdol, citizens learn with me. You would leave Tabernarii: changing trades costs 100 coins.");
+    assert.equal(en("Quer aprender o ofício de Caçador? Em Suchdol, quem é cidadão aprende comigo. Aprender outro ofício custa 100 moedas."), "Do you want to learn the trade of Hunter? In Suchdol, citizens learn with me. Learning another trade costs 100 coins.");
+    assert.equal(en("Só ensino o ofício a quem é cidadão de Suchdol. Escolha a sua cidade na seção Cidadania do menu F2 e volte."), "I only teach the trade to citizens of Suchdol. Choose your town in the Citizenship section of the F2 menu and come back.");
+    assert.equal(en("Você é cidadão de Raborsch. Aqui em Suchdol só ensino a quem é daqui: procure o Mestre Ferreiro da sua terra."), "You are a citizen of Raborsch. Here in Suchdol I only teach those who are from here: look for the Master Smith of your land.");
+    assert.equal(en("Mestre Ferreiro de Suchdol lhe ensinou o ofício: você agora é Ferreiro (Fabri Ferrarii). Foi de graça, por ser a sua primeira vez: o próximo ofício custa 100 moedas."), "Master Smith of Suchdol taught you the trade: you are now Blacksmith (Fabri Ferrarii). It was free, as it is your first time: the next trade costs 100 coins.");
+    assert.equal(en("Mestre Ferreiro de Suchdol lhe ensinou o ofício: você agora é Ferreiro (Fabri Ferrarii). Custou 100 moedas."), "Master Smith of Suchdol taught you the trade: you are now Blacksmith (Fabri Ferrarii). It cost 100 coins.");
+    assert.equal(en("Aprender outro ofício custa 100 moedas e você tem 50 moedas."), "Learning another trade costs 100 coins and you have 50 coins.");
+    assert.equal(en("Cavalo comum: 150 moedas"), "Common horse: 150 coins");
+    assert.equal(en("Cavalo comum: esgotado por hoje"), "Common horse: sold out for today");
+    assert.equal(en("O cavalo comum custa 150 moedas e você não tem o bastante."), "The common horse costs 150 coins and you do not have enough.");
+    assert.equal(en("Você comprou um cavalo comum por 150 moedas: veja em Animais (F2) para dar um nome. Ele vem com sela, rédeas e ferraduras simples."), "You bought a common horse for 150 coins: see Animals (F2) to give it a name. It comes with a plain saddle, reins and horseshoes.");
+    assert.equal(en("O domador já lhe vendeu o cavalo de hoje: volte amanhã."), "The tamer has already sold you today's horse: come back tomorrow.");
+    assert.equal(en("Cortar lenha e quebrar pedra é ofício dos Coletores (guilda Collectores). Aprenda o ofício com o comerciante da guilda da sua cidade."), "Cutting wood and breaking stone is the Gatherers' trade (guild Collectores). Learn the trade from the guild's vendor in your town.");
+    for (const name of ["Mestre Ferreiro", "Boticário", "Taberneiro", "Costureira", "Mestre Caçador", "Mestre Coletor", "Agricultor", "Mestre Domador"]) assert.notEqual(en(name), name, name);
+});
+
+test("the war and region texts of the panel speak English; the Cidadania page and its notes left the panel (2026-11-09)", () => {
+    const { api } = load();
+    const en = (text) => api.translate(text, "en");
+    for (const [pt, english] of [
+        ["Guerra", "War"], ["Marcar guerra", "Mark war"], ["Escolha o vencedor", "Choose the winner"],
+        ["Região do título", "Region of the title"], ["A cidade de quem recebe", "The town of whoever receives it"], ["Lendo…", "Reading…"],
+        ["Marque as terras contra as quais Suchdol está em guerra.", "Mark the lands Suchdol is at war with."],
+        ["Começa a guerra com Raborsch e Malešov: todos os jogadores online são avisados.", "The war with Raborsch and Malešov begins: all the players online are told."],
+        ["Termina a guerra com Raborsch.", "The war with Raborsch ends."],
+        ["Em guerra com Raborsch e Bohunowitz", "At war with Raborsch and Bohunowitz"],
+        ["Entregar Suchdol ao senhor de Raborsch (Gunther)?", "Hand Suchdol over to the lord of Raborsch (Gunther)?"],
+        ["Marcar contra quais terras Suchdol está em guerra", "Mark which lands Suchdol is at war with"],
+        ["Entregar Suchdol ao senhor de uma terra com quem está em guerra", "Hand Suchdol over to the lord of a land it is at war with"],
+    ]) {
+        assert.equal(en(pt), english, pt);
+    }
+    for (const gone of ["Entregar terras", "Ao senhor de", "Como senhor das terras, você pode fechar a cidadania, para ninguém novo se tornar cidadão, e expulsar quem já é (Ver cidadãos). Também marca a guerra com outras terras e, se perder uma, entrega as suas.", "Como administrador, você pode fechar ou abrir a cidadania de qualquer cidade ou terra, e expulsar quem já é (Ver cidadãos). Também marca a guerra de qualquer terra."]) {
+        assert.equal(en(gone), gone, "the Cidadania page is gone from the panel: nothing says it any more");
+    }
+    assert.equal(en("Como senhor das terras, você pode fechar a cidadania, para ninguém novo se tornar cidadão, e expulsar quem já é (Ver cidadãos)."), "Como senhor das terras, você pode fechar a cidadania, para ninguém novo se tornar cidadão, e expulsar quem já é (Ver cidadãos).", "the old note is gone: nothing of the page says it any more");
+});
+
+test("the information of a region left the notice boards (2026-11-09): nothing says it any more; the board's Cidadania tab says in English that a place is no town", () => {
+    const { api } = load();
+    const en = (text) => api.translate(text, "en");
+    assert.equal(en("Informação da região afixada: fica no quadro, sem prazo, até ser retirada."), "Informação da região afixada: fica no quadro, sem prazo, até ser retirada.", "no entry for it any more");
+    assert.equal(en("Só quem afixou a informação, o lorde destas terras ou um administrador pode retirá-la."), "Only quem afixou a informação, o lorde destas terras ou um administrador pode retirá-la.", "only the word rules of the dictionary are left of it");
+    assert.equal(en("Você já tem 6 informações neste quadro. Retire uma para afixar outra."), "Você já tem 6 informações neste quadro. Retire uma para afixar outra.");
+    assert.equal(en("Este lugar não é uma cidade: não há cidadania aqui."), "This place is no town: there is no citizenship here.");
 });

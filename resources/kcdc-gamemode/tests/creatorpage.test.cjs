@@ -297,6 +297,32 @@ test("what the page picks goes to the server, and a message that is not what it 
     ]);
 });
 
+test("the accept carries the age and the height to the server, and the clothes marked; what is not a whole number, or not a gender's, stays behind (2026-11-02)", () => {
+    const sut = load();
+    const look = { gender: "male", head: 2, hair: 1, tone: 0, beard: -1, skin: 3 };
+    sut.server("begin", BEGIN);
+    sut.advance(20_000);
+    sut.page("ready", {});
+    sut.state.sent.length = 0;
+    sut.page("accept", { look, name: "Henry", epithet: "", age: 32, height: 170, clothes: { gender: "male", top: 1, legs: -1, feet: 0 } });
+    sut.page("accept", { look, name: "Henry", epithet: "", age: "32", height: 170.5, clothes: { gender: "x", top: 1 } });
+    sut.page("accept", { look, name: "Henry", epithet: "", age: 32, height: 170, clothes: { gender: "female", top: 99, legs: 2 } });
+    assert.deepEqual(plain(sut.state.sent), [
+        { name: "kcdc-gamemode:creator.accept", payload: { look, name: "Henry", epithet: "", age: 32, height: 170, clothes: { gender: "male", top: 1, legs: -1, feet: 0 } } },
+        { name: "kcdc-gamemode:creator.accept", payload: { look, name: "Henry", epithet: "" } },
+        { name: "kcdc-gamemode:creator.accept", payload: { look, name: "Henry", epithet: "", age: 32, height: 170, clothes: { gender: "female", legs: 2 } } },
+    ]);
+});
+
+test("the accept carries no place of birth any more: a field of that name does not reach the server (2026-11-09)", () => {
+    const sut = open(load());
+    const look = { gender: "male", head: 2, hair: 1, tone: 0, beard: -1, skin: 3 };
+    sut.state.sent.length = 0;
+    sut.page("accept", { look, name: "Henry", epithet: "", birth: "corvos" });
+    assert.deepEqual(plain(sut.state.sent), [{ name: "kcdc-gamemode:creator.accept", payload: { look, name: "Henry", epithet: "" } }]);
+    assert.equal(sut.serverEvents.get("kcdc-gamemode:creator.birth"), undefined, "the places of birth are not listened for");
+});
+
 test("the server's answers about the name, and its refusals, reach the page", () => {
     const sut = open(load());
     sut.server("name", { ok: false, message: "Já existe um Henry." });

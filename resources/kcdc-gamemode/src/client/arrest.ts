@@ -29,6 +29,12 @@ export const HELD_ACTIONS: readonly string[] = [
     "kcdc_emote_wheel",
 ];
 
+/**
+ * The walk keys, taken away while the server says the body is held still (`still`, 2026-11-01): in the pillory, and in handcuffs while no officer leads (user: "pelourinho faz a
+ * animação mas o jogador consegue sair andando"). The keyboard's and the pad's, by the game's own names (`Libs/Config/defaultProfile.xml`); the camera stays free.
+ */
+export const MOVE_ACTIONS: readonly string[] = ["moveforward", "moveback", "moveleft", "moveright", "xi_movex", "xi_movey"];
+
 /** The game's own menus shut for the time (the pause menu is not among them). */
 export const HELD_MENUS = ["inventory", "player", "map", "codex", "journal", "crafting"] as const;
 
@@ -59,6 +65,32 @@ function fieldsOf(payload: unknown): Record<string, unknown> | null {
 /** The actions that were held, so that exactly those are given back. */
 const heldActions: string[] = [];
 const heldMenus: string[] = [];
+const heldMoves: string[] = [];
+
+/** Takes the walk keys away, once however often the server says it. */
+function holdMoves(): void {
+    if (heldMoves.length > 0) {
+        return;
+    }
+    for (const action of MOVE_ACTIONS) {
+        try {
+            Controls.disableAction(action);
+            heldMoves.push(action);
+        } catch {
+            // An action this build does not have.
+        }
+    }
+}
+
+function releaseMoves(): void {
+    for (const action of heldMoves.splice(0)) {
+        try {
+            Controls.enableAction(action);
+        } catch {
+            // Given back with the resource.
+        }
+    }
+}
 
 function hold(): void {
     for (const action of HELD_ACTIONS) {
@@ -104,6 +136,12 @@ export function installArrest(): void {
     Events.on(STATE, (payload) => {
         const fields = fieldsOf(payload);
         const on = fields !== null && fields["on"] === true;
+        // Held still, or let walk (led by an officer, or free).
+        if (on && fields !== null && fields["still"] === true) {
+            holdMoves();
+        } else {
+            releaseMoves();
+        }
         if (on === isRestrained()) {
             return;
         }
